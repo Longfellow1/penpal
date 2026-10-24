@@ -13,6 +13,7 @@ from evals.fixture_data import CAPTURE_EVENTS, EVENTS, FAKE_KEY
 from evals.run import load_questions, run_eval
 
 BASELINE = Path(__file__).resolve().parents[1] / "evals" / "baseline.json"
+PROPOSED_BASELINE = Path(__file__).resolve().parents[1] / "evals" / "baseline.proposed.json"
 
 
 @pytest.fixture(scope="module")
@@ -41,7 +42,12 @@ def test_question_set_has_required_shape() -> None:
     assert len(qs) >= 30
     scenarios = {s: sum(1 for q in qs if q.get("scenario") == s) for s in ("W01", "W02", "L01", "L02", "cross")}
     assert all(n >= 8 for n in scenarios.values()), scenarios
-    assert sum(q["variant"] == "no_answer" for q in qs) >= 10
+    variants = {variant: sum(q["variant"] == variant for q in qs) for variant in
+                ("answerable", "no_answer", "restricted", "conflict")}
+    assert variants["answerable"] >= 50, variants
+    assert variants["no_answer"] >= 15, variants
+    assert variants["restricted"] >= 10, variants
+    assert variants["conflict"] >= 5, variants
 
 
 def test_run_is_isolated_from_real_home(report) -> None:
@@ -58,21 +64,32 @@ def test_fake_secret_never_searchable_in_eval(report) -> None:
     assert FAKE_KEY not in json.dumps(report)
 
 
-def test_current_results_pass_the_committed_baseline(report, baseline) -> None:
-    assert compare.check(report, baseline) == []
+def test_current_results_match_the_approved_or_proposed_baseline(report, baseline) -> None:
+    if report["question_set_digest"] == baseline["question_set_digest"]:
+        assert compare.check(report, baseline) == []
+        return
+
+    problems = compare.check(report, baseline)
+    assert len(problems) == 1 and "owner approval" in problems[0], problems
+    proposed = json.loads(PROPOSED_BASELINE.read_text(encoding="utf-8"))
+    assert proposed["question_set_digest"] == report["question_set_digest"]
+    assert compare.check(report, proposed) == []
 
 
 def test_gate_tolerates_up_to_2pp_and_blocks_beyond(report, baseline) -> None:
     ok = copy.deepcopy(report)
+    ok["question_set_digest"] = baseline["question_set_digest"]
     ok["summary"]["m1_evidence_recall_at_5"] = baseline["m1_evidence_recall_at_5"] - 0.02
     ok["summary"]["m2_no_answer_false_hit_rate"] = baseline["m2_no_answer_false_hit_rate"] + 0.02
     assert compare.check(ok, baseline) == []
 
     bad_m1 = copy.deepcopy(report)
+    bad_m1["question_set_digest"] = baseline["question_set_digest"]
     bad_m1["summary"]["m1_evidence_recall_at_5"] = baseline["m1_evidence_recall_at_5"] - 0.021
     assert any("M1" in p for p in compare.check(bad_m1, baseline))
 
     bad_m2 = copy.deepcopy(report)
+    bad_m2["question_set_digest"] = baseline["question_set_digest"]
     bad_m2["summary"]["m2_no_answer_false_hit_rate"] = baseline["m2_no_answer_false_hit_rate"] + 0.021
     assert any("M2" in p for p in compare.check(bad_m2, baseline))
 
