@@ -117,6 +117,11 @@
 {"id":"ncap2","variant":"no_answer","style":"near_miss","query":"Spotify on 2026-04-30","keywords":["Spotify"],"time_range":{"start":"2026-04-30","end":"2026-04-30"},"note":"Spotify was only used on 04-29"}
 {"id":"rcap1","variant":"restricted","style":"kw","query":"房租","keywords":["房租"],"grant":{"buckets":["Work"]},"forbidden":["cp-02"]}
 {"id":"rcap2","variant":"restricted","style":"kw","query":"tracking number","keywords":["tracking number"],"grant":{"buckets":["Work"]},"forbidden":["cp-05"]}
+{"id":"n15","variant":"no_answer","style":"kw","query":"bioluminescent mahogany keyboard","keywords":["bioluminescent","mahogany","keyboard"],"note":"synthetic query has no matching fixture evidence"}
+{"id":"r07","variant":"restricted","style":"kw","query":"therapist directory","keywords":["therapist","directory"],"grant":{"buckets":["Work"]},"forbidden":["sf-03"]}
+{"id":"r08","variant":"restricted","style":"kw","query":"therapy journal reflections","keywords":["therapy","journal"],"grant":{"buckets":["Work"]},"forbidden":["md-05"]}
+{"id":"c04","variant":"conflict","style":"kw","query":"what is the current release deadline now","keywords":["release","deadline","current"],"newest":"cc-17","stale":"cc-16"}
+{"id":"c05","variant":"conflict","style":"kw","query":"was the review meeting moved with the deadline","keywords":["review","meeting","deadline"],"newest":"cc-17","stale":"cc-16"}
 {"id": "r01a", "variant": "answerable", "scenario": "R01", "style": "kw", "query": "which commit did I push to dev on 2026-05-06 that I copied", "keywords": ["push", "dev"], "sources": ["clipboard"], "time_range": {"start": "2026-05-06", "end": "2026-05-06"}, "gold": ["cp-r1"]}
 {"id": "r01b", "variant": "answerable", "scenario": "R01", "style": "kw", "query": "2026-05-13 推送到 staging 后我复制的那个提交", "keywords": ["推送", "staging"], "sources": ["clipboard"], "time_range": {"start": "2026-05-13", "end": "2026-05-13"}, "gold": ["cp-r2"]}
 {"id": "r01c", "variant": "answerable", "scenario": "R01", "style": "nl", "query": "the commit hash I copied after pushing to dev on 2026-05-06 (second search, restricted to clipboard)", "keywords": ["dev"], "sources": ["clipboard"], "time_range": {"start": "2026-05-06", "end": "2026-05-06"}, "gold": ["cp-r1"]}

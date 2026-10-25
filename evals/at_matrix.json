@@ -1,0 +1,174 @@
+{
+  "schema_version": 1,
+  "source": "docs/Penpal_Eval_PRD.md §3.2.2; baseline P0 definitions in docs/Penpal_V2.md §6.3 (AT16 deferred by D30)",
+  "p0_at_ids": [
+    "AT01",
+    "AT02",
+    "AT03",
+    "AT04",
+    "AT08",
+    "AT09",
+    "AT12",
+    "AT13",
+    "AT17",
+    "AT18",
+    "AT19",
+    "AT21"
+  ],
+  "variants": [
+    "有答案",
+    "无答案",
+    "权限受限"
+  ],
+  "cells": {
+    "AT01": {
+      "有答案": [
+        "tests/test_eval_at_matrix.py::test_answerable_variant[AT01]",
+        "tests/test_mainline_claude_to_mcp.py::test_at01_session_found_by_exact_word_with_provenance"
+      ],
+      "无答案": [
+        "tests/test_eval_at_matrix.py::test_no_answer_variant[AT01]"
+      ],
+      "权限受限": [
+        "tests/test_eval_at_matrix.py::test_permission_limited_variant[AT01]"
+      ]
+    },
+    "AT02": {
+      "有答案": [
+        "tests/test_eval_at_matrix.py::test_answerable_variant[AT02]"
+      ],
+      "无答案": [
+        "tests/test_eval_at_matrix.py::test_no_answer_variant[AT02]",
+        "tests/test_mainline_claude_to_mcp.py::test_at02_unknown_word_is_no_results_and_fabricates_nothing"
+      ],
+      "权限受限": [
+        "tests/test_eval_at_matrix.py::test_permission_limited_variant[AT02]"
+      ]
+    },
+    "AT03": {
+      "有答案": [
+        "tests/test_eval_at_matrix.py::test_answerable_variant[AT03]",
+        "tests/test_mainline_codex_git.py::test_at03_same_topic_returns_claude_codex_and_git_with_own_evidence"
+      ],
+      "无答案": [
+        "tests/test_eval_at_matrix.py::test_no_answer_variant[AT03]"
+      ],
+      "权限受限": [
+        "tests/test_eval_at_matrix.py::test_permission_limited_variant[AT03]"
+      ]
+    },
+    "AT04": {
+      "有答案": [
+        "tests/test_eval_at_matrix.py::test_answerable_variant[AT04]",
+        "tests/test_evidence_tools.py::test_at04_get_evidence_returns_location_for_claude_codex_and_git"
+      ],
+      "无答案": [
+        "tests/test_eval_at_matrix.py::test_no_answer_variant[AT04]"
+      ],
+      "权限受限": [
+        "tests/test_eval_at_matrix.py::test_permission_limited_variant[AT04]",
+        "tests/test_evidence_tools.py::test_out_of_scope_evidence_is_indistinguishable_from_nonexistent"
+      ]
+    },
+    "AT08": {
+      "有答案": [
+        "tests/test_eval_at_matrix.py::test_answerable_variant[AT08]",
+        "tests/test_mainline_codex_git.py::test_at08_rerun_no_duplicates_and_append_only_ingests_new"
+      ],
+      "无答案": [
+        "tests/test_eval_at_matrix.py::test_no_answer_variant[AT08]"
+      ],
+      "权限受限": [
+        "tests/test_eval_at_matrix.py::test_permission_limited_variant[AT08]"
+      ]
+    },
+    "AT09": {
+      "有答案": [
+        "tests/test_eval_at_matrix.py::test_answerable_variant[AT09]",
+        "tests/test_hud_viewmodel.py::test_at09_daemon_dead_offers_restart"
+      ],
+      "无答案": [
+        "tests/test_eval_at_matrix.py::test_no_answer_variant[AT09]"
+      ],
+      "权限受限": [
+        "tests/test_eval_at_matrix.py::test_permission_limited_variant[AT09]"
+      ]
+    },
+    "AT12": {
+      "有答案": [
+        "tests/test_eval_at_matrix.py::test_answerable_variant[AT12]",
+        "tests/test_multi_host_mcp.py::test_two_hosts_with_same_buckets_get_the_same_facts"
+      ],
+      "无答案": [
+        "tests/test_eval_at_matrix.py::test_no_answer_variant[AT12]"
+      ],
+      "权限受限": [
+        "tests/test_eval_at_matrix.py::test_permission_limited_variant[AT12]",
+        "tests/test_multi_host_mcp.py::test_a_token_presented_under_another_hosts_name_is_denied"
+      ]
+    },
+    "AT13": {
+      "有答案": [
+        "tests/test_eval_at_matrix.py::test_answerable_variant[AT13]",
+        "tests/test_evidence_tools.py::test_tool_descriptions_state_the_contract"
+      ],
+      "无答案": [
+        "tests/test_eval_at_matrix.py::test_no_answer_variant[AT13]"
+      ],
+      "权限受限": [
+        "tests/test_eval_at_matrix.py::test_permission_limited_variant[AT13]"
+      ]
+    },
+    "AT17": {
+      "有答案": [
+        "tests/test_eval_at_matrix.py::test_answerable_variant[AT17]",
+        "tests/test_multi_host_mcp.py::test_claude_codex_cursor_configs_each_search_and_get_evidence"
+      ],
+      "无答案": [
+        "tests/test_eval_at_matrix.py::test_no_answer_variant[AT17]"
+      ],
+      "权限受限": [
+        "tests/test_eval_at_matrix.py::test_permission_limited_variant[AT17]",
+        "tests/test_multi_host_mcp.py::test_a_token_presented_under_another_hosts_name_is_denied"
+      ]
+    },
+    "AT18": {
+      "有答案": [
+        "tests/test_eval_at_matrix.py::test_answerable_variant[AT18]",
+        "tests/test_issue26_capture_chain.py::test_at18_control_app_and_domain_are_stored_and_searchable"
+      ],
+      "无答案": [
+        "tests/test_eval_at_matrix.py::test_no_answer_variant[AT18]",
+        "tests/test_issue26_capture_chain.py::test_at18_excluded_app_and_domain_produce_no_content_events"
+      ],
+      "权限受限": [
+        "tests/test_eval_at_matrix.py::test_permission_limited_variant[AT18]",
+        "tests/test_chat_app_scope.py::test_opted_in_chat_app_is_private_and_hidden_from_work_personal_hosts"
+      ]
+    },
+    "AT19": {
+      "有答案": [
+        "tests/test_eval_at_matrix.py::test_answerable_variant[AT19]",
+        "tests/test_capture_switches.py::test_pause_blocks_three_watchers_then_resume_writes_again"
+      ],
+      "无答案": [
+        "tests/test_eval_at_matrix.py::test_no_answer_variant[AT19]"
+      ],
+      "权限受限": [
+        "tests/test_eval_at_matrix.py::test_permission_limited_variant[AT19]"
+      ]
+    },
+    "AT21": {
+      "有答案": [
+        "tests/test_eval_at_matrix.py::test_answerable_variant[AT21]",
+        "tests/test_evidence_tools.py::test_at21_source_deleted_event_still_found_but_evidence_marked_unavailable"
+      ],
+      "无答案": [
+        "tests/test_eval_at_matrix.py::test_no_answer_variant[AT21]"
+      ],
+      "权限受限": [
+        "tests/test_eval_at_matrix.py::test_permission_limited_variant[AT21]"
+      ]
+    }
+  }
+}
