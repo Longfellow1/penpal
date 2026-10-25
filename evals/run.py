@@ -37,7 +37,7 @@ from pathlib import Path
 from typing import Any
 
 from evals import compare
-from evals.fixture_data import BUCKETS, BY_ID, CAPTURE_EVENTS, EVENTS
+from evals.fixture_data import BUCKETS, BY_ID, CAPTURE_EVENTS, EVENTS, PROJECT_BUCKET_RULES
 
 QUESTIONS_PATH = Path(__file__).parent / "data" / "retrieval_questions.jsonl"
 TOP_K = 5
@@ -56,7 +56,10 @@ def load_questions(path: Path = QUESTIONS_PATH) -> list[dict[str, Any]]:
 
 def question_set_digest(questions: list[dict[str, Any]]) -> str:
     """Hash of questions + fixtures: changes whenever the eval set changes (needs owner approval)."""
-    payload = json.dumps([questions, [e.__dict__ for e in EVENTS], [e.__dict__ for e in CAPTURE_EVENTS]], sort_keys=True, ensure_ascii=False)
+    payload = json.dumps(
+        [questions, [e.__dict__ for e in EVENTS], [e.__dict__ for e in CAPTURE_EVENTS], PROJECT_BUCKET_RULES],
+        sort_keys=True, ensure_ascii=False,
+    )
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()[:16]
 
 
@@ -216,18 +219,42 @@ def run_eval() -> dict[str, Any]:
             raise RuntimeError(f"fixture events were not ingested (fixture/plugin problem, not retrieval): {missing}")
         wired = {BY_ID[fx].source for fx in fx_to_row}
 
-        scored = [q for q in questions if q["variant"] in ("answerable", "no_answer")]
         # Answerable / no-answer / conflict questions span all four buckets, so the eval Host is
         # granted all of them. Each restricted question gets its own scoped grant (default Work).
         full = auth.create_grant("eval", buckets=list(BUCKETS))
         tokens = {}
-        for q in questions:
+        default_questions = [q for q in questions if q["variant"] != "restricted_project"]
+        project_questions = [q for q in questions if q["variant"] == "restricted_project"]
+        for q in default_questions:
             if q["variant"] == "restricted":
                 scope = q.get("grant", {})
                 tokens[q["id"]] = auth.create_grant(f"eval-{q['id']}", buckets=scope.get("buckets"), sources=scope.get("sources"))
             else:
                 tokens[q["id"]] = full
-        responses = _call_all(tokens, questions)
+        responses = _call_all(tokens, default_questions)
+        observed_default = dict(observed)
+
+        # P0 default questions above deliberately see source defaults. Then apply the user's
+        # explicit D37 project rules and exercise the same restricted queries again.
+        from penpal.store.db import get_conn
+        from penpal.store.models import Policy
+        from penpal.store.repository import insert_policy
+        from penpal.store.buckets import reapply_buckets
+
+        for project, bucket in PROJECT_BUCKET_RULES:
+            insert_policy(Policy(
+                scope_type="project", scope_value=project, mode="bucket",
+                config_json=json.dumps({"bucket": bucket}),
+            ))
+        reapply_buckets(get_conn())
+        _, _, observed_project = _resolve_fixture_rows()
+        project_tokens = {}
+        for q in project_questions:
+            scope = q.get("grant", {})
+            project_tokens[q["id"]] = auth.create_grant(
+                f"eval-{q['id']}", buckets=scope.get("buckets"), sources=scope.get("sources")
+            )
+        responses.update(_call_all(project_tokens, project_questions))
 
     def top_fx(q: dict[str, Any]) -> list[str | None]:
         results = responses[q["id"]].get("results", [])[:TOP_K]
@@ -238,6 +265,7 @@ def run_eval() -> dict[str, Any]:
     skipped: list[dict[str, Any]] = []
     recorded: list[dict[str, Any]] = []
     restricted: list[dict[str, Any]] = []
+    restricted_project: list[dict[str, Any]] = []
     details: list[dict[str, Any]] = []
 
     for q in questions:
@@ -260,16 +288,18 @@ def run_eval() -> dict[str, Any]:
                    "returned": len(resp.get("results", [])), "returned_strong": len(strong)}
             no_answer_rows.append(row)
             details.append(row)
-        elif q["variant"] == "restricted":
+        elif q["variant"] in ("restricted", "restricted_project"):
             # G1-style: no forbidden (out-of-scope) evidence may come back.
             leaked = [fx for fx in top if fx in q["forbidden"]]
             # A leak is "misbucketed" when the forbidden event's *assigned* bucket is inside the
             # grant: P0 has no content classification (D23), so e.g. a therapy chat in a Claude Code
             # session is Work by source default. Otherwise it is a scope-enforcement leak (G1).
             scope_b = set(q["grant"].get("buckets") or ["Work"])
-            causes = {fx: ("misbucketed" if observed.get(fx, {}).get("bucket") in scope_b else "scope_enforcement") for fx in leaked}
-            restricted.append({**base, "grant": q["grant"], "forbidden": q["forbidden"], "leaked": leaked,
-                               "leak_causes": causes, "hit": bool(leaked)})
+            bucket_view = observed_default if q["variant"] == "restricted" else observed_project
+            causes = {fx: ("misbucketed" if bucket_view.get(fx, {}).get("bucket") in scope_b else "scope_enforcement") for fx in leaked}
+            row = {**base, "grant": q["grant"], "forbidden": q["forbidden"], "leaked": leaked,
+                   "leak_causes": causes, "hit": bool(leaked)}
+            (restricted if q["variant"] == "restricted" else restricted_project).append(row)
         elif q["variant"] == "conflict":
             rank = {fx: i + 1 for i, fx in enumerate(top) if fx}
             recorded.append({**base, "newest_rank": rank.get(q["newest"]), "stale_rank": rank.get(q["stale"]),
@@ -302,6 +332,10 @@ def run_eval() -> dict[str, Any]:
             "questions_recorded_only": len(recorded),
             "restricted_evaluated": len(restricted),
             "restricted_leaks": sum(r["hit"] for r in restricted),
+            "restricted_default_evaluated": len(restricted),
+            "restricted_default_leaks": sum(r["hit"] for r in restricted),
+            "restricted_project_evaluated": len(restricted_project),
+            "restricted_project_leaks": sum(r["hit"] for r in restricted_project),
             "restricted_enforcement_leaks": sum("scope_enforcement" in r["leak_causes"].values() for r in restricted),
         },
         "by_scenario": _group(answerable_rows, "scenario"),
@@ -315,13 +349,15 @@ def run_eval() -> dict[str, Any]:
             "sources_wired": sorted(wired),
             "coverage_source_x_bucket": {s: {b: coverage.get((s, b), 0) for b in BUCKETS} for s in sorted({e.source for e in EVENTS})},
             "bucket_assigned_by_mainline": {
-                s: sum(1 for e in EVENTS if e.source == s and observed.get(e.id, {}).get("bucket"))
+                s: sum(1 for e in EVENTS if e.source == s and observed_default.get(e.id, {}).get("bucket"))
                 for s in sorted({e.source for e in EVENTS})
             },
+            "project_bucket_rules": [{"project": p, "bucket": b} for p, b in PROJECT_BUCKET_RULES],
         },
         "skipped": skipped,
         "recorded_only": recorded,
         "restricted": restricted,
+        "restricted_project": restricted_project,
         "questions": details,
     }
 
@@ -336,7 +372,8 @@ def _print(report: dict[str, Any]) -> None:
     print(f"  skipped {s['questions_skipped']}, recorded-only {s['questions_recorded_only']}, total {s['questions_total']}")
     for title, key in (("scenario", "by_scenario"), ("source", "by_source"), ("bucket", "by_bucket"), ("style", "by_style"), ("no-answer style", "no_answer_by_style")):
         print(f"  by {title}: " + ", ".join(f"{k} {v['hits']}/{v['n']}" for k, v in report[key].items()))
-    print(f"  restricted (scoped grants): {s['restricted_evaluated']} evaluated, {s['restricted_leaks']} returned forbidden evidence ({s['restricted_enforcement_leaks']} by scope enforcement, rest misbucketed by P0 source defaults)")
+    print(f"  restricted P0 default: {s['restricted_default_evaluated']} evaluated, {s['restricted_default_leaks']} forbidden returned (known D37 limitation: coding-agent default; {s['restricted_enforcement_leaks']} scope-enforcement leaks)")
+    print(f"  restricted with project rules: {s['restricted_project_evaluated']} evaluated, {s['restricted_project_leaks']} forbidden returned")
     for r in report["recorded_only"]:
         print(f"  conflict {r['id']}: newest rank {r['newest_rank']}, stale rank {r['stale_rank']} (recorded only)")
 

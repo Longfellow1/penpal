@@ -11,9 +11,10 @@ from click.testing import CliRunner
 
 from penpal.capture.policy import ALLOW, DENY, PolicyEngine
 from penpal.config import Config
+from penpal.i18n import T
 from mcp_helpers import search, server_for
 from penpal.mcp import auth, tools
-from penpal.mcp.cli import mcp_group
+from penpal.mcp.cli import grant_output_lines, mcp_group
 from penpal.store import buckets
 from penpal.store.db import close, get_conn, init_db
 from penpal.store.migrations import MIGRATIONS, run_migrations
@@ -33,11 +34,12 @@ def _isolated_home(tmp_path, monkeypatch):
 _n = [0]
 
 
-def _ev(source, text, ts="2026-03-01T09:00:00+00:00", app=None, bucket=None, event_type="semantic_event") -> int:
+def _ev(source, text, ts="2026-03-01T09:00:00+00:00", app=None, bucket=None, event_type="semantic_event", metadata=None) -> int:
     _n[0] += 1
     return insert_raw_event(
         RawEvent(source=source, event_type=event_type, ts_start=ts, content_text=text, app_name=app,
-                 content_hash=f"hh{_n[0]}", bucket=bucket)
+                 content_hash=f"hh{_n[0]}", bucket=bucket,
+                 metadata_json=json.dumps(metadata) if metadata is not None else None)
     )
 
 
@@ -81,6 +83,24 @@ def test_rule_priority_and_disabled_rules(db) -> None:
     assert _bucket_of(_ev("git_log", "y")) == "Work"                    # disabled rule ignored
 
 
+def test_project_rule_precedes_app_source_and_default_and_matches_exactly(db) -> None:
+    insert_policy(Policy(scope_type="project", scope_value="life-admin", mode="bucket",
+                         config_json=json.dumps({"bucket": "Financial"}), priority=100))
+    insert_policy(Policy(scope_type="app", scope_value="Claude", mode="bucket",
+                         config_json=json.dumps({"bucket": "Personal"}), priority=1))
+    insert_policy(Policy(scope_type="source", scope_value="claude_code", mode="bucket",
+                         config_json=json.dumps({"bucket": "Private"}), priority=1))
+
+    exact = _ev("claude_code", "private message", app="Claude Code", metadata={"project": "LIFE-ADMIN"})
+    partial = _ev("claude_code", "other project", app="Claude Code", ts="2026-03-01T10:00:00+00:00",
+                  metadata={"project": "life-admin-tools"})
+    source_only = _ev("claude_code", "source-scoped project", ts="2026-03-01T11:00:00+00:00",
+                      metadata={"project": "unmatched"})
+    assert _bucket_of(exact) == "Financial"  # project specificity beats lower numeric app/source priority
+    assert _bucket_of(partial) == "Personal"  # exact project matching does not prefix-match
+    assert _bucket_of(source_only) == "Private"  # source rule beats the claude_code Work default
+
+
 def test_bucket_rules_do_not_disturb_privacy_policy_engine(db) -> None:
     insert_policy(Policy(scope_type="app", scope_value="Chase", mode="bucket",
                          config_json=json.dumps({"bucket": "Financial"}), priority=1))
@@ -114,6 +134,15 @@ def test_reapply_buckets_after_rule_change(db) -> None:
     assert _bucket_of(rid) == "Financial"
 
 
+def test_project_rule_rebucket_applies_to_legacy_project_dir_metadata(db) -> None:
+    rid = _ev("claude_code", "stored therapy chat", metadata={"project_dir": "/tmp/claude/projects/-tmp-proj-life-admin"})
+    assert _bucket_of(rid) == "Work"
+    insert_policy(Policy(scope_type="project", scope_value="-tmp-proj-life-admin", mode="bucket",
+                         config_json=json.dumps({"bucket": "Personal"})))
+    assert buckets.reapply_buckets(get_conn()) == 1
+    assert _bucket_of(rid) == "Personal"
+
+
 def test_rules_cli_adds_bucket_rule(db, monkeypatch) -> None:
     from penpal import cli
     from penpal.cli import privacy as privacy_cli
@@ -127,6 +156,27 @@ def test_rules_cli_adds_bucket_rule(db, monkeypatch) -> None:
     assert runner.invoke(cli.main, ["rules", "add", "--scope-type", "window", "--scope-value", "x", "--bucket", "Work"]).exit_code != 0
     assert runner.invoke(cli.main, ["rules", "add", "--scope-type", "app", "--scope-value", "x", "--bucket", "Temporary"]).exit_code != 0
     assert runner.invoke(cli.main, ["rules", "add", "--scope-type", "app", "--scope-value", "x"]).exit_code != 0
+
+
+def test_project_rules_cli_alias_and_projects_listing_are_read_only(db, monkeypatch) -> None:
+    from penpal import cli
+    from penpal.cli import privacy as privacy_cli
+
+    monkeypatch.setattr(privacy_cli, "get_config", lambda: Config())
+    monkeypatch.setattr(privacy_cli, "require_db", lambda cfg: None)
+    _ev("claude_code", "must not appear in project listing", metadata={"project": "-tmp-proj-life-admin"})
+    runner = CliRunner()
+    result = runner.invoke(cli.main, [
+        "rules", "add", "--scope", "project", "--value", "-tmp-proj-life-admin", "--bucket", "Personal",
+    ])
+    assert result.exit_code == 0, result.output
+    listed = runner.invoke(cli.main, ["rules", "projects", "--plain"])
+    assert listed.exit_code == 0, listed.output
+    assert listed.output.strip() == "claude_code\t-tmp-proj-life-admin\t1\tWork"
+    assert "must not appear" not in listed.output
+    assert runner.invoke(cli.main, [
+        "rules", "add", "--scope", "project", "--value", "life-admin", "--mode", "deny",
+    ]).exit_code != 0
 
 
 # ── migration v21 ────────────────────────────────────────────────────────────────────────────
@@ -165,6 +215,31 @@ def test_v21_adds_grant_scope_backfills_buckets_and_is_idempotent(tmp_path: Path
 def test_new_grant_defaults_to_work_only_read(db) -> None:
     grant = auth.authenticate(auth.create_grant("host"))
     assert grant.buckets == ("Work",) and grant.sources is None and grant.operations == ("read",)
+
+
+def test_work_grant_notice_shows_once_only_when_enabled_coding_source_is_in_scope() -> None:
+    notice = T(
+        "Work 包含 Claude Code / Codex 里的全部对话；私人项目可用 `penpal rules add --scope project …` 归到 Personal。",
+        "Work includes all conversations in Claude Code / Codex; move a private project to Personal with `penpal rules add --scope project …`.",
+    )
+    shown = grant_output_lines(
+        "claude", "buckets=Work", "kp_fake", "claude", "penpal", buckets=["Work"],
+        enabled_sources=["claude_code", "codex_cli"],
+    )
+    hidden_personal = grant_output_lines(
+        "claude", "buckets=Personal", "kp_fake", "claude", "penpal", buckets=["Personal"],
+        enabled_sources=["claude_code", "codex_cli"],
+    )
+    hidden_source_scope = grant_output_lines(
+        "claude", "buckets=Work, sources=git_log", "kp_fake", "claude", "penpal", buckets=["Work"],
+        sources=["git_log"], enabled_sources=["claude_code", "codex_cli"],
+    )
+    hidden_disabled_sources = grant_output_lines(
+        "claude", "buckets=Work", "kp_fake", "claude", "penpal", buckets=["Work"], enabled_sources=[],
+    )
+    assert sum(line == notice for line in shown) == 1
+    assert all(not any(line == notice for line in output) for output in
+               (hidden_personal, hidden_source_scope, hidden_disabled_sources))
 
 
 def test_grant_validation(db) -> None:
@@ -228,6 +303,10 @@ def test_multi_bucket_grant_and_cli(db, monkeypatch) -> None:
     runner = CliRunner()
     out = runner.invoke(mcp_group, ["grant", "claude", "--buckets", "Work,Personal", "--purpose", "demo", "--expires-in-days", "7"])
     assert out.exit_code == 0, out.output
+    assert out.output.count(T(
+        "Work 包含 Claude Code / Codex 里的全部对话；私人项目可用 `penpal rules add --scope project …` 归到 Personal。",
+        "Work includes all conversations in Claude Code / Codex; move a private project to Personal with `penpal rules add --scope project …`.",
+    )) == 1
     token = next(line.strip() for line in out.output.splitlines() if line.strip().startswith("kp_"))
     assert {r["bucket"] for r in search(token, ["pelican"])["results"]} == {"Work", "Personal"}
     default = runner.invoke(mcp_group, ["grant", "plain"])
@@ -236,6 +315,10 @@ def test_multi_bucket_grant_and_cli(db, monkeypatch) -> None:
     assert runner.invoke(mcp_group, ["grant", "bad", "--buckets", "Temporary"]).exit_code != 0
     listing = runner.invoke(mcp_group, ["list"]).output
     assert "Work" in listing and "expires" in listing and "kp_" not in listing
+    assert T(
+        "Work 包含 Claude Code / Codex 里的全部对话；私人项目可用 `penpal rules add --scope project …` 归到 Personal。",
+        "Work includes all conversations in Claude Code / Codex; move a private project to Personal with `penpal rules add --scope project …`.",
+    ) in listing
 
 
 def test_scoped_ranking_uses_relevance_not_just_recency_and_ignores_out_of_scope_data(db) -> None:
@@ -249,3 +332,15 @@ def test_scoped_ranking_uses_relevance_not_just_recency_and_ignores_out_of_scope
     for i in range(50):  # unrelated out-of-scope corpus must not change in-scope order
         _ev("chrome_history", f"pelican pelican pelican pelican {i}")
     assert [r["snippet"] for r in search(token, ["pelican"])["results"]] == before
+
+
+def test_project_rule_by_folder_name_reaches_legacy_claude_rows_with_only_the_encoded_dir(db) -> None:
+    # The user types the folder name they know; old rows only carry Claude's lossy encoded dir.
+    rid = _ev("claude_code", "stored mortgage chat", metadata={"project_dir": "/tmp/claude/projects/-tmp-proj-life-admin"})
+    other = _ev("claude_code", "stored work chat", ts="2026-03-01T12:00:00+00:00",
+                metadata={"project_dir": "/tmp/claude/projects/-tmp-proj-life-admin-tools"})
+    insert_policy(Policy(scope_type="project", scope_value="life-admin", mode="bucket",
+                         config_json=json.dumps({"bucket": "Personal"})))
+    buckets.reapply_buckets(get_conn())
+    assert _bucket_of(rid) == "Personal"
+    assert _bucket_of(other) == "Work"

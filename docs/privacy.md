@@ -153,6 +153,7 @@
 |---|---|
 | 每个 AI（Host）一个独立令牌，库里只存哈希，明文只在创建时显示一次 | `mcp/auth.py` `create_grant`、`hash_token`；`tests/test_auth_audit.py::test_g5_no_plaintext_token_or_hash_in_db_wal_logs_audit_or_cli_output` |
 | 授权按分类（Work / Personal / Private / Financial）限定，默认只给 Work；还可以限定来源和到期时间 | `mcp/auth.py` `DEFAULT_BUCKETS`、`Grant`；`tests/test_buckets_grants.py` |
+| Work 会包含已启用的 Claude Code / Codex 来源中的全部对话；按项目目录名添加 project 桶规则并执行 `penpal rules rebucket` 可把已有对话改归 Personal | `store/buckets.py`、`sources/plugins/claude_code.py`、`sources/plugins/codex_cli.py`、`penpal rules projects`；`tests/test_buckets_grants.py::test_project_rule_precedes_app_source_and_default_and_matches_exactly`、`test_project_rule_rebucket_applies_to_legacy_project_dir_metadata` |
 | 查询时必须同时满足：令牌有效、声明的客户端名与授权一致、该客户端在你批准的名单内 | `mcp/auth.py` `check_access`；`tests/test_auth_audit.py` |
 | 随时撤销，下一次调用立刻失效（不缓存）；`rotate` 换新令牌，旧令牌立刻失效 | `revoke_grants`、`rotate_grant`；`tests/test_auth_audit.py::test_revoke_is_immediate_and_removes_whitelist`、`test_rotate_keeps_grant_and_scope_and_kills_old_token` |
 | 审计日志记：谁（客户端名）、什么时候、哪个工具、放行还是拒绝、授权的分类名、放行时返回几条；**不记查询内容、片段、令牌** | `mcp/audit.py`（表里没有能放查询文字的列）；`penpal mcp audit`；`tests/test_auth_audit.py` |

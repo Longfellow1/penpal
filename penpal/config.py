@@ -236,7 +236,7 @@ class PolicyConfig(BaseModel):
     scope_type: str
     scope_value: str
     mode: str = "allow"  # allow|deny|metadata-only|redact|truncate (ignored when `bucket` is set)
-    bucket: str | None = None  # bucket rule: Work|Personal|Private|Financial (scope_type app|source)
+    bucket: str | None = None  # bucket rule: Work|Personal|Private|Financial (scope_type app|source|project)
     enabled: bool = True
     priority: int = 100
 

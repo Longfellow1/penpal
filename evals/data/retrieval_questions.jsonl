@@ -90,6 +90,9 @@
 {"id":"r03","variant":"restricted","style":"kw","query":"mortgage","keywords":["mortgage"],"grant":{"buckets":["Work"]},"forbidden":["cx-04","sf-02"]}
 {"id":"r04","variant":"restricted","style":"kw","query":"journal therapy","keywords":["journal","therapy"],"grant":{"buckets":["Work"]},"forbidden":["md-05"]}
 {"id":"r05","variant":"restricted","style":"kw","query":"信用卡 年费","keywords":["信用卡","年费"],"grant":{"buckets":["Work","Personal"]},"forbidden":["cc-09"]}
+{"id":"r02p","variant":"restricted_project","style":"kw","query":"心理咨询","keywords":["心理咨询"],"grant":{"buckets":["Work"]},"forbidden":["cc-10"]}
+{"id":"r03p","variant":"restricted_project","style":"kw","query":"mortgage","keywords":["mortgage"],"grant":{"buckets":["Work"]},"forbidden":["cx-04","sf-02"]}
+{"id":"r05p","variant":"restricted_project","style":"kw","query":"信用卡 年费","keywords":["信用卡","年费"],"grant":{"buckets":["Work"]},"forbidden":["cc-09"]}
 {"id":"r06","variant":"restricted","style":"kw","query":"Luxilon","keywords":["Luxilon"],"grant":{"sources":["claude_code"]},"forbidden":["ch-03"]}
 {"id":"c01","variant":"conflict","style":"kw","query":"deadline","keywords":["deadline"],"newest":"cc-17","stale":"cc-16"}
 {"id":"c02","variant":"conflict","style":"kw","query":"发布 deadline","keywords":["发布","deadline"],"newest":"cc-17","stale":"cc-16"}

@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterator
 
+from penpal.foundation.project import normalize_project
 from penpal.foundation.transcript_noise import clean_message_part
 from penpal.sources.cleaning.noise import (
     advance_echo,
@@ -56,6 +57,7 @@ class ClaudeCodeSource(DataSource):
             session_files = list(project_dir.glob("*.jsonl"))
             metadata = {
                 "project_path": _decode_project_path(project_dir.name),
+                "project": normalize_project(project_dir),
                 "session_count": len(session_files),
             }
             instances.append(
@@ -246,6 +248,8 @@ def _row_metadata(session_id: str, row: dict[str, Any], project_dir: Path, via_p
         "session_id": session_id,
         "parent_uuid": row.get("parentUuid"),
         "project_dir": str(project_dir.resolve()),
+        # The real folder name from the row's cwd; the encoded projects dir name is lossy ("life-admin" -> "life", "admin").
+        "project": normalize_project(row.get("cwd")) or normalize_project(project_dir),
     }
     if via_penpal:
         metadata["via_penpal"] = True

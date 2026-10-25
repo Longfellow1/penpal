@@ -30,6 +30,7 @@ def test_discover_claude_projects(monkeypatch, tmp_path: Path) -> None:
     assert instance.locator == str(project_dir.resolve())
     assert instance.label == "penpal"
     assert instance.metadata["project_path"] == "/Users/someone/Work/penpal"
+    assert instance.metadata["project"] == "-Users-someone-Work-penpal"
     assert instance.metadata["session_count"] == 2
 
 
@@ -117,6 +118,8 @@ def test_read_claude_jsonl_handles_dict_and_stringified_message(monkeypatch, tmp
     assert len(events[3].intent) == 2300
     assert events[0].artifact == "claude:session:abc-session:msg:u-1"
     assert events[1].metadata["parent_uuid"] == "u-1"
+    assert events[0].metadata["project"] == "-Users-someone-Work-penpal"
+    assert events[0].metadata["project_dir"] == str(project_dir.resolve())
     assert events[2].raw_ref.endswith(":3")
 
 
@@ -169,3 +172,18 @@ def test_default_does_not_exclude_keypulse_named_project_dir(monkeypatch, tmp_pa
     source = ClaudeCodeSource()
 
     assert [i.locator for i in source.discover()] == [str(main_dir.resolve())]
+
+
+def test_claude_rows_record_the_real_folder_name_from_cwd(monkeypatch, tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    monkeypatch.setattr(Path, "home", lambda: home)
+    project_dir = home / ".claude" / "projects" / "-Users-someone-life-admin"
+    project_dir.mkdir(parents=True)
+    row = {"type": "user", "uuid": "u-1", "parentUuid": None, "timestamp": "2026-04-28T01:00:00Z",
+           "cwd": "/Users/someone/life-admin", "message": {"role": "user", "content": "compare card fees"}}
+    (project_dir / "s.jsonl").write_text(json.dumps(row) + "\n", encoding="utf-8")
+    source = ClaudeCodeSource()
+    since = datetime(2026, 4, 28, 0, 0, tzinfo=timezone.utc)
+    until = datetime(2026, 4, 28, 2, 0, tzinfo=timezone.utc)
+    events = [event for instance in source.discover() for event in source.read(instance, since, until)]
+    assert [event.metadata["project"] for event in events] == ["life-admin"]

@@ -154,10 +154,10 @@ def rules_list(plain):
         console.print(table)
 
 @rules.command("add", help=T("新增隐私策略或分桶规则。", "Add a privacy policy or a bucket rule."))
-@click.option("--scope-type", required=True, help=T("范围类型（app、window、source、content；分桶规则仅 app / source）", "Scope type (app, window, source, content; bucket rules: app or source only)"))
-@click.option("--scope-value", required=True, help=T("范围值（例如 'Safari'、'password'）", "Scope value (e.g., 'Safari', 'password')"))
+@click.option("--scope-type", "--scope", required=True, help=T("范围类型（app、window、source、content；分桶规则支持 app / source / project）", "Scope type (app, window, source, content; bucket rules also support project)"))
+@click.option("--scope-value", "--value", required=True, help=T("范围值（例如 'Safari'、'password'；project 使用项目目录名）", "Scope value (e.g., 'Safari', 'password'; project uses the project folder name)"))
 @click.option("--mode", default=None, help=T("模式（allow、deny、metadata-only、redact、truncate）", "Mode (allow, deny, metadata-only, redact, truncate)"))
-@click.option("--bucket", default=None, help=T("分桶规则：把该 App / 来源的数据归入此桶（Work、Personal、Private、Financial）", "Bucket rule: file data from this app/source into a bucket (Work, Personal, Private, Financial)"))
+@click.option("--bucket", default=None, help=T("分桶规则：把该 App / 来源 / 项目的数据归入此桶（Work、Personal、Private、Financial）", "Bucket rule: file data from this app/source/project into a bucket (Work, Personal, Private, Financial)"))
 @click.option("--priority", type=int, default=100, help=T("优先级（值越小优先级越高）", "Priority (lower = higher priority)"))
 def rules_add(scope_type, scope_value, mode, bucket, priority):
     """Add rule."""
@@ -170,8 +170,14 @@ def rules_add(scope_type, scope_value, mode, bucket, priority):
 
         if mode:
             raise click.UsageError("--bucket and --mode are mutually exclusive")
-        if scope_type not in ("app", "source"):
-            raise click.UsageError("bucket rules support --scope-type app or source")
+        if scope_type not in ("app", "source", "project"):
+            raise click.UsageError("bucket rules support --scope-type app, source, or project")
+        if scope_type == "project":
+            from penpal.foundation.project import normalize_project
+
+            scope_value = normalize_project(scope_value)
+            if not scope_value:
+                raise click.UsageError("project bucket rules require a project folder name")
         try:
             config_json = json.dumps({"bucket": normalize_bucket(bucket)})
         except ValueError as exc:
@@ -179,6 +185,8 @@ def rules_add(scope_type, scope_value, mode, bucket, priority):
         mode = BUCKET_MODE
     elif not mode:
         raise click.UsageError("one of --mode or --bucket is required")
+    elif scope_type == "project":
+        raise click.UsageError("project scope is only supported for bucket rules")
 
     policy = Policy(
         scope_type=scope_type,
@@ -190,6 +198,43 @@ def rules_add(scope_type, scope_value, mode, bucket, priority):
 
     policy_id = insert_policy(policy)
     console.print(f"[green]Policy added (ID: {policy_id})[/green]")
+
+
+@rules.command("projects", help=T("列出已导入的项目、来源、事件数和当前分桶；不显示内容。", "List imported projects, sources, event counts, and current buckets without showing content."))
+@click.option("--plain", is_flag=True, default=False, help=PLAIN_HELP)
+def rules_projects(plain):
+    """List known project keys from event metadata, without reading event content."""
+    from collections import Counter
+
+    from penpal.foundation.project import project_from_metadata_json
+
+    cfg = get_config()
+    require_db(cfg)
+    counts = Counter()
+    for row in get_conn().execute(
+        "SELECT source, bucket, metadata_json FROM raw_events WHERE metadata_json IS NOT NULL"
+    ):
+        project = project_from_metadata_json(row["metadata_json"])
+        if project:
+            counts[(row["source"], project, row["bucket"] or "—")] += 1
+
+    rows = sorted(counts.items(), key=lambda item: (item[0][0], item[0][1].casefold(), item[0][2]))
+    if plain:
+        for (source, project, bucket), count in rows:
+            print(f"{source}\t{project}\t{count}\t{bucket}")
+        return
+    if not rows:
+        console.print(T("还没有带项目标记的事件。", "No events with project metadata yet."), markup=False)
+        return
+
+    table = Table(title=T("已知项目", "Known projects"), show_header=True, header_style="bold cyan")
+    table.add_column(T("来源", "Source"))
+    table.add_column(T("项目目录", "Project folder"))
+    table.add_column(T("事件数", "Events"), justify="right")
+    table.add_column(T("当前桶", "Current bucket"))
+    for (source, project, bucket), count in rows:
+        table.add_row(source, project, str(count), bucket)
+    console.print(table)
 
 @rules.command("rebucket", help=T("按当前分桶规则重新计算已有数据的桶（规则变更不会自动回溯）。", "Re-evaluate buckets of stored events with the current rules (rule changes are not retroactive otherwise)."))
 def rules_rebucket():

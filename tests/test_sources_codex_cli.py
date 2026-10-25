@@ -60,3 +60,23 @@ def test_codex_cli_discover_returns_empty_when_missing(monkeypatch, tmp_path: Pa
     source = CodexCliSource()
 
     assert source.discover() == []
+
+
+def test_codex_session_records_normalized_project_folder(tmp_path: Path) -> None:
+    sessions = tmp_path / "sessions"
+    rollout = sessions / "2026" / "04" / "23" / "rollout.jsonl"
+    rows = [
+        {"timestamp": "2026-04-23T09:00:00Z", "ordinal": 1, "type": "session_meta",
+         "payload": {"session_id": "s-4", "cwd": "/tmp/proj/cx-s4"}},
+        {"timestamp": "2026-04-23T09:00:00Z", "ordinal": 2, "type": "response_item",
+         "payload": {"type": "message", "role": "user", "content": [{"type": "input_text", "text": "private note"}]}},
+    ]
+    rollout.parent.mkdir(parents=True)
+    rollout.write_text("\n".join(json.dumps(row) for row in rows) + "\n", encoding="utf-8")
+    source = CodexCliSource(sessions_root=sessions)
+    instance = source.discover()[0]
+    events = list(source.read(
+        instance, datetime(2026, 4, 23, 0, tzinfo=timezone.utc), datetime(2026, 4, 24, 0, tzinfo=timezone.utc)
+    ))
+    assert events[0].metadata["project"] == "cx-s4"
+    assert events[0].metadata["project_dir"] == "/tmp/proj/cx-s4"
