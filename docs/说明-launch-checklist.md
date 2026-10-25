@@ -1,5 +1,7 @@
 # Penpal Launch Checklist
 
+> Historical checklist for the v0.1.0 Obsidian-export product concept. Its items are not current Penpal MCP release status; see the repository README for current positioning and setup.
+
 ## Repo packaging
 
 - [x] GitHub profile README points to Penpal

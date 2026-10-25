@@ -1,5 +1,7 @@
 # Penpal v0.1.0 Public Preview
 
+> Historical v0.1.0 release draft for the former Obsidian/report pipeline. It does not describe Penpal MCP 0.3.0; use the repository README for current functionality.
+
 Penpal is ready for early public testing as a local-first Mac companion for Obsidian-native daily reflection.
 
 This release focuses on one core loop:

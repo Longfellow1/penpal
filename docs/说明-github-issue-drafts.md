@@ -1,5 +1,7 @@
 # GitHub Issue Drafts
 
+> Archived pre-V2 public issue drafts. They describe an older Obsidian/report product concept and must not be published as current Penpal MCP plans. See the repository README for current positioning.
+
 These are public issue drafts for making the repository feel active without creating low-signal noise.
 
 Do not create them before the README and install path have been reviewed.

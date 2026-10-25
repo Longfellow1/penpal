@@ -1,82 +1,27 @@
-# Penpal Distribution Drafts
+# Penpal MCP distribution drafts
 
-Do not publish these broadly until the README, screenshots, install path, and privacy explanation have been reviewed.
+These drafts describe Penpal MCP 0.3.0. Review the install steps and privacy boundary before posting. Do not add claims about Obsidian export, daily or weekly reports, reflection, or journaling; those former features were removed.
 
-## X / Twitter
+## Short post
 
 ```text
-I don't want another productivity dashboard.
+I built Penpal MCP, a local-first memory layer for AI agents on macOS.
 
-I want a quiet local-first companion that observes my work surface, forgets secrets before persistence, and writes a daily reflection back into Obsidian.
+It records activity from sources you enable and imports supported local histories, coding-agent sessions, Git and approved Markdown sources. Claude Code, Codex and Cursor can search the same local store through MCP.
 
-So I built Penpal.
-
-Local-first. macOS. Obsidian-native. Privacy by architecture.
+Penpal has no built-in LLM. Its data stays on your Mac; results returned to an AI host may enter that host's conversation and cloud model service.
 
 https://github.com/Longfellow1/penpal
 ```
 
-## V2EX
+## Chinese post
 
 ```text
-标题：做了一个 Mac 里的本地 AI 笔友：把每天工作痕迹整理成 Obsidian 复盘
+我做了 Penpal MCP：一个给 macOS AI Agent 使用的本地记忆层和 MCP server。
 
-我最近在做一个小工具 Penpal。
+它按用户启用的来源记录本机活动，并导入支持的本地历史、编程 Agent 会话、Git 和获批 Markdown 数据。Claude Code、Codex 和 Cursor 可以通过 MCP 查询同一份本地数据。
 
-它不是 RescueTime 那类时间统计，也不是生产力打分。我更想要的是一个本地优先的“私人思考镜子”：看见我每天反复切换的 App、窗口、手动记录和剪贴板边界，然后把这些东西整理成一页 Obsidian 日报。
+Penpal 不内置大模型，数据保存在 Mac 本机；返回结果会进入所用 AI Host 的对话，也可能被发送到该 Host 的云端模型服务。
 
-隐私这块我尽量放在架构里解决：敏感 App 过滤、字段级脱敏、写盘前丢弃，而不是先收集再承诺不看。
-
-现在还是早期版本，想找一些 Mac / Obsidian / local-first 工具用户试试，主要想听三个反馈：
-
-1. README 是否讲清楚了它到底是什么？
-2. 你会不会担心它像监控软件？
-3. 这个每日复盘产出对你有没有价值？
-
-GitHub：
-https://github.com/Longfellow1/penpal
-```
-
-## Obsidian Forum
-
-```text
-Title: My local-first daily review workflow: Mac work traces -> Obsidian Daily Notes
-
-I have been building Penpal, a local-first Mac companion that writes daily reflection notes into an Obsidian vault.
-
-The goal is not screen-time tracking or productivity scoring. The workflow is:
-
-Mac work-surface signals -> local privacy filters -> Markdown daily notes / event cards / topic cards in Obsidian.
-
-The output is plain Markdown with frontmatter, wikilinks, and checkbox feedback so the vault remains user-owned.
-
-I am looking for feedback from Obsidian users on:
-
-- whether this feels like an Obsidian-native workflow
-- whether the daily note structure is useful
-- whether the privacy model is clear enough
-- what a lightweight companion plugin should do, if any
-
-Repo:
-https://github.com/Longfellow1/penpal
-```
-## Hacker News / Reddit
-
-```text
-Show HN: Penpal - local-first daily reflection notes for Mac and Obsidian
-
-I built Penpal because I wanted something different from productivity dashboards and screen-time trackers.
-
-Penpal is a local-first Mac companion that observes lightweight work-surface signals, filters sensitive content before persistence, and writes daily reflection notes into your own Obsidian vault.
-
-The goal is not to optimize a productivity score. The goal is to help knowledge workers notice recurring patterns in their own work.
-
-I am especially interested in feedback on:
-
-- whether the privacy model is clear enough
-- whether the daily note output is actually useful
-- whether the positioning feels different from time-tracking tools
-
-Repo:
 https://github.com/Longfellow1/penpal
 ```

@@ -1,0 +1,16 @@
+# Penpal MCP
+
+Penpal MCP is a local-first memory layer and stdio MCP server for AI agents on macOS, with local activity capture and searchable history for Claude Code, Codex and Cursor.
+
+## Project
+
+- [English README](README.en.md)
+- [Quick start](README.en.md#quick-start)
+- [Privacy](docs/privacy.en.md)
+- [MCP tools](README.en.md#tools-the-ai-can-use)
+
+## Guides
+
+- [What is a local memory layer for AI agents?](docs/guides/local-memory-for-ai-agents.md)
+- [Give Claude Code, Codex and Cursor memory](docs/guides/give-claude-code-codex-cursor-memory.md)
+- [Penpal vs. alternatives](docs/guides/penpal-vs-alternatives.md)

@@ -1,0 +1,7 @@
+date,engine,prompt_id,prompt,retrieved,cited,recommended,notes
+2026-10-25,web search,p01,"memory for Claude Code MCP local Mac activity history browser",0,not_measured,not_measured,"Aggregate baseline supplied as 0/6; individual search captures not supplied"
+2026-10-25,web search,p02,"local memory layer for AI agents macOS MCP open source",0,not_measured,not_measured,"Aggregate baseline supplied as 0/6; individual search captures not supplied"
+2026-10-25,web search,p03,"Penpal MCP memory Claude Code Codex Cursor",0,not_measured,not_measured,"Aggregate baseline supplied as 0/6; individual search captures not supplied"
+2026-10-25,web search,p04,"Longfellow1 penpal github",0,not_measured,not_measured,"Aggregate baseline supplied as 0/6; individual search captures not supplied"
+2026-10-25,web search,p05,"Rewind alternative open source MCP Mac clipboard browser history",0,not_measured,not_measured,"Aggregate baseline supplied as 0/6; individual search captures not supplied"
+2026-10-25,web search,p06,"OpenMemory alternative local no API key",not_measured,not_measured,not_measured,"Not yet measured"

@@ -1,6 +1,6 @@
 # Brain Index
 
-_Auto-generated. Last updated 2026-10-25T14:16:31.921Z._
+_Auto-generated. Last updated 2026-10-25T14:40:42.636Z._
 
 - [anchors-json-is-ssot](pages/anchors-json-is-ssot.md) — category: decision | ## Decision
 - [beat-vs-emit-separation](pages/beat-vs-emit-separation.md) — category: decision | ## Decision
@@ -15,6 +15,7 @@ _Auto-generated. Last updated 2026-10-25T14:16:31.921Z._
 - [db-direct-read-over-screen-capture](pages/db-direct-read-over-screen-capture.md) — category: decision | ## Decision
 - [email-domain-kept-mask](pages/email-domain-kept-mask.md) — category: decision | tags: [privacy, redaction, mcp] | D31 (2026-10-12, product owner): emails are masked in the local part only, keeping the domain (`***@gmail.com`).
 - [eval-prd-separate](pages/eval-prd-separate.md) — category: decision | tags: [eval, prd] | ## Decision
+- [geo-discoverability](pages/geo-discoverability.md) — category: decision | tags: [geo, positioning, growth] | - Public name is **"Penpal MCP"** (zh "Penpal MCP（笔友）"): bare "Penpal" collides with the common word "pen pal" and other projects. Category
 - [gold-set-gated-prompt-changes](pages/gold-set-gated-prompt-changes.md) — category: decision | status: archived | ## Decision
 - [host-does-query-preprocessing](pages/host-does-query-preprocessing.md) — category: decision | tags: [v1, mcp, search, decision] | <current best understanding — replace this with the real content>
 - [irreplaceability-vs-bash](pages/irreplaceability-vs-bash.md) — category: decision | tags: [v1, product, positioning, eval, decision] | <current best understanding — replace this with the real content>
