@@ -9,6 +9,7 @@ from datetime import datetime, timedelta, timezone
 
 from penpal.hud.snapshot import AuditRow, HostInfo, PermIssue, Snapshot, SourceInfo
 from penpal.hud.viewmodel import UiState, Reveal, build_model, delete_options
+from penpal.i18n import T
 from penpal.runtime import RuntimeState, RuntimeStatus
 from penpal.runtime.evaluate import Issue
 from penpal.foundation.runtime_record import Component
@@ -255,6 +256,12 @@ def test_host_page_scope_usage_rotate_revoke():
     assert [(r["title"], r["trail"]["on"]) for r in buckets["rows"]] == [
         ("工作", True), ("个人", True), ("私密", False), ("财务", False)]
     assert "云端" in buckets["footer"]
+    notice = T(
+        "Work 包含 Claude Code / Codex 里的全部对话；私人项目可用 `penpal rules add --scope project …` 归到 Personal。",
+        "Work includes all conversations in Claude Code / Codex; move a private project to Personal with `penpal rules add --scope project …`.",
+    )
+    assert m["sections"][1]["header"] == "授权范围提示"
+    assert notice in m["sections"][1]["footer"]
     usage = next(s for s in m["sections"] if s.get("header") == "使用情况")
     assert [r["value"]["text"] for r in usage["rows"]][1:] == ["132 次", "3 次"]
     buttons = [s for s in m["sections"] if s["kind"] == "button"]
@@ -263,7 +270,14 @@ def test_host_page_scope_usage_rotate_revoke():
         ("撤销 Claude Code 的授权", "danger", "confirm.ask", {"kind": "revoke", "client_id": "claude"}),
     ]
     codex = build_model(snap(), UiState(tab="access", page="host:codex"))
-    assert codex["sections"][1]["header"] == "限定来源" and titles(codex["sections"][1]) == ["Claude Code"]
+    assert codex["sections"][1]["header"] == "授权范围提示"
+    assert codex["sections"][2]["header"] == "限定来源" and titles(codex["sections"][2]) == ["Claude Code"]
+
+    disabled = build_model(
+        snap(sources=_sources(claude_code={"enabled": False})),
+        UiState(tab="access", page="host:codex"),
+    )
+    assert all(section.get("header") != "授权范围提示" for section in disabled["sections"])
 
 
 def test_new_host_page_defaults_to_work_only():

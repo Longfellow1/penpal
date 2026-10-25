@@ -188,14 +188,16 @@ flowchart LR
 |---|---:|---:|---:|---|
 | 有答案 | 不少于 50 | 104 | 30 | 查询、能支持答案的 evidence_id 集合、所属场景（W01 / W02 / L01 / L02 / 跨源） |
 | 无答案 | 不少于 15 | 15 | 10 | 查询；标注"任何结果都不应被当成答案" |
-| 权限受限 | 不少于 10 | 10 | — | 查询、Host 授权范围（与 G1 共用无权数据） |
+| 权限受限 | 不少于 10 | 10 + 3 | — | 查询、Host 授权范围（与 G1 共用无权数据）；10 条按 P0 默认桶测量，另 3 条重复 life-admin / mortgage / card-fee 查询，在显式 project 桶规则后测量（D37） |
 | 冲突 / 过期 | 不少于 5 | 5 | 5 | 只记录（AT11 为 P1） |
-| **合计** | **不少于 80** | **134** | **45** | 四个场景每个至少 8 条，跨源至少 8 条 |
+| **合计** | **不少于 80** | **137** | **45** | 四个场景每个至少 8 条，跨源至少 8 条 |
 
-夹具库当前共 134 条，按类别达到上述下限；CI 形状测试锁定每类下限，后续只允许增加，不得因补题而删除已有题目。
+夹具库当前共 137 条，按类别达到上述下限；CI 形状测试锁定每类下限，后续只允许增加，不得因补题而删除已有题目。
 
 - 查询写法要贴近真实提问：模糊线索、人名别名、相对时间（"上周""昨天"）、同名项目都要覆盖（基线 §8.3）。
 - 夹具库的标注进 git；真实库的标注只存在本机 `~/.penpal/eval/`（【已确认】）。
+
+**D37 restricted 结果：** E3 同时保留 P0 默认集合与应用 project 规则后的变体。默认集合当前 **3 条 forbidden evidence 泄漏**（已知限制：coding-agent 默认归 Work），规则变体 **0 条泄漏**；`evals/compare.py` 对规则变体设零容忍硬门槛，并要求至少评测 3 条，默认集合继续报告但不作为回归门槛。规则变体的合成项目键是 Claude Code 的 `-tmp-proj-life-admin` 和 Codex 的 `cx-s4`，二者都归到 Personal；r05 的变体使用 Work-only grant，以测量项目规则能否把 cc-09 移出 Work。
 
 #### 3.3.3 评分逻辑
 
@@ -349,6 +351,15 @@ MCP 参数改名的契约矩阵：
 | 工具出口 | 新参数 | 过渡别名 | 用例与通过线 |
 |---|---|---|---|
 | `search_context`、`get_timeline` | `include_penpal_echoes` | `include_keypulse_echoes`（标记 deprecated，0.5.0 移除） | `tests/test_mainline_claude_to_mcp.py` 验证 schema 标记、新旧参数映射相同值和旧参数仍拒绝非布尔值；G1 schema 覆盖断言两种字段都已登记。 |
+
+D37 的 bucket / grant 约定矩阵：
+
+| 出口 / 输入 | 预期结论 | 用例与通过线 |
+|---|---|---|
+| coding-agent `metadata.project` + bucket policies | 精确、忽略大小写；project > app > source > default | `tests/test_buckets_grants.py::test_project_rule_precedes_app_source_and_default_and_matches_exactly`；同名项目以外不得命中 |
+| `penpal rules rebucket` | 使用事件当前存储的 project 元数据更新已有桶；旧 Claude 行从 `project_dir` 回退 | `tests/test_buckets_grants.py::test_project_rule_rebucket_applies_to_legacy_project_dir_metadata` |
+| MCP grant 创建 / 列表 / 轮换与 HUD grant 视图 | 仅 Work grant 能读到至少一个已启用 coding-agent 来源时显示一次提示；Personal 或来源限定不相交时不显示 | `tests/test_buckets_grants.py::test_work_grant_notice_shows_once_only_when_enabled_coding_source_is_in_scope`、`tests/test_hud_viewmodel.py::test_host_page_scope_usage_rotate_revoke`；提示不创建新确认步骤 |
+| E3 project restricted variant | project 规则生效后 forbidden returned = 0 | `tests/test_eval_retrieval_gate.py::test_gate_fails_when_a_project_ruled_forbidden_item_is_returned`；任何泄漏阻断 |
 
 ---
 

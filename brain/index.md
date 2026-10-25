@@ -1,6 +1,6 @@
 # Brain Index
 
-_Auto-generated. Last updated 2026-10-25T14:40:42.636Z._
+_Auto-generated. Last updated 2026-10-25T14:50:19.171Z._
 
 - [anchors-json-is-ssot](pages/anchors-json-is-ssot.md) — category: decision | ## Decision
 - [beat-vs-emit-separation](pages/beat-vs-emit-separation.md) — category: decision | ## Decision
@@ -9,6 +9,7 @@ _Auto-generated. Last updated 2026-10-25T14:40:42.636Z._
 - [capture-hygiene-at-write](pages/capture-hygiene-at-write.md) — category: decision | tags: [v1, capture, privacy, pipeline, decision] | <current best understanding — replace this with the real content>
 - [capture-streams-queryable](pages/capture-streams-queryable.md) — category: decision | tags: [v1, privacy, mcp, capture, decision] | <current best understanding — replace this with the real content>
 - [cli-core-app-optional](pages/cli-core-app-optional.md) — category: decision | tags: [product, distribution, hud, app] | **Decision (owner, 2026-10-14):** split the product route into two install tiers.
+- [coding-agent-project-buckets](pages/coding-agent-project-buckets.md) — category: decision | tags: [privacy, buckets, decision] | - D23 stands: core never classifies by content (would need an LLM or an ever-growing keyword list).
 - [core-no-embedded-llm](pages/core-no-embedded-llm.md) — category: decision | tags: [core, llm, privacy] | ## Decision
 - [daily-single-render-entry](pages/daily-single-render-entry.md) — category: decision | status: archived | ## Decision
 - [data-footprint-limits](pages/data-footprint-limits.md) — category: decision | tags: [retention, data-lifecycle, storage, doctor] | Decision (user, 2026-10-16): the data directory must not grow without bound. Memory rows stay under [[retention-keep-forever]] (D32): never

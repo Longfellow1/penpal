@@ -69,20 +69,48 @@ def _host_config_lines(host: str, exe: str, token: str, client_id: str) -> list[
     return ["Generic MCP client (JSON snippet):\n", json_block]
 
 
-def grant_output_lines(client_id: str, scope: str, token: str, host: str, exe: str) -> list[str]:
+def grant_output_lines(
+    client_id: str,
+    scope: str,
+    token: str,
+    host: str,
+    exe: str,
+    *,
+    buckets: tuple[str, ...] | list[str] = (),
+    sources: tuple[str, ...] | list[str] | None = None,
+    enabled_sources: tuple[str, ...] | list[str] | None = None,
+) -> list[str]:
     """What `penpal mcp grant` prints after creating a grant (shared with the HUD, which shows it once)."""
+    from penpal.mcp.grant_notice import enabled_coding_agent_sources, work_project_notice
+
     lines = [f"Granted client '{client_id}' ({scope}). Token (shown once, only its hash is stored):\n", f"  {token}\n"]
     lines.extend(_host_config_lines(host, exe, token, client_id))
     lines.append("\nBoth values are required; a call without the matching client id is denied.")
+    notice = work_project_notice(
+        buckets, sources,
+        enabled_coding_agent_sources() if enabled_sources is None else enabled_sources,
+    )
+    if notice:
+        lines.append(notice)
     lines.append(EGRESS_NOTICE)
     lines.append("Keep the config file readable by your user only. Revoke with: penpal mcp revoke " + client_id)
     return lines
 
 
-def rotate_output_lines(client_id: str, token: str, exe: str) -> list[str]:
+def rotate_output_lines(
+    client_id: str,
+    token: str,
+    exe: str,
+    *,
+    buckets: tuple[str, ...] | list[str] = (),
+    sources: tuple[str, ...] | list[str] | None = None,
+    enabled_sources: tuple[str, ...] | list[str] | None = None,
+) -> list[str]:
     """What `penpal mcp rotate` prints (shared with the HUD, which shows it once)."""
+    from penpal.mcp.grant_notice import enabled_coding_agent_sources, work_project_notice
+
     server = {"command": exe, "args": ["mcp", "serve"], "env": {TOKEN_ENV: token, CLIENT_ENV: client_id}}
-    return [
+    lines = [
         f"Rotated token for '{client_id}'. The previous token is now invalid. New token (shown once):\n",
         f"  {token}\n",
         "Claude Code (CLI):\n",
@@ -90,6 +118,13 @@ def rotate_output_lines(client_id: str, token: str, exe: str) -> list[str]:
         ".mcp.json / claude_desktop_config.json snippet:\n",
         json.dumps({"mcpServers": {"penpal": server}}, indent=2),
     ]
+    notice = work_project_notice(
+        buckets, sources,
+        enabled_coding_agent_sources() if enabled_sources is None else enabled_sources,
+    )
+    if notice:
+        lines.append(notice)
+    return lines
 
 
 @mcp_group.command("serve", help="Run the MCP server over stdio (env PENPAL_TOKEN + PENPAL_CLIENT).")
@@ -141,7 +176,10 @@ def grant_command(client_id: str, buckets: str, sources: str | None, operations:
     except ValueError as exc:
         raise click.ClickException(str(exc)) from exc
     scope = f"buckets={buckets}, sources={sources or 'all in buckets'}, operations={operations}"
-    for line in grant_output_lines(client_id, scope, token, host, _penpal_executable()):
+    for line in grant_output_lines(
+        client_id, scope, token, host, _penpal_executable(),
+        buckets=buckets.split(","), sources=sources.split(",") if sources is not None else None,
+    ):
         click.echo(line)
 
 
@@ -158,26 +196,43 @@ def revoke_command(client_id: str) -> None:
 @mcp_group.command("list", help="List client grants (never shows tokens).")
 def list_command() -> None:
     from penpal.mcp.auth import list_grants
+    from penpal.mcp.grant_notice import enabled_coding_agent_sources, work_project_notice
 
     init_db(Config.load().db_path_expanded)
+    enabled_sources = enabled_coding_agent_sources()
     for g in list_grants():
         state = f"revoked {g['revoked_at']}" if g["revoked_at"] else "active"
         scope = f"buckets={g['buckets']} sources={g['sources'] or 'all'} ops={g['operations']}"
         expiry = f" expires {g['expires_at']}" if g["expires_at"] else ""
         click.echo(f"{g['id']}\t{g['client_id']}\t{g['created_at']}\t{state}\t{scope}{expiry}")
+        if not g["revoked_at"]:
+            try:
+                grant_buckets = json.loads(g["buckets"] or "[]")
+                grant_sources = json.loads(g["sources"]) if g["sources"] else None
+            except (TypeError, ValueError):
+                continue
+            notice = work_project_notice(grant_buckets, grant_sources, enabled_sources)
+            if notice:
+                click.echo(f"  {notice}")
 
 
 @mcp_group.command("rotate", help="Issue a new token for a client's grant (same scope). The old token stops working at once.")
 @click.argument("client_id")
 def rotate_command(client_id: str) -> None:
-    from penpal.mcp.auth import CLIENT_ENV, TOKEN_ENV, rotate_grant
+    from penpal.mcp.auth import CLIENT_ENV, TOKEN_ENV, active_grants, rotate_grant
+    from penpal.mcp.grant_notice import enabled_coding_agent_sources
 
     init_db(Config.load().db_path_expanded)
     try:
         token = rotate_grant(client_id)
     except ValueError as exc:
         raise click.ClickException(str(exc)) from exc
-    for line in rotate_output_lines(client_id, token, shutil.which("penpal") or "penpal"):
+    grant = next((g for g in active_grants() if g["client_id"] == client_id), None)
+    for line in rotate_output_lines(
+        client_id, token, shutil.which("penpal") or "penpal",
+        buckets=grant["buckets"] if grant else (), sources=grant["sources"] if grant else None,
+        enabled_sources=enabled_coding_agent_sources(),
+    ):
         click.echo(line)
 
 

@@ -1,9 +1,10 @@
-"""Bucket assignment (V1 PRD §3.4.2, D23): per-source default + app rules, no content classification.
+"""Bucket assignment (V1 PRD §3.4.2, D23/D37): project/app/source rules, no content classification.
 
 Resolution order for an event:
-  1. enabled `policies` rows with mode='bucket' (scope_type 'app' or 'source'), by priority then id.
-     config_json = {"bucket": "<Name>"}. App scope matches app_name / process_name by
-     case-insensitive substring (same semantics as the privacy PolicyEngine); source scope is exact.
+  1. enabled `policies` rows with mode='bucket', grouped by specificity: project, app, source.
+     Within a scope type, lower priority then lower id wins. Project matches the normalized project
+     folder name exactly and case-insensitively; app matches app_name / process_name by
+     case-insensitive substring; source is exact. config_json = {"bucket": "<Name>"}.
   2. config `[buckets.source_defaults]` overrides, then DEFAULT_SOURCE_BUCKETS.
      chrome_history / safari_history have no default here: they are site-classified (below).
   3. Penpal's own capture streams (CAPTURE_SOURCES, D26) are classified by app: config
@@ -329,9 +330,11 @@ def default_bucket_for_source(source: Optional[str], overrides: Optional[dict[st
 
 
 def load_bucket_rules(conn: sqlite3.Connection) -> list[dict]:
+    from penpal.foundation.project import normalize_project
+
     rows = conn.execute(
         "SELECT scope_type, scope_value, config_json FROM policies "
-        "WHERE enabled = 1 AND mode = ? AND scope_type IN ('app', 'source') "
+        "WHERE enabled = 1 AND mode = ? AND scope_type IN ('project', 'app', 'source') "
         "ORDER BY priority ASC, id ASC",
         (BUCKET_MODE,),
     ).fetchall()
@@ -341,8 +344,12 @@ def load_bucket_rules(conn: sqlite3.Connection) -> list[dict]:
             bucket = normalize_bucket(json.loads(r["config_json"] or "{}").get("bucket", ""))
         except (ValueError, TypeError, AttributeError):
             continue
-        rules.append({"scope_type": r["scope_type"], "scope_value": r["scope_value"], "bucket": bucket})
-    return rules
+        value = r["scope_value"]
+        if r["scope_type"] == "project":
+            value = normalize_project(value)
+        rules.append({"scope_type": r["scope_type"], "scope_value": value, "bucket": bucket})
+    scope_order = {"project": 0, "app": 1, "source": 2}
+    return sorted(rules, key=lambda rule: scope_order[rule["scope_type"]])
 
 
 def resolve_bucket(
@@ -351,16 +358,23 @@ def resolve_bucket(
     process_name: Optional[str] = None,
     *,
     rules: list[dict],
+    project: Optional[str] = None,
     overrides: Optional[dict[str, str]] = None,
     app_overrides: Optional[dict[str, str]] = None,
     url: Optional[str] = None,
     site_overrides: Optional[dict[str, str]] = None,
 ) -> Optional[str]:
+    from penpal.foundation.project import normalize_project, project_matches
+
+    project = normalize_project(project)
     for rule in rules:
         value = (rule["scope_value"] or "").lower()
         if not value:
             continue
-        if rule["scope_type"] == "app":
+        if rule["scope_type"] == "project":
+            if project_matches(value, project):
+                return rule["bucket"]
+        elif rule["scope_type"] == "app":
             if any(value in (name or "").lower() for name in (app_name, process_name)):
                 return rule["bucket"]
         elif rule["scope_type"] == "source" and source == rule["scope_value"]:
@@ -389,16 +403,23 @@ def resolve_for_event(
     ts_start: Optional[str] = None,
     window_title: Optional[str] = None,
 ) -> Optional[str]:
+    from penpal.foundation.project import project_from_metadata_json
+
     url = None
     if wants_site_url(source, app_name, process_name):
         url = url_from_metadata(metadata_json)
         if url is None and source in SITE_INHERIT_SOURCES:
             url = nearest_browser_url(conn, app_name, process_name, ts_start, window_title)
-    return resolve_bucket(source, app_name, process_name, rules=load_bucket_rules(conn), url=url)
+    return resolve_bucket(
+        source, app_name, process_name, rules=load_bucket_rules(conn),
+        project=project_from_metadata_json(metadata_json), url=url,
+    )
 
 
 def reapply_buckets(conn: sqlite3.Connection, *, only_missing: bool = False) -> int:
     """Re-evaluate buckets for stored rows with current rules; returns rows changed."""
+    from penpal.foundation.project import project_from_metadata_json
+
     rules = load_bucket_rules(conn)
     overrides = _config_overrides()
     app_overrides = _config_app_overrides()
@@ -416,6 +437,7 @@ def reapply_buckets(conn: sqlite3.Connection, *, only_missing: bool = False) -> 
                 url = timeline.lookup(row["app_name"], row["process_name"], row["ts_start"], row["window_title"])
         new = resolve_bucket(
             row["source"], row["app_name"], row["process_name"], rules=rules, overrides=overrides,
+            project=project_from_metadata_json(row["metadata_json"]),
             app_overrides=app_overrides, url=url, site_overrides=site_overrides,
         )
         if new != row["bucket"]:

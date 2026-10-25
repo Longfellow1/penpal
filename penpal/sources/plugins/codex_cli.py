@@ -30,6 +30,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterator
 
+from penpal.foundation.project import normalize_project
 from penpal.utils.paths import get_codex_home
 from penpal.sources.plugins.claude_code import _parse_iso8601, _parse_json_line
 from penpal.foundation.transcript_noise import clean_message_part
@@ -234,7 +235,7 @@ class CodexCliSource(DataSource):
                 if cwd:
                     metadata["cwd"] = cwd
                     metadata["project_dir"] = cwd
-                    metadata["project"] = Path(cwd).name
+                    metadata["project"] = normalize_project(cwd)
                 state.update(offset=offset, line=line_no, sid=sid, sid_meta=sid_from_meta, cwd=cwd, ts=start_ts, echo=echo)
                 yield SemanticEvent(
                     time=when,

@@ -17,6 +17,10 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 BUCKETS = ("Work", "Personal", "Private", "Financial")
+PROJECT_BUCKET_RULES = (
+    ("-tmp-proj-life-admin", "Personal"),
+    ("cx-s4", "Personal"),
+)
 
 
 @dataclass(frozen=True)

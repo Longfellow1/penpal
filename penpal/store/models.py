@@ -68,7 +68,7 @@ class SearchDoc:
 
 @dataclass
 class Policy:
-    scope_type: str   # app|window|source|content
+    scope_type: str   # app|window|source|content|project (bucket rules only)
     scope_value: str
     mode: str         # allow|deny|metadata-only|redact|truncate
     enabled: bool = True

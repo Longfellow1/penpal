@@ -12,7 +12,8 @@ from evals import compare
 from evals.fixture_data import CAPTURE_EVENTS, EVENTS, FAKE_KEY
 from evals.run import load_questions, run_eval
 
-BASELINE = Path(__file__).resolve().parents[1] / "evals" / "baseline.json"
+EVALS = Path(__file__).resolve().parents[1] / "evals"
+BASELINE = EVALS / "baseline.json"
 
 
 @pytest.fixture(scope="module")
@@ -57,6 +58,13 @@ def test_run_is_isolated_from_real_home(report) -> None:
     assert not any("penpal-eval-" in str(getattr(p, "_history_path", "")) for p in registry._PLUGINS.values())
 
 
+def test_project_rule_variant_eliminates_known_coding_agent_default_leaks(report) -> None:
+    summary = report["summary"]
+    assert summary["restricted_default_leaks"] == 3
+    assert summary["restricted_project_evaluated"] == 3
+    assert summary["restricted_project_leaks"] == 0
+
+
 def test_fake_secret_never_searchable_in_eval(report) -> None:
     row = next(q for q in report["questions"] if q["id"] == "n08")
     assert row["status"] == "no_results" and not row["hit"]
@@ -90,6 +98,21 @@ def test_gate_fails_when_the_eval_set_changes_without_rebaseline(report, baselin
     changed = copy.deepcopy(report)
     changed["question_set_digest"] = "deadbeef"
     assert any("owner approval" in p for p in compare.check(changed, baseline))
+
+
+def test_gate_fails_when_a_project_ruled_forbidden_item_is_returned(report, baseline) -> None:
+    leaked = copy.deepcopy(report)
+    leaked["summary"]["restricted_project_leaks"] = 1
+    problems = compare.check(leaked, baseline)
+    assert any("project-rule restricted set returned 1 forbidden item" in p for p in problems)
+
+    missing = copy.deepcopy(report)
+    del missing["summary"]["restricted_project_leaks"]
+    assert any("project-rule restricted leak metric is missing" in p for p in compare.check(missing, baseline))
+
+    empty = copy.deepcopy(report)
+    empty["summary"]["restricted_project_evaluated"] = 0
+    assert any("must evaluate at least 3 questions" in p for p in compare.check(empty, baseline))
 
 
 def test_gate_fails_on_a_really_degraded_retriever(baseline, monkeypatch) -> None:

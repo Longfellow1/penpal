@@ -400,9 +400,11 @@ Source Input
 | 内容归一 | 对话、命令、网页、文件分别规范字段；不要把所有东西转成同一种纯文本 | `event_type`、`source_type`、结构化 payload |
 | 去重 | 优先 external id；次选内容哈希 + 来源 + 时间窗口；不能仅以相同正文认定重复 | 重复导入不膨胀，跨源证据不断链 |
 | 脱敏（尽力而为） | 秘钥、密码、验证码、金融敏感片段等按规则尽力过滤/丢弃/掩码；实验阶段不设完整度门槛，P1 加固 | 敏感处理状态与过滤原因；已识别的原始秘钥不进索引和日志 |
-| 分桶 | 最少支持 Work / Personal / Private / Financial / Temporary；允许用户改分类。**P0 分桶 = 按源默认 + 应用规则（复用旧 policies 表），不做内容分类；Temporary 为 P1（D23）** | 默认访问策略可按桶独立设置 |
+| 分桶 | 最少支持 Work / Personal / Private / Financial / Temporary；允许用户改分类。**P0 分桶 = 按源默认 + 应用规则（复用旧 policies 表），不做内容分类；D37 为 Claude Code / Codex 增加精确项目目录规则；Temporary 为 P1（D23）** | 默认访问策略可按桶独立设置 |
 | 项目/人物标记 | P0 基于明确目录/来源映射与用户指定规则；P1 再做跨源推断 | 不确定归属标记 `unclassified` |
 | 数据完整性 | Source → Event → Memory 维持 ID 关联，支持从答案定位原文 | 原文失效后必须可识别 |
+
+**D37 项目分桶说明：** 项目键是项目文件夹名：Claude Code 与 Codex 都取会话 `cwd` 的最后一级目录名（例如 `life-admin`），用户在 `penpal rules projects` 里看到什么就填什么；规则按目录名精确匹配、忽略大小写。早期 Claude Code 记录只存了 `~/.claude/projects/` 下的路径编码目录名（如 `-tmp-proj-life-admin`），按文件夹名写的规则也能匹配其末段；编码有损，可能多匹配同名后缀的项目，但只会让更多记录离开共享桶。项目规则优先于 App、来源规则，再到默认桶；新增/变更规则后运行 `penpal rules rebucket` 才回溯已有事件。核心不按对话内容分类（D23）。
 
 **【建议冻结】Bucket 访问默认策略**
 
@@ -930,13 +932,14 @@ P0 只有在以下条件**全部达成**时才能宣布完成：
 | D20 | V1 数据库如何演进？ | 在现有 SQLite 库上以迁移 v20+ 演进（raw_events 补 source_id / external_id / bucket / kind；新增 Source、Evidence、Memory、AccessGrant、SyncCursor、审计表）；不新建 schema，不做一次性导入器；迁移外创建的 llm_trigger_log、run_records 保持 legacy 所有 | 产品负责人 2026-10-10 已定 |
 | D21 | 代码如何组织？ | 原地瘦身：store / search / sources / capture / privacy / hud 保留，切断约 10 处 pipeline / obsidian / quality / LLM 耦合；import-linter 禁止核心模块导入上述模块，并禁止 macOS 专属库越界（D18）；新能力（MCP、授权、记忆、审计）放新模块；不建顶层 core 包 | 产品负责人 2026-10-10 已定 |
 | D22 | 旧版日报/周报/Obsidian 如何处理？（**已被 D24 修订**） | 移出后台 daemon，保留为可选独立命令或定时任务，仅修 bug；daemon 只运行核心（采集、源同步、检索、MCP） | 产品负责人 2026-10-10 已定 |
-| D23 | P0 范围是否对齐旧版？ | (1) Artifact 推迟 P1，P0 用事件 metadata 的 artifact 字段；(2) Session P0 仅窗口焦点会话，源派生会话推迟 P1；(3) 分桶 P0 按源默认 + 应用规则，不做内容分类，Temporary 及到期清理推迟 P1；(4) 控制面 P0 为全局暂停 + 按源开关，删除按源与时间范围级联（并修复旧版 purge --app 误删其它应用数据的问题），定时暂停与按桶/单条删除推迟 P1；AT10/G4 不变 | 产品负责人 2026-10-10 已定 |
+| D23 | P0 范围是否对齐旧版？ | (1) Artifact 推迟 P1，P0 用事件 metadata 的 artifact 字段；(2) Session P0 仅窗口焦点会话，源派生会话推迟 P1；(3) 分桶 P0 按源默认 + 应用规则，不做内容分类；D37 增加 coding-agent 项目的显式桶规则，Temporary 及到期清理推迟 P1；(4) 控制面 P0 为全局暂停 + 按源开关，删除按源与时间范围级联（并修复旧版 purge --app 误删其它应用数据的问题），定时暂停与按桶/单条删除推迟 P1；AT10/G4 不变 | 产品负责人 2026-10-10 已定；D37 补充于 2026-10-25 |
 | D24 | 旧报告链是否保留为可选命令？（修订 D22） | 不保留：日报、周报、Obsidian 导出、LLM pipeline、质量检查及 Gold Set 规则全部从 V1 代码删除；旧代码见 `legacy-v0`；用户已生成的报告文件不动；安装脚本卸载旧 Obsidian 定时任务 | 产品负责人 2026-10-10 已定 |
 | D25 | AI 自己能用 bash 读本机文件，Penpal 为何必须存在？ | 仅为本机已有文件建索引不构成存在理由。存在理由限于：①采集本不落盘的信息；②超过来源保留期的长期记忆；③受控访问（最小权限、入库前脱敏、可撤销、审计）；④跨 AI 共享、带证据与生命周期的记忆（commit_memory）。每个功能须至少落在其中一点，并经 bash 对照评测证明优于「AI + bash」。Roadmap 不变；新增 bash 对照评测与 AT21 | 产品负责人 2026-10-10 已定 |
 | D26 | Penpal 自己采集的数据能否经 MCP 给已授权 AI 查询？ | 能：键盘片段、窗口切换、剪贴板、屏幕文字、网址、Spotlight 全部开放（含键盘），先脱敏、受分类与来源授权控制；按应用自动归类（预置表：编辑器 / 终端 / AI 助手 / 办公协作 → Work，银行 / 支付 → Financial，其余 → Personal），用户规则优先；聊天 App 默认不采集（D19）不变。理由：D25 ①，这是 bash 找不回、只有 Penpal 才有的数据，作为测验与演示主体 | 产品负责人 2026-10-10 已定 |
 | D27 | 下线日报后，采集数据的清洗放在哪？键盘怎么处理？ | 清洗统一放回写入环节（一个共享清洗入口，搬旧代码和测试）：短片段、低信息乱码、拼音串、隐私关键词、登录页、界面文字入库前拦截；排除名单（聊天 / 密码管理器、屏蔽网站）覆盖所有采集流；窗口跳过锁屏等系统遮罩；Claude 插件过滤系统包装消息。键盘保留：修空格、忽略快捷键、按句切段，终端内只留元数据；中文靠「输入框上屏文字」限时实测。AI 复述 Penpal 结果的回答照常入库但打标记、搜索默认排除。重要程度权重仅作排序最后一级 | 产品负责人 2026-10-12 已定 |
 | D35 | 键盘片段默认状态与可搜索性？（修订 D13 默认关、D26/D27 及 issue #29 AC3 中键盘“打标记、搜索默认排除”） | 键盘片段（`keyboard_chunk`）默认开启，与其他来源一样在 Host 已授权分桶内可被 AI 搜索（编辑器 / 终端归 Work）。隐私靠：按 Host 的分桶授权、排除名单、入库前脱敏、安装时一次性风险提示、`penpal source disable keyboard_chunk` 一条命令关闭。仅修复前（schema v24 之前）的历史乱码键盘行在搜索中隐藏（`pre_fix_keyboard`）。D27 中“AI 复述 Penpal 结果的回答打标记、搜索默认排除”针对 AI 复述，不是键盘，保持不变。理由：键盘采的正是 bash 事后找不回的内容（D25 ①），评测召回依赖它 | 产品负责人 2026-10-24 已定（默认开启为 2026-10-14） |
 | D36 | 运行状态怎么判、进程怎么重启、升级后如何保证新旧代码不混跑？ | 一份运行时约定：只由后台服务写的运行记录（含各关键循环进度，空闲算健康）；唯一评估函数供 doctor / status / HUD / MCP / 健康检查共用；启动停止重启只走 launchd 控制入口（`penpal restart`），看门狗带重启预算；每个常驻进程（后台服务、HUD、MCP）按代码指纹自我换新；HUD 后台取数、原生启动程序承载 App 身份；旧的 PID 判活、自愈杀进程等直接删除。详见 `docs/design/runtime-contract.md`，评测门槛 Eval PRD §3.7（E8） | 产品负责人 2026-10-24 已定 |
+| D37 | Coding-agent 会话里的私人项目如何避免 Work 授权读取？ | D23 不变，不在核心做内容分类；Claude Code / Codex 统一记录项目目录名，bucket policy 增加精确、忽略大小写的 `project` scope，优先级为 project > app > source > default；`penpal rules projects` 展示来源、项目、事件数和当前桶，`rules rebucket` 回溯已存行。Work 授权创建/查看时提示其覆盖已启用的 Claude Code / Codex 来源，并给出项目规则命令。E3 同时报告默认集合泄漏与项目规则集合泄漏，后者为零泄漏硬门槛 | Owner-delegated，2026-10-25 |
 
 ### 7.2 主要风险
 

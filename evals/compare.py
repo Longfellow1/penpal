@@ -26,6 +26,9 @@ def make_baseline(report: dict[str, Any]) -> dict[str, Any]:
         "m1_keyword_subset": s["m1_keyword_subset"],
         "answerable_evaluated": s["answerable_evaluated"],
         "no_answer_evaluated": s["no_answer_evaluated"],
+        "restricted_default_leaks": s["restricted_default_leaks"],
+        "restricted_project_evaluated": s["restricted_project_evaluated"],
+        "restricted_project_leaks": s["restricted_project_leaks"],
         "by_scenario": {k: v["rate"] for k, v in report["by_scenario"].items()},
         "by_source": {k: v["rate"] for k, v in report["by_source"].items()},
     }
@@ -44,6 +47,14 @@ def check(report: dict[str, Any], baseline: dict[str, Any]) -> list[str]:
             problems.append(f"M1 {label} subset dropped {baseline[key]:.1%} -> {s[key]:.1%} (> 2pp)")
     if (m2 - b2) > MAX_REGRESSION + _EPS:
         problems.append(f"M2 no-answer false-hit rate rose {b2:.1%} -> {m2:.1%} (> 2pp)")
+    project_evaluated = s.get("restricted_project_evaluated")
+    if project_evaluated is None or project_evaluated < 3:
+        problems.append("project-rule restricted set must evaluate at least 3 questions")
+    project_leaks = s.get("restricted_project_leaks")
+    if project_leaks is None:
+        problems.append("project-rule restricted leak metric is missing")
+    elif project_leaks != 0:
+        problems.append(f"project-rule restricted set returned {project_leaks} forbidden item(s); expected 0")
     if report["question_set_digest"] != baseline["question_set_digest"]:
         problems.append(
             "eval set / fixtures changed since the baseline was recorded "

@@ -369,8 +369,13 @@ def page_host(snap: Snapshot, client_id: str) -> Optional[tuple[str, list[dict]]
     h = next((x for x in snap.hosts if x.client_id == client_id), None)
     if h is None:
         return None
+    from penpal.mcp.grant_notice import work_project_notice
+
     buckets = [row(BUCKET_LABELS[b], check=b in h.buckets) for b in BUCKET_LABELS]
     scope = [lst(buckets, "能看到的分类", EGRESS_FOOTER)]
+    notice = work_project_notice(h.buckets, h.sources, [s.name for s in snap.sources if s.enabled])
+    if notice:
+        scope.append(lst([], "授权范围提示", notice))
     if h.sources is not None:
         scope.append(lst([row(source_label(s)) for s in h.sources], "限定来源"))
     usage = [

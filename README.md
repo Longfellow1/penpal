@@ -92,6 +92,8 @@ daemon 单独写入轮转的 `penpal.log`（5 MiB，最多 3 个备份）。laun
 
 只读：AI 不能写入或修改记忆（`rate_result` 只在本机记一条评分）。查到的内容会进入该 AI 的对话，可能发送到它的云端服务。授权时按分类（Work / Personal / Private / Financial）限定，`penpal mcp audit` 能看到谁在什么时候查过、结果有几条，不记录查询内容。
 
+注意：Work 包含 Claude Code / Codex 里的全部对话，也可能包含私人项目。查看已导入的项目和当前分桶用 `penpal rules projects`；要把项目归到 Personal，按项目目录名执行 `penpal rules add --scope project --value <项目目录名> --bucket Personal`，再运行 `penpal rules rebucket` 更新已有记录。
+
 ## 记什么不记什么
 
 **会记录**（每个来源都能单独关）：
