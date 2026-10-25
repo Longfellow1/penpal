@@ -1,57 +1,25 @@
-# Penpal Positioning
+# Penpal MCP positioning
 
 ## One-liner
 
-A local-first Mac companion that turns your daily work traces into private reflective notes.
+Penpal MCP is a local-first memory layer and stdio MCP server for AI agents on macOS.
 
 ## Category
 
-Local-first personal AI / private reflection companion / Obsidian-native daily review workflow.
+Local memory for AI agents, exposed through MCP. Penpal records activity from enabled sources and imports supported local histories, sessions, Git and approved Markdown sources. It stores its own data on the Mac and has no built-in LLM.
 
-## Target users
+## Hosts
 
-- Mac power users
-- Obsidian users
-- knowledge workers
-- AI builders who want personal memory without cloud surveillance
-- people who already do daily review, journaling, weekly review, or PKM
-
-## Not competing directly with
-
-- screen-time trackers
-- task managers
-- generic AI assistants
-- productivity dashboards
-- cloud employee monitoring tools
-
-## Core differentiation
-
-Penpal does not optimize productivity scores. It helps users notice recurring work patterns through private daily reflection.
-
-Its strongest wedge is Obsidian-native output:
-
-- plain Markdown
-- YAML frontmatter
-- daily notes, event cards, topic cards, anchors
-- checkbox feedback inside the note itself
-- no cloud account required
+Claude Code, Codex and Cursor connect to the same Penpal MCP server. Each host receives an explicit grant scoped by data bucket and, optionally, source.
 
 ## What to say
 
 ```text
-Penpal turns your Mac work surface into Obsidian-native daily reflection notes.
-
-It does not replace your PKM system.
-It writes back into it.
+Penpal MCP gives Claude Code, Codex and Cursor searchable access to selected local activity and history on macOS. The server and its database run on the Mac; Penpal has no built-in LLM, and returned results may be sent by the AI host to its model service.
 ```
 
 ## What not to say
 
-- popular
-- fast-growing
-- trusted by teams
-- used by many people
-- best personal AI tool
-- automatic productivity optimization
-
-Unless there is evidence, do not imply traction that does not exist.
+- Do not describe Penpal as an Obsidian, reflection, journaling or daily-report companion. The former report and Obsidian export pipeline was removed.
+- Do not claim that Penpal is popular, fast-growing, trusted by teams or the best personal AI tool.
+- Do not claim that it records a source unless the source is enabled, available and authorized.

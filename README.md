@@ -1,12 +1,12 @@
-# Penpal（笔友）
+# Penpal MCP（笔友）— 给 AI Agent 的本地记忆
 
-> **给你所有 AI 共用的本地记忆。** Penpal 在你的 Mac 上记下你看过、写过、问过的东西，通过 MCP 交给 Claude Code、Codex、Cursor 查询，每条结果都能打开出处，每个 AI 能看到什么由你授权。
+Penpal MCP 是面向 macOS AI Agent 的本地优先记忆层，也是 stdio MCP server。它连接 Claude Code、Codex、Cursor，按你启用的来源记录应用与窗口切换、剪贴板和过滤后的键盘文本，并导入支持的本地历史、会话、Git 与 Markdown 数据。Penpal 服务与数据库完全在 Mac 本机运行，不内置大模型；返回内容会进入你所用 AI Host 的对话，也可能被发送到该 Host 的云端模型服务。
 
 [English](README.en.md) · [快速开始](#快速开始) · [记什么不记什么](#记什么不记什么) · [现在做到哪](#现在做到哪)
 
 [![Python](https://img.shields.io/badge/Python-3.11+-blue.svg)](https://www.python.org/downloads/)
 [![macOS](https://img.shields.io/badge/macOS-12+-lightgrey.svg)](https://www.apple.com/macos/)
-[![Tests](https://img.shields.io/badge/tests-1100%2B%20passing-brightgreen.svg)](tests/)
+[![Tests](https://img.shields.io/badge/tests-1443%20collected-blue.svg)](tests/)
 [![License: Apache 2.0](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
 
 ---
@@ -136,7 +136,7 @@ daemon 单独写入轮转的 `penpal.log`（5 MiB，最多 3 个备份）。laun
   - 键盘片段目前只可靠覆盖英文，中文输入法上屏文字的采集还在试验。
   - 只支持 macOS。
   - AI 只能读，不能写回长期记忆。
-  - 桌面 App 目前只有菜单栏 HUD 一个界面，采用 ad-hoc 签名（无开发者证书）；日报、周报等依赖界面的功能是后续计划。
+  - 桌面 App 目前只有菜单栏 HUD 一个界面，采用 ad-hoc 签名（无开发者证书）；旧日报、周报、Obsidian 导出和 LLM 报告链已从当前产品代码移除，不属于当前功能。
 
 ## 许可
 

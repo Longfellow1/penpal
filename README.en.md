@@ -1,12 +1,12 @@
-# Penpal
+# Penpal MCP — local memory for your AI agents
 
-> **The local memory all your AIs share.** Penpal remembers what you've seen, written and asked on your Mac, and serves it over MCP to Claude Code, Codex and Cursor. Every result links back to its source, and you decide what each AI is allowed to see.
+Penpal MCP is a local-first memory layer and stdio MCP server for AI agents on macOS. It connects to Claude Code, Codex and Cursor, recording activity from sources you enable—such as app and window switches, clipboard content and filtered keyboard text—and importing supported local histories, sessions, Git and Markdown sources. Penpal's service and database run entirely on your Mac, with no built-in LLM; returned context enters the host's conversation and may be sent to its cloud model service.
 
 [中文](README.md) · [Quick start](#quick-start) · [What it records](#what-it-records-and-what-it-doesnt) · [Where it stands](#where-it-stands)
 
 [![Python](https://img.shields.io/badge/Python-3.11+-blue.svg)](https://www.python.org/downloads/)
 [![macOS](https://img.shields.io/badge/macOS-12+-lightgrey.svg)](https://www.apple.com/macos/)
-[![Tests](https://img.shields.io/badge/tests-1100%2B%20passing-brightgreen.svg)](tests/)
+[![Tests](https://img.shields.io/badge/tests-1443%20collected-blue.svg)](tests/)
 [![License: Apache 2.0](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
 
 ---
@@ -136,7 +136,7 @@ Website blocking covers the host and its subdomains. After a change, run `penpal
   - Keyboard snippets are reliable only for English; capturing committed text from Chinese input methods is still experimental.
   - macOS only.
   - AIs can read but cannot write back to long-term memory.
-  - The desktop app is the menu-bar HUD only for now, and is ad-hoc signed (no developer certificate); features that need a UI, such as daily and weekly reports, come later.
+  - The desktop app is the menu-bar HUD only for now, and is ad-hoc signed (no developer certificate). The former daily/weekly report, Obsidian export and LLM report pipeline were removed from the current product code and are not current features.
 
 ## License
 
