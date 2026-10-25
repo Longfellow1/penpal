@@ -5,7 +5,7 @@ category: decision
 status: active
 tags: [eval, prd]
 created: "2026-10-10T11:19:06"
-updated: "2026-10-25T00:22:31"
+updated: "2026-10-25T22:16:31"
 ---
 
 <!-- compiled_truth -->
@@ -56,3 +56,9 @@ updated: "2026-10-25T00:22:31"
   summary: "2026-10-25 owner: E3 synthetic set is topped up to the PRD minimums (no-answer >=15, permission-limited >=10, conflict/stale >=5) and the PRD states per-category minimums locked by a CI shape test; E5 (freshness, latency) is a release-blocking benchmark run on the owner's Mac before each release (100k synthetic events, 100 queries, auto pass/fail into the release report); CI runs only a small smoke without timing asserts. E2 gets an AT x variant traceability matrix checked in CI."
   source: owner decision 2026-10-25
   affects: [runtime-contract]
+
+- time: 2026-10-25T22:16:31
+  kind: decision
+  summary: "Owner approved the E3 baseline regenerated for the expanded synthetic set (104/15/10/5 = 134 items, per-category minimums locked); evals/baseline.json replaced, proposed file removed. Any later eval-set change again fails CI until the owner re-approves a new baseline."
+  source: "owner 2026-10-25 ('你都可以直接做')"
+  affects: [eval-prd-separate]

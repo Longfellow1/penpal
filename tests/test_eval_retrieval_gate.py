@@ -13,7 +13,6 @@ from evals.fixture_data import CAPTURE_EVENTS, EVENTS, FAKE_KEY
 from evals.run import load_questions, run_eval
 
 BASELINE = Path(__file__).resolve().parents[1] / "evals" / "baseline.json"
-PROPOSED_BASELINE = Path(__file__).resolve().parents[1] / "evals" / "baseline.proposed.json"
 
 
 @pytest.fixture(scope="module")
@@ -64,16 +63,9 @@ def test_fake_secret_never_searchable_in_eval(report) -> None:
     assert FAKE_KEY not in json.dumps(report)
 
 
-def test_current_results_match_the_approved_or_proposed_baseline(report, baseline) -> None:
-    if report["question_set_digest"] == baseline["question_set_digest"]:
-        assert compare.check(report, baseline) == []
-        return
-
-    problems = compare.check(report, baseline)
-    assert len(problems) == 1 and "owner approval" in problems[0], problems
-    proposed = json.loads(PROPOSED_BASELINE.read_text(encoding="utf-8"))
-    assert proposed["question_set_digest"] == report["question_set_digest"]
-    assert compare.check(report, proposed) == []
+def test_current_results_match_the_approved_baseline(report, baseline) -> None:
+    assert report["question_set_digest"] == baseline["question_set_digest"], "eval set changed: baseline needs owner approval"
+    assert compare.check(report, baseline) == []
 
 
 def test_gate_tolerates_up_to_2pp_and_blocks_beyond(report, baseline) -> None:
