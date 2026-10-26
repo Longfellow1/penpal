@@ -32,6 +32,20 @@ def test_install_script_unloads_legacy_services_before_data_migration():
     assert '"$VENV_DIR/bin/penpal" install init' in source
 
 
+def test_install_script_homebrew_path_drives_the_formula_only_through_its_cli():
+    # README pipes install.sh from main while brew installs the latest release; an import of a module
+    # that main added after that release fails on every fresh install.
+    install_script = Path(__file__).parents[1] / "install.sh"
+    source = install_script.read_text(encoding="utf-8")
+    brew_start = source.index('if [[ "$DEV_MODE" != true ]]; then')
+    brew_block = source[brew_start:source.index("exit 0", brew_start)]
+
+    assert "check_data_dir_migration" not in brew_block
+    assert "from penpal" not in brew_block
+    assert "libexec/bin/python" not in brew_block
+    assert "penpal install init" in brew_block
+
+
 def test_install_script_homebrew_path_uses_qualified_names_and_uninstalls_old_formula_first():
     install_script = Path(__file__).parents[1] / "install.sh"
     source = install_script.read_text(encoding="utf-8")
