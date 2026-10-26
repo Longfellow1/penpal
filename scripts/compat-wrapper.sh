@@ -8,10 +8,17 @@ penpal_is_legacy_keypulse_wrapper() {
     grep -Eq '^[[:space:]]*exec[[:space:]].*\.keypulse/venv/bin/keypulse.*"\$@"[[:space:]]*$' "$path"
 }
 
+# A wrapper this script wrote earlier; refreshed in place, not reported as a custom file.
+penpal_is_current_compat_wrapper() {
+  local path="$1"
+  [[ -f "$path" && ! -L "$path" ]] || return 1
+  grep -Fq 'VENV_KEYPULSE="$HOME/.penpal/venv/bin/keypulse"' "$path"
+}
+
 penpal_install_compat_wrapper() {
   local path="$1"
   if [[ -e "$path" || -L "$path" ]]; then
-    if ! penpal_is_legacy_keypulse_wrapper "$path"; then
+    if ! penpal_is_legacy_keypulse_wrapper "$path" && ! penpal_is_current_compat_wrapper "$path"; then
       printf 'Warning: keeping custom file at %s; it was not recognized as the old KeyPulse wrapper.\n' "$path" >&2
       return 0
     fi
