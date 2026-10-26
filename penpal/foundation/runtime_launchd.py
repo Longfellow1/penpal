@@ -12,14 +12,24 @@ from penpal.utils.paths import get_launchd_daemon_plist_path
 
 _PID_RE = re.compile(r"\bpid\s*=\s*(\d+)", re.IGNORECASE)
 _LAST_EXIT_RE = re.compile(r"\blast exit code\s*=\s*(-?\d+)", re.IGNORECASE)
-_DEFAULT_RUNNER = subprocess.run
+# Every launchctl call is bounded: launchctl can block indefinitely on a job whose program vanished
+# (observed: kickstart of a healthcheck still pointing at a deleted Homebrew keg).
+LAUNCHCTL_TIMEOUT_SEC = 15.0
+
+
+def run_launchctl(command: list[str], **kwargs):
+    kwargs.setdefault("timeout", LAUNCHCTL_TIMEOUT_SEC)
+    return subprocess.run(command, **kwargs)
+
+
+_DEFAULT_RUNNER = run_launchctl
 
 
 def is_installed() -> bool:
     return get_launchd_daemon_plist_path().is_file()
 
 
-def probe_label(label: str, *, runner: Callable = subprocess.run) -> dict[str, int | bool | None]:
+def probe_label(label: str, *, runner: Callable = run_launchctl) -> dict[str, int | bool | None]:
     """Return launchd's current view for a label; tests inject the subprocess runner."""
     if os.getenv("PENPAL_RUNTIME_DISABLE_LAUNCHD_PROBE") == "1":
         return {"loaded": False, "pid": None, "last_exit": None}
@@ -30,7 +40,7 @@ def probe_label(label: str, *, runner: Callable = subprocess.run) -> dict[str, i
     target = f"gui/{os.getuid()}/{label}"
     try:
         result = runner(["launchctl", "print", target], check=False, capture_output=True, text=True)
-    except OSError:
+    except (OSError, subprocess.TimeoutExpired):
         return {"loaded": False, "pid": None, "last_exit": None}
     output = "\n".join(filter(None, (result.stdout or "", result.stderr or "")))
     pid_match = _PID_RE.search(output)

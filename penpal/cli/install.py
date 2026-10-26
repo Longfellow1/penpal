@@ -88,8 +88,8 @@ def _write_launchd_plist(label: str, payload: dict[str, Any], *, force: bool = F
         plistlib.dump(payload, handle, sort_keys=False)
     return status
 
-def _launchd_load_plist(path: Path) -> bool:
-    return load_job(path.stem, path)
+def _launchd_load_plist(path: Path, *, replace: bool = False) -> bool:
+    return load_job(path.stem, path, replace=replace)
 
 def _install_launchd_jobs(*, load: bool, force: bool) -> list[tuple[str, Path, str, bool]]:
     executable = _penpal_executable_path()
@@ -107,7 +107,7 @@ def _install_launchd_jobs(*, load: bool, force: bool) -> list[tuple[str, Path, s
         if not result.ok:
             raise click.ClickException(T(result.error_zh, result.error_en))
     for label, path, status in pending:
-        if load and label == "com.penpal.healthcheck" and not _launchd_load_plist(path):
+        if load and label == "com.penpal.healthcheck" and not _launchd_load_plist(path, replace=True):
             raise click.ClickException(T(f"無法載入健康檢查工作：{path}", f"Could not load healthcheck job: {path}"))
         results.append((label, path, status, launchd_label_loaded(label) if load else False))
     return results

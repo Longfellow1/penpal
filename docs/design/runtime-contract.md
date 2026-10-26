@@ -38,6 +38,9 @@
 - 新增 `penpal restart`。安装 / 升级、HUD 重启按钮、doctor 修复、看门狗全部调用它。
 - 看门狗（现有健康检查 job）：`hung` / `outdated` → restart；连续失败阈值 + 冷却期 + 每小时重启预算，耗尽后只告警不再重启（防自愈循环）。成功判据 = 新 generation 的进度在推进，**不是**"出现新事件"。
 - 单实例改用 `flock`（进程退出由内核释放）；PID 只作诊断。
+- launchd 只认 bootstrap 那一刻读到的 plist：安装每次都对健康检查 job 做 bootout + bootstrap（不只是 kickstart），否则升级后它仍指向已删除的旧 keg（EX_CONFIG 78）。
+- 所有 launchctl 调用 15 秒超时（`LAUNCHCTL_TIMEOUT_SEC`）：对程序已消失的 job，kickstart 可能永不返回。
+
 
 ### 2.4 代码身份与自我换新
 - 每个常驻进程启动时记下代码指纹，每分钟与磁盘上已安装代码比对；不一致时：

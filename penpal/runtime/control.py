@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable
 
-from penpal.foundation.runtime_launchd import probe_label
+from penpal.foundation.runtime_launchd import LAUNCHCTL_TIMEOUT_SEC, probe_label, run_launchctl
 from penpal.foundation.runtime_plist import launchd_jobs
 from penpal.runtime.evaluate import RuntimeState, RuntimeStatus, evaluate
 from penpal.utils.paths import get_launchd_plist_path
@@ -37,7 +37,7 @@ def _default_runner(command: list[str], **kwargs):
         raise OSError("LaunchAgent control is disabled in isolated environments")
     if sys.platform != "darwin":
         raise OSError("LaunchAgent control is only available on macOS")
-    return subprocess.run(command, **kwargs)
+    return run_launchctl(command, **kwargs)
 
 
 @dataclass(frozen=True)
@@ -64,6 +64,8 @@ def _domain_target() -> str:
 def _run(command: list[str], runner: Runner) -> tuple[bool, str]:
     try:
         result = runner(command, check=False, capture_output=True, text=True)
+    except subprocess.TimeoutExpired:
+        return False, f"launchctl timed out after {LAUNCHCTL_TIMEOUT_SEC:g}s: {' '.join(command)}"
     except OSError as exc:
         return False, str(exc)
     detail = "\n".join(part for part in (result.stdout or "", result.stderr or "") if part).strip()
@@ -257,15 +259,24 @@ def restart(
 
 def load_job(
     label: str, plist_path: Path, *, runner: Runner = _default_runner, probe: Probe = probe_label,
-    spawn: bool = True,
+    spawn: bool = True, replace: bool = False, sleep: Callable[[float], None] = time.sleep,
 ) -> bool:
     """Load an auxiliary Penpal LaunchAgent, such as the periodic healthcheck. ``spawn=False`` only registers
     it (a login item that should start at the next login, not now). An already loaded job is started too: one
-    left pending by an earlier bootstrap never fires its StartInterval either."""
+    left pending by an earlier bootstrap never fires its StartInterval either.
+
+    launchd keeps the definition it read at bootstrap, so a rewritten plist only takes effect after
+    ``replace``: bootout, then bootstrap with the same retry ``start`` uses (bootstrap right after a bootout
+    can fail while launchd is still tearing the old job down)."""
     if _loaded(label, runner, probe):
+        if not replace:
+            if spawn:
+                _spawn_loaded(label, runner)
+            return True
+        unload_job(label, plist_path, runner=runner, probe=probe)
         if spawn:
-            _spawn_loaded(label, runner)
-        return True
+            ok, _ = _bootstrap_with_retry(plist_path, runner=runner, sleep=sleep)
+            return ok
     ok, _ = _run(["launchctl", "bootstrap", _domain_target(), str(plist_path)], runner)
     if ok and spawn:
         _spawn_loaded(label, runner)
