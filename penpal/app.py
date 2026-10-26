@@ -1,4 +1,6 @@
 from __future__ import annotations
+import logging
+import os
 import signal
 import sqlite3
 import sys
@@ -36,6 +38,27 @@ _CAPTURE_PROBE_CAPS = {
 }
 _COMPAT_CAPTURE_CAPS = _CAPTURE_FACT_CAPS
 
+
+
+def _reload_in_place() -> None:
+    """Replace this process with the installed entry point after a runtime identity change.
+
+    launchd's KeepAlive relaunch is not dependable: on macOS 26 an exited job can stay pending
+    ("pended nondemand spawn = semaphore") instead of restarting. Exec keeps the PID and launchd's
+    ownership. The stable entry (Homebrew's link or the ~/.local/bin wrapper) survives an upgrade
+    that removed the old versioned files. If exec fails, exit 75 and let launchd or the watchdog
+    relaunch.
+    """
+    from penpal.foundation.runtime_plist import resolve_penpal_executable
+
+    for handler in logging.getLogger().handlers:
+        handler.flush()
+    try:
+        executable = str(resolve_penpal_executable())
+        os.execv(executable, [executable, "serve"])
+    except OSError as exc:
+        logger.error("in-place reload failed (%s); exiting for launchd to relaunch", type(exc).__name__)
+    sys.exit(RELOAD_EXIT_CODE)
 
 def _on_mac_wake(registry: CapabilityRegistry, scheduler: SourcesScheduler) -> None:
     """After the Mac wakes: the same read-only self-check the supervisor runs (updates the stored
@@ -186,7 +209,7 @@ def run(config: Optional[Config] = None, *, config_path: str | Path | None = Non
                     logger.error("newer database schema prevents the old daemon from flushing")
                 manager._write_runtime_record(force=True)
                 lock.release()
-                sys.exit(RELOAD_EXIT_CODE)
+                _reload_in_place()
             time.sleep(1)
     except Exception as e:
         logger.error(f"Fatal error: {e}")
