@@ -2,6 +2,9 @@
 
 ROOT := $(abspath $(dir $(lastword $(MAKEFILE_LIST))))
 PYTHON := $(ROOT)/.venv/bin/python
+# The installed command (install.sh / Homebrew), not the repo build venv: plists and restarts must
+# target the same penpal the user runs. Override with `make reload PENPAL=/path/to/penpal`.
+PENPAL ?= $(HOME)/.local/bin/penpal
 BOOTSTRAP_PYTHON := python3
 APP_DEST := /Applications/Penpal.app
 PLIST_DST := $(HOME)/Library/LaunchAgents
@@ -32,7 +35,7 @@ preflight:
 # --no-load: the `reload` target loads them. --force: they are Penpal-managed, regenerate on change.
 install-plists:
 	@mkdir -p $(PLIST_DST)
-	PENPAL_EXECUTABLE=$(ROOT)/.venv/bin/penpal $(ROOT)/.venv/bin/penpal install launchd --no-load --force
+	PENPAL_EXECUTABLE=$(PENPAL) $(PENPAL) install launchd --no-load --force
 
 # install: build .app, preflight, copy to /Applications, sync plists, reload all agents.
 # Always cleans dist/Penpal.app at the end — leaving it would create a duplicate
@@ -72,7 +75,7 @@ onboard:
 # controller used by the HUD, watchdog, and CLI.
 post-onboard-kick:
 	@echo "--- post-onboard daemon kick (refresh TCC cache) ---"
-	$(ROOT)/.venv/bin/penpal restart
+	$(PENPAL) restart
 
 reload:
-	PENPAL_EXECUTABLE=$(ROOT)/.venv/bin/penpal $(ROOT)/.venv/bin/penpal install launchd --force
+	PENPAL_EXECUTABLE=$(PENPAL) $(PENPAL) install launchd --force
