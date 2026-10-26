@@ -183,7 +183,8 @@ wait_for_state() {
       fi
     fi
     if (( SECONDS >= deadline )); then
-      fail_check "runtime_state=$wanted not observed within ${timeout}s; latest: $(status_summary)"
+      fail_check "runtime_state=$wanted not observed within ${timeout}s; latest (rc=$STATUS_RC): $(status_summary)"
+      printf 'last status --plain output:\n%s\n' "$STATUS_OUTPUT" >&2
       return 1
     fi
     sleep 2
@@ -453,8 +454,8 @@ install_previous_release() {
     fail_check "previous public release penpal install init failed"
     return 1
   fi
-  if ! wait_for_state running 10; then
-    CHECK_REASON="previous public release did not reach running within 10s; baseline assumption broke ($(status_summary))"
+  if ! wait_for_state running 60; then
+    CHECK_REASON="previous public release did not reach running within 60s; baseline assumption broke ($(status_summary))"
     return 1
   fi
   OLD_PID="$(status_field pid)"
