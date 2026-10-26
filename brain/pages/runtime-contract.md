@@ -5,7 +5,7 @@ category: decision
 status: active
 tags: [runtime, health, hud, doctor, launchd, mcp]
 created: "2026-10-24T23:46:07"
-updated: "2026-10-26T11:48:26"
+updated: "2026-10-26T14:42:11"
 ---
 
 <!-- compiled_truth -->
@@ -70,3 +70,9 @@ Decision (D36, 2026-10-24, owner accepted all recommendations after a deep-fix a
   summary: "Plists with Penpal's Label are Penpal-owned; install always rewrites them (upgrade path); only foreign files need --force"
   source: "0.4.0 hand test, 2026-10-26"
   affects: [penpal/cli/install.py]
+
+- time: 2026-10-26T14:42:11
+  kind: evidence
+  summary: "launchctl bootstrap may not spawn RunAtLoad jobs (speculative pending); always kickstart after bootstrap; fakes model bootstrap as load-only"
+  source: "0.4.0 hand test, 2026-10-26"
+  affects: [penpal/runtime/control.py]
