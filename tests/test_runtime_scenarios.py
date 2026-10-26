@@ -167,11 +167,15 @@ def _write_daemon_plist(monkeypatch, executable: Path) -> Path:
 
 
 @pytest.mark.parametrize("change", ["code", "config"])
-def test_daemon_identity_change_flushes_and_exits_for_launchd_reload(tmp_path, change):
+def test_daemon_identity_change_flushes_and_execs_the_installed_entry_in_place(tmp_path, change):
+    # launchd may not relaunch an exited job (macOS 26), so the daemon replaces itself: same PID,
+    # the stable installed entry, `serve`.
     home = tmp_path / "home"
     executable = tmp_path / "bin" / "penpal"
     executable.parent.mkdir(parents=True)
-    executable.write_text("", encoding="utf-8")
+    exec_marker = tmp_path / "exec.txt"
+    executable.write_text(f'#!/bin/sh\necho "$$ $*" > "{exec_marker}"\n', encoding="utf-8")
+    executable.chmod(0o755)
     env = _environment(home, executable)
     env["PENPAL_TEST_IDENTITY_INTERVAL_SEC"] = "0.2"
     fingerprint_root = tmp_path / "installed" / "penpal"
@@ -195,7 +199,8 @@ def test_daemon_identity_change_flushes_and_exits_for_launchd_reload(tmp_path, c
             config_path = home / ".penpal" / "config.toml"
             config = config_path.read_text(encoding="utf-8")
             config_path.write_text(config.replace("flush_interval_sec = 1", "flush_interval_sec = 2"), encoding="utf-8")
-        assert process.wait(timeout=10) == 75
+        assert process.wait(timeout=10) == 0
+        assert exec_marker.read_text(encoding="utf-8").split() == [str(process.pid), "serve"]
         assert _wait_for(lambda: (home / ".penpal" / "run" / "daemon.json").stat().st_size > 0)
     finally:
         if process.poll() is None:
@@ -411,3 +416,16 @@ def test_read_only_commands_run_in_a_fresh_process_with_and_without_a_live_daemo
         _assert_no_crash(env, "live daemon")
     finally:
         harness.stop()
+
+
+def test_daemon_reload_exits_75_when_the_installed_entry_cannot_be_executed(monkeypatch, tmp_path):
+    from penpal import app
+
+    def fail_exec(_path, _args):
+        raise PermissionError("not executable")
+
+    monkeypatch.setattr("penpal.foundation.runtime_plist.resolve_penpal_executable", lambda: tmp_path / "penpal")
+    monkeypatch.setattr(app.os, "execv", fail_exec)
+    with pytest.raises(SystemExit) as exited:
+        app._reload_in_place()
+    assert exited.value.code == 75

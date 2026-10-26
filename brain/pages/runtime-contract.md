@@ -5,7 +5,7 @@ category: decision
 status: active
 tags: [runtime, health, hud, doctor, launchd, mcp]
 created: "2026-10-24T23:46:07"
-updated: "2026-10-26T15:39:26"
+updated: "2026-10-26T15:51:32"
 ---
 
 <!-- compiled_truth -->
@@ -82,3 +82,9 @@ Decision (D36, 2026-10-24, owner accepted all recommendations after a deep-fix a
   summary: "Read-only commands must work in a fresh process; evaluate() owns its DB init; subprocess smoke guards it"
   source: "0.4.0 hand test, 2026-10-26"
   affects: [penpal/runtime/evaluate.py, tests/test_runtime_scenarios.py]
+
+- time: 2026-10-26T15:51:32
+  kind: reversal
+  summary: "Daemon self-reload: exec the stable entry in place; exit 75 + KeepAlive relaunch was unreliable on macOS 26"
+  source: "0.4.0 hand test, 2026-10-26"
+  affects: [penpal/app.py, docs/design/runtime-contract.md]
