@@ -5,7 +5,7 @@ category: decision
 status: active
 tags: [runtime, health, hud, doctor, launchd, mcp]
 created: "2026-10-24T23:46:07"
-updated: "2026-10-25T05:00:26"
+updated: "2026-10-26T11:48:26"
 ---
 
 <!-- compiled_truth -->
@@ -64,3 +64,9 @@ Decision (D36, 2026-10-24, owner accepted all recommendations after a deep-fix a
   summary: "PR5 settled (D36 epic complete): the app log is penpal.log (5 MiB x 3 rotating), written only by the daemon (CLI/HUD/MCP log to stderr) so rotation has a single writer; launchd stdout/stderr files are capped at 1 MiB by in-place truncation (launchd keeps them open). A configured keypulse.log in the data dir maps to penpal.log. Legacy artifacts are reported by doctor as WARN with fix commands; Penpal deletes only KeyPulse-named PID/log files in its own data dir (penpal maintenance clean-legacy) and never removes user apps or launchd jobs; the post-migration ~/.keypulse marker dir is not reported."
   source: D36 PR5 review 2026-10-25
   affects: [runtime-contract]
+
+- time: 2026-10-26T11:48:26
+  kind: decision
+  summary: "Plists with Penpal's Label are Penpal-owned; install always rewrites them (upgrade path); only foreign files need --force"
+  source: "0.4.0 hand test, 2026-10-26"
+  affects: [penpal/cli/install.py]

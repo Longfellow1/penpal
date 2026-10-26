@@ -256,25 +256,13 @@ info "Editable install from $REPO_DIR"
 "$VENV_PIP" install --no-user -e "$REPO_DIR" --quiet
 success "Penpal installed"
 
-# Install macOS-specific pyobjc — try prebuilt wheel first, then source
+# macOS dependencies come from the `macos` extra in pyproject.toml (the one list of pyobjc frameworks).
 info "Installing macOS dependencies (pyobjc)…"
-if "$VENV_PIP" install --no-user \
-    "pyobjc-framework-AppKit" \
-    "pyobjc-framework-Quartz" \
-    --quiet 2>/dev/null; then
+if "$VENV_PIP" install --no-user -e "$REPO_DIR[macos]" --quiet; then
   success "pyobjc installed"
 else
-  warn "pyobjc wheel not available for this Python — trying with --no-binary (slower)…"
-  if "$VENV_PIP" install --no-user \
-      "pyobjc-framework-AppKit" \
-      "pyobjc-framework-Quartz" \
-      --no-binary pyobjc-framework-AppKit,pyobjc-framework-Quartz \
-      --quiet 2>/dev/null; then
-    success "pyobjc installed from source"
-  else
-    warn "pyobjc install failed — window/clipboard watchers will be disabled"
-    warn "Install manually later:  $VENV_PIP install pyobjc-framework-AppKit pyobjc-framework-Quartz"
-  fi
+  warn "pyobjc install failed — window/clipboard watchers will be disabled"
+  warn "Install manually later:  $VENV_PIP install -e '$REPO_DIR[macos]'"
 fi
 
 # Quick sanity check

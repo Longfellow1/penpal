@@ -305,3 +305,50 @@ def test_install_launchd_replaces_own_plist_pinned_to_cellar_without_force(monke
 
     assert result.exit_code == 0, result.output
     assert plistlib.loads(stale.read_bytes())["ProgramArguments"][0] == str(executable)
+
+
+def test_install_launchd_replaces_own_plist_from_an_older_template_without_force(monkeypatch, tmp_path):
+    # Upgrading after the template changed (e.g. KeepAlive) must not stop `penpal install init`.
+    executable = tmp_path / "bin" / "penpal"
+    executable.parent.mkdir(parents=True)
+    executable.write_text("#!/bin/sh\n", encoding="utf-8")
+    executable.chmod(0o755)
+    launch_agents = tmp_path / "Library" / "LaunchAgents"
+    launch_agents.mkdir(parents=True)
+    older = launch_agents / "com.penpal.daemon.plist"
+    older.write_bytes(plistlib.dumps({
+        "Label": "com.penpal.daemon",
+        "ProgramArguments": [str(executable), "serve"],
+        "KeepAlive": True,
+    }))
+
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    monkeypatch.setattr("penpal.cli.install._penpal_executable_path", lambda: executable)
+
+    result = CliRunner().invoke(main, ["install", "init", "--no-load"])
+
+    assert result.exit_code == 0, result.output
+    assert plistlib.loads(older.read_bytes())["KeepAlive"] == {"SuccessfulExit": False}
+
+
+def test_install_launchd_preserves_a_plist_naming_another_job_without_force(monkeypatch, tmp_path):
+    executable = tmp_path / "bin" / "penpal"
+    executable.parent.mkdir(parents=True)
+    executable.write_text("#!/bin/sh\n", encoding="utf-8")
+    executable.chmod(0o755)
+    launch_agents = tmp_path / "Library" / "LaunchAgents"
+    launch_agents.mkdir(parents=True)
+    foreign = launch_agents / "com.penpal.daemon.plist"
+    foreign.write_bytes(plistlib.dumps({"Label": "com.example.other", "ProgramArguments": ["/bin/true"]}))
+    before = foreign.read_bytes()
+
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    monkeypatch.setattr("penpal.cli.install._penpal_executable_path", lambda: executable)
+
+    result = CliRunner().invoke(main, ["install", "launchd", "--no-load"])
+
+    assert result.exit_code != 0
+    assert "already exists and differs" in result.output
+    assert foreign.read_bytes() == before

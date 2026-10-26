@@ -62,14 +62,11 @@ def _remove_legacy_launchd_jobs() -> list[str]:
 def _launchd_plist_path(label: str) -> Path:
     return get_launchd_plist_path(label)
 
-def _is_own_versioned_plist(existing: Any, label: str) -> bool:
-    """Our own plist from an earlier install that pinned a versioned Homebrew Cellar path (or a binary that is
-    gone). Replacing it needs no --force: it is not a user customization, and it breaks on `brew upgrade`."""
-    if not isinstance(existing, dict) or existing.get("Label") != label:
-        return False
-    args = existing.get("ProgramArguments") or []
-    program = str(args[0]) if args else ""
-    return "/Cellar/penpal/" in program or (program != "" and not Path(program).exists())
+def _is_own_plist(existing: Any, label: str) -> bool:
+    """A plist carrying our Label was written by an earlier Penpal install, so it follows the current template
+    on every install (an upgrade that changes the template, a pinned Cellar path, a binary that is gone).
+    Only a file that is not a plist or names another job counts as a user's own and needs --force."""
+    return isinstance(existing, dict) and existing.get("Label") == label
 
 def _write_launchd_plist(label: str, payload: dict[str, Any], *, force: bool = False) -> str:
     path = _launchd_plist_path(label)
@@ -81,7 +78,7 @@ def _write_launchd_plist(label: str, payload: dict[str, Any], *, force: bool = F
             existing = None
         if existing == payload:
             return "unchanged"
-        if not force and not _is_own_versioned_plist(existing, label):
+        if not force and not _is_own_plist(existing, label):
             raise click.ClickException(f"{path} already exists and differs. Re-run with --force to replace it.")
         status = "updated"
     else:
@@ -186,7 +183,7 @@ def _stale_moved_dev_venv_script() -> tuple[Path, str] | None:
 
 @install_group.command("launchd", help="Write and load Penpal launchd jobs.")
 @click.option("--no-load", is_flag=True, default=False, help="Write plists without loading launchd")
-@click.option("--force", is_flag=True, default=False, help="Replace existing Penpal plists when their content differs")
+@click.option("--force", is_flag=True, default=False, help="Also replace a file at the plist path that Penpal did not write")
 @click.option("--plain", is_flag=True, default=False, help="Plain text output")
 def install_launchd(no_load, force, plain):
     """Install launchd jobs."""
@@ -199,7 +196,7 @@ def install_launchd(no_load, force, plain):
 @click.option("--no-launchd", is_flag=True, default=False, help="Skip launchd job installation")
 @click.option("--no-load", is_flag=True, default=False, help="Write launchd plists without loading them")
 @click.option("--force-config", is_flag=True, default=False, help="Overwrite existing config.toml")
-@click.option("--force-launchd", is_flag=True, default=False, help="Replace existing launchd plists when their content differs")
+@click.option("--force-launchd", is_flag=True, default=False, help="Also replace a file at a plist path that Penpal did not write")
 @click.option("--plain", is_flag=True, default=False, help="Plain text output")
 def install_init(no_launchd, no_load, force_config, force_launchd, plain):
     """Initialize runtime."""

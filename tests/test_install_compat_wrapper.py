@@ -72,3 +72,13 @@ def test_compat_wrapper_preserves_unrecognized_custom_file(tmp_path):
     assert result.returncode == 0, result.stderr
     assert target.read_text(encoding="utf-8") == custom_content
     assert "keeping custom file" in result.stderr
+
+
+def test_compat_wrapper_reinstall_refreshes_its_own_wrapper_without_a_warning(tmp_path):
+    home = tmp_path / "home"
+    assert _install_wrapper(home).returncode == 0
+
+    result = _install_wrapper(home)
+
+    assert result.returncode == 0, result.stderr
+    assert "keeping custom file" not in result.stderr
