@@ -274,7 +274,12 @@ def _unrecorded_process_status(pid: int, started_at: str | None, now: datetime) 
 
 def _paused() -> bool:
     from penpal.capture.capture_control import is_capture_paused
+    from penpal.store import db
 
+    # evaluate() is the first call of every status entry point (doctor, hud status, the HUD, the watchdog),
+    # so it opens the configured DB itself instead of relying on the caller having done so.
+    if not db.is_initialized():
+        db.init_db(Config.load().db_path_expanded)
     return is_capture_paused()
 
 
