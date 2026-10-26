@@ -69,6 +69,8 @@ LEGACY_TARGET="$GUI_DOMAIN/com.keypulse.daemon"
 LEGACY_PLIST="$HOME/Library/LaunchAgents/com.keypulse.daemon.plist"
 DRILL_VERSION_1=""
 DRILL_VERSION_2=""
+DRILL_VERSION_3=""
+LAST_FINGERPRINT=""
 CANDIDATE_FINGERPRINT_1=""
 OLD_PID=""
 OLD_DB_PATH=""
@@ -323,6 +325,7 @@ candidate_versions() {
   fi
   DRILL_VERSION_1="${base_version}.99-drill.1"
   DRILL_VERSION_2="${base_version}.99-drill.2"
+  DRILL_VERSION_3="${base_version}.99-drill.3"
 }
 
 ensure_tap() {
@@ -350,9 +353,9 @@ build_candidate_tarball() {
     marker_dir="$DRILL_TMP/identity-marker"
     marker="upgrade_drill_identity_generated.py"
     mkdir -p "$marker_dir/penpal"
-    cat > "$marker_dir/penpal/$marker" <<'PY'
-"""Harmless generated module that changes the upgrade-drill package fingerprint."""
-PY
+    # The version in the body makes each drill candidate's fingerprint distinct.
+    printf '"""Harmless generated module that changes the upgrade-drill package fingerprint (%s)."""\n' \
+      "$version" > "$marker_dir/penpal/$marker"
     if ! tar -rf "$tarball" -C "$marker_dir" "penpal/$marker"; then
       fail_check "could not append the generated identity marker to candidate $version"
       return 1
@@ -714,7 +717,11 @@ check_stop_watchdog_start() {
   fi
 }
 
-check_self_reload() {
+# Upgrade with `brew upgrade` only (no install init, no restart) and wait for the daemon to exec the new code in
+# place. keep_old_keg=true mimics HOMEBREW_NO_INSTALL_CLEANUP: the keg the daemon was loaded from stays on disk,
+# so the daemon must follow the stable entry rather than re-hash its own keg.
+self_reload_to() {
+  local from_version="$1" to_version="$2" keep_old_keg="$3"
   local pid_before old_keg python package_version fingerprint_after
   read_status
   pid_before="$(status_field pid)"
@@ -722,14 +729,25 @@ check_self_reload() {
     fail_check "could not capture daemon pid before self-reload"
     return 1
   fi
-  old_keg="$(brew --cellar)/penpal/$DRILL_VERSION_1"
-  if ! build_candidate_tarball "$DRILL_VERSION_2" true; then return 1; fi
-  if ! rewrite_formula "$DRILL_VERSION_2" "$TAR_PATH" "$TAR_SHA"; then return 1; fi
-  if ! brew upgrade longfellow1/penpal/penpal; then
-    fail_check "brew upgrade to the second drill candidate failed"
-    return 1
+  old_keg="$(brew --cellar)/penpal/$from_version"
+  if ! build_candidate_tarball "$to_version" true; then return 1; fi
+  if ! rewrite_formula "$to_version" "$TAR_PATH" "$TAR_SHA"; then return 1; fi
+  if [[ "$keep_old_keg" == "true" ]]; then
+    if ! (export HOMEBREW_NO_INSTALL_CLEANUP=1; brew upgrade longfellow1/penpal/penpal); then
+      fail_check "brew upgrade to $to_version failed"
+      return 1
+    fi
+    if [[ ! -d "$old_keg" ]]; then
+      fail_check "scenario setup: $from_version keg was removed although cleanup was disabled"
+      return 1
+    fi
+  else
+    if ! brew upgrade longfellow1/penpal/penpal; then
+      fail_check "brew upgrade to $to_version failed"
+      return 1
+    fi
+    brew cleanup penpal || true
   fi
-  brew cleanup penpal || true
   local deadline state pid installed_version
   deadline=$((SECONDS + 180))
   while true; do
@@ -738,27 +756,28 @@ check_self_reload() {
     pid="$(status_field pid)"
     if [[ "$STATUS_RC" == 0 && "$state" == "running" && "$pid" == "$pid_before" ]]; then
       if ! fingerprint_after="$(installed_fingerprint)"; then
-        fail_check "could not compute the second candidate fingerprint"
+        fail_check "could not compute the $to_version fingerprint"
         return 1
       fi
       # Files on disk change at once; the reload is done only when the daemon's own record carries them.
-      if [[ "$fingerprint_after" != "$CANDIDATE_FINGERPRINT_1" && "$(daemon_record_fingerprint)" == "$fingerprint_after" ]]; then
+      if [[ "$fingerprint_after" != "$LAST_FINGERPRINT" && "$(daemon_record_fingerprint)" == "$fingerprint_after" ]]; then
         break
       fi
     fi
     if (( SECONDS >= deadline )); then
-      fail_check "daemon did not self-reload to running with the same pid and changed identity within 180s (state=${state:-unknown} pid=${pid:-none})"
+      fail_check "daemon did not self-reload to $to_version with the same pid within 180s (state=${state:-unknown} pid=${pid:-none} keep_old_keg=$keep_old_keg)"
       return 1
     fi
     sleep 2
   done
-  installed_version="$(brew list --versions penpal | awk '{ print $2; exit }')"
-  if [[ "$installed_version" != "$DRILL_VERSION_2" ]]; then
-    fail_check "brew installed '$installed_version' after self-reload upgrade; expected '$DRILL_VERSION_2'"
+  # With several kegs on disk, the linked one is the installed version.
+  installed_version="$(basename "$(readlink "$(brew --prefix)/opt/penpal")")"
+  if [[ "$installed_version" != "$to_version" ]]; then
+    fail_check "brew reports '$installed_version' after the upgrade; expected '$to_version'"
     return 1
   fi
-  if [[ -e "$old_keg" ]]; then
-    fail_check "drill.1 keg still exists after self-reload: $old_keg"
+  if [[ "$keep_old_keg" != "true" && -e "$old_keg" ]]; then
+    fail_check "$from_version keg still exists after cleanup: $old_keg"
     return 1
   fi
   if ! python="$(penpal_python)"; then
@@ -767,6 +786,17 @@ check_self_reload() {
   fi
   package_version="$("$python" -I -c 'from penpal.foundation.runtime_identity import installed_package_version; print(installed_package_version())')"
   if ! assert_daemon_identity_matches_install "$fingerprint_after" "$package_version"; then return 1; fi
+  LAST_FINGERPRINT="$fingerprint_after"
+}
+
+check_self_reload_keeping_old_keg() {
+  LAST_FINGERPRINT="$CANDIDATE_FINGERPRINT_1"
+  self_reload_to "$DRILL_VERSION_1" "$DRILL_VERSION_2" true
+}
+
+check_self_reload_after_cleanup() {
+  # Both kegs are on disk now; cleanup removes every keg but the newest, including the one the daemon runs from.
+  self_reload_to "$DRILL_VERSION_2" "$DRILL_VERSION_3" false
 }
 
 printf 'PASS ci_guard\n'
@@ -794,7 +824,8 @@ check readonly_commands_do_not_traceback check_read_only_commands
 check restart_reaches_running_with_new_pid check_restart_cycle
 check stop_is_not_revived_by_watchdog_and_start_works check_stop_watchdog_start
 if [[ "$MODE" == "upgrade" ]]; then
-  check self_reload_uses_new_identity_and_same_pid check_self_reload
+  check self_reload_with_old_keg_kept check_self_reload_keeping_old_keg
+  check self_reload_after_brew_cleanup check_self_reload_after_cleanup
 fi
 
 printf 'Upgrade drill completed: mode=%s\n' "$MODE"
