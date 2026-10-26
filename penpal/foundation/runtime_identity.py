@@ -32,21 +32,64 @@ class RuntimeIdentity:
         )
 
 
-def _package_root() -> Path:
+def _test_root() -> Path | None:
     test_root = os.environ.get(TEST_FINGERPRINT_ROOT_ENV)
     if os.environ.get("PENPAL_ISOLATED") == "1" and test_root:
         return Path(test_root).resolve()
-    return Path(__file__).resolve().parents[1]
+    return None
+
+
+def _loaded_package_root() -> Path:
+    return _test_root() or Path(__file__).resolve().parents[1]
+
+
+def installed_package_root() -> Path:
+    """The penpal package the stable entry would load if exec'd now. A Homebrew upgrade installs a new keg
+    and repoints the entry, and may keep the old keg (HOMEBREW_NO_INSTALL_CLEANUP), so the keg this process was
+    loaded from is not the installed code. Wrapper scripts and editable installs fall back to the loaded root."""
+    test_root = _test_root()
+    if test_root is not None:
+        return test_root
+    try:
+        from penpal.foundation.runtime_plist import resolve_penpal_executable
+
+        entry = resolve_penpal_executable()
+        real = entry.resolve()
+        if real.parent.name == "bin":
+            venv = real.parent.parent
+            if (venv / "pyvenv.cfg").is_file():
+                candidates = [
+                    p.parent
+                    for p in venv.glob("lib/python3*/site-packages/penpal/__init__.py")
+                    if p.is_file()
+                ]
+                if len(candidates) == 1:
+                    return candidates[0].resolve()
+    except (OSError, ValueError, RuntimeError):
+        pass
+    return _loaded_package_root()
+
 
 
 def _fingerprint(package: Path | None = None) -> str:
-    package = package or _package_root()
+    package = package or installed_package_root()
     digest = hashlib.sha256()
-    for path in sorted(package.rglob("*.py")):
-        relative = path.relative_to(package).as_posix()
+    try:
+        paths = sorted(package.rglob("*.py"))
+    except OSError:
+        paths = []
+    for path in paths:
+        try:
+            relative = path.relative_to(package).as_posix()
+        except ValueError:
+            continue
         digest.update(relative.encode("utf-8"))
         digest.update(b"\0")
-        digest.update(path.read_bytes())
+        try:
+            content = path.read_bytes()
+        except FileNotFoundError:
+            content = b"<missing>"
+        digest.update(content)
         digest.update(b"\n")
     return digest.hexdigest()
 
@@ -69,7 +112,7 @@ def _read_package_version(package: Path) -> str:
     raise ValueError("package version is not a string literal")
 
 
-_LOADED_CODE_FINGERPRINT = _fingerprint()
+_LOADED_CODE_FINGERPRINT = _fingerprint(_loaded_package_root())
 _LOADED_PACKAGE_VERSION = _read_package_version(Path(__file__).resolve().parents[1])
 
 
@@ -80,7 +123,7 @@ def code_fingerprint() -> str:
 
 def installed_fingerprint() -> str:
     """Recompute the on-disk identity so long-running processes can detect upgrades."""
-    return _fingerprint()
+    return _fingerprint(installed_package_root())
 
 
 def loaded_package_version() -> str:
@@ -91,7 +134,7 @@ def loaded_package_version() -> str:
 def installed_package_version() -> str:
     """Read the installed package version, falling back if an upgrade is mid-write."""
     try:
-        return _read_package_version(_package_root())
+        return _read_package_version(installed_package_root())
     except (OSError, SyntaxError, ValueError):
         return _LOADED_PACKAGE_VERSION
 

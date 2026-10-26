@@ -50,7 +50,7 @@
 - 数据库结构版本纳入身份：旧代码发现库结构比自己新，按 `outdated` 处理。
 - 配置纳入身份：`config.toml` 的指纹变化时，后台服务同样自我换新，配置改动（如 `block-site`）无需用户手动重启；CLI 提示改为"约 1 分钟内生效"。
 - `mcp serve` 在 stdin 关闭或父进程退出时立即退出，不留孤儿进程。
-- identity 由代码指纹、包版本、`config.toml` 内容哈希、数据库记录的结构版本组成；结构版本高于当前代码支持值时，评估统一为 `outdated`，存储入口拒绝继续写入。
+- identity 由代码指纹、包版本、`config.toml` 内容哈希、数据库记录的结构版本组成；结构版本高于当前代码支持值时，评估统一为 `outdated`，存储入口拒绝继续写入。已安装代码身份跟随稳定入口（即再次 exec 会加载的代码），而非当前进程载入的 keg，因此即使 Homebrew 保留旧 keg 也能及时发现升级。
 - daemon 在约 60 秒检查一次 identity；变更后停止调度、完成并持久化当前 flush，然后 exec 稳定安装入口（`penpal serve`），PID 与 launchd 托管关系不变。不依赖 launchd 重拉：macOS 26 上已退出的任务可能一直挂起（`pended nondemand spawn = semaphore`），不会被重启（2026-10-26 实测）。exec 失败时以退出码 75 退出，由 `KeepAlive = { SuccessfulExit = false }` 或 watchdog（≤ 10 分钟）兜底；正常停止不重启。凡是 Penpal 自己 bootstrap 的任务，之后都显式 `kickstart`。
 - daemon 运行记录升为 v2，持久化配置指纹和数据库结构版本；v1 记录只为 PR1 到 PR3 的升级读取一次，缺少的两项只跳过对应比较。
 - MCP transport 在请求响应已 flush 后检查 identity。exec 前把 initialize 参数和旧工具清单摘要放进短命环境变量；新进程向自己的 SDK read stream 注入 synthetic initialize / initialized，并过滤 synthetic initialize response。工具清单变化时，在续接后发送 `notifications/tools/list_changed`。
