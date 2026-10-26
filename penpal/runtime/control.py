@@ -260,8 +260,11 @@ def load_job(
     spawn: bool = True,
 ) -> bool:
     """Load an auxiliary Penpal LaunchAgent, such as the periodic healthcheck. ``spawn=False`` only registers
-    it (a login item that should start at the next login, not now)."""
+    it (a login item that should start at the next login, not now). An already loaded job is started too: one
+    left pending by an earlier bootstrap never fires its StartInterval either."""
     if _loaded(label, runner, probe):
+        if spawn:
+            _spawn_loaded(label, runner)
         return True
     ok, _ = _run(["launchctl", "bootstrap", _domain_target(), str(plist_path)], runner)
     if ok and spawn:

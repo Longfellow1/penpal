@@ -180,8 +180,15 @@ def test_start_refuses_to_bootstrap_over_an_unmanaged_live_daemon(monkeypatch, t
     assert calls == []
 
 
-def test_load_job_starts_the_bootstrapped_job_unless_it_is_only_a_login_item(tmp_path):
-    for spawn, expected in ((True, ["bootstrap", "kickstart"]), (False, ["bootstrap"])):
+def test_load_job_starts_the_job_unless_it_is_only_a_login_item(tmp_path):
+    cases = (
+        (False, True, ["bootstrap", "kickstart"]),
+        (False, False, ["bootstrap"]),
+        # Loaded but left pending by an earlier bootstrap: its StartInterval never fires until it is started.
+        (True, True, ["kickstart"]),
+        (True, False, []),
+    )
+    for loaded, spawn, expected in cases:
         calls = []
 
         def runner(command, **_kwargs):
@@ -190,6 +197,6 @@ def test_load_job_starts_the_bootstrapped_job_unless_it_is_only_a_login_item(tmp
 
         assert control.load_job(
             "com.penpal.healthcheck", tmp_path / "com.penpal.healthcheck.plist",
-            runner=runner, probe=lambda _label, **_kwargs: {"loaded": False}, spawn=spawn,
+            runner=runner, probe=lambda _label, **_kwargs: {"loaded": loaded}, spawn=spawn,
         )
         assert [command[1] for command in calls] == expected
