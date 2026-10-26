@@ -5,7 +5,7 @@ category: decision
 status: active
 tags: [runtime, health, hud, doctor, launchd, mcp]
 created: "2026-10-24T23:46:07"
-updated: "2026-10-26T15:51:32"
+updated: "2026-10-26T17:08:01"
 ---
 
 <!-- compiled_truth -->
@@ -88,3 +88,9 @@ Decision (D36, 2026-10-24, owner accepted all recommendations after a deep-fix a
   summary: "Daemon self-reload: exec the stable entry in place; exit 75 + KeepAlive relaunch was unreliable on macOS 26"
   source: "0.4.0 hand test, 2026-10-26"
   affects: [penpal/app.py, docs/design/runtime-contract.md]
+
+- time: 2026-10-26T17:08:01
+  kind: decision
+  summary: Public install.sh drives the Homebrew formula only through its CLI
+  source: "PR #149; clean-install 2026-10-26 ModuleNotFoundError"
+  affects: [install.sh, clean-install CI]

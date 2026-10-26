@@ -103,6 +103,62 @@ if [[ "$(uname)" != "Darwin" ]]; then
 fi
 success "macOS $(sw_vers -productVersion)"
 
+if [[ "$DEV_MODE" != true ]]; then
+  header "2/4  Checking Homebrew"
+  if ! command -v brew &>/dev/null; then
+    error "Homebrew is required for the public installer."
+    echo "  Install Homebrew first:"
+    echo '  /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"'
+    exit 1
+  fi
+  success "Homebrew $(brew --version | head -n 1 | awk '{print $2}')"
+
+  header "3/4  Installing Penpal"
+  # Pre-rename formula: remove it before touching taps so the qualified install below is
+  # unambiguous. Only the package is removed; user data in ~/.penpal is kept.
+  if brew list --formula keypulse &>/dev/null; then
+    info "Removing old keypulse formula (your data in ~/.penpal is not touched)…"
+    brew uninstall keypulse || warn "Could not uninstall keypulse; run manually: brew uninstall keypulse"
+  fi
+  # Users of the pre-rename tap (Longfellow1/keypulse) get it removed. brew refuses to untap
+  # while formulae from it are installed or it is untrusted; that is reported and tolerated.
+  old_taps="$(brew tap 2>/dev/null || true)"
+  if printf '%s\n' "$old_taps" | grep -qix 'longfellow1/keypulse'; then
+    info "Removing old tap Longfellow1/keypulse…"
+    if ! brew untap longfellow1/keypulse 2>/dev/null; then
+      warn "Could not remove old tap Longfellow1/keypulse; if the install below fails, run: brew untap longfellow1/keypulse"
+    fi
+  fi
+  # The fully qualified name auto-taps Longfellow1/penpal, so no separate tap step is needed.
+  if brew list --formula penpal &>/dev/null; then
+    info "Penpal already installed; upgrading…"
+    brew upgrade longfellow1/penpal/penpal || brew reinstall longfellow1/penpal/penpal
+  else
+    brew install longfellow1/penpal/penpal
+  fi
+  success "penpal executable installed"
+
+  header "4/4  Initializing runtime"
+  # README pipes this script from main while brew installs the latest release, so this path drives
+  # the formula only through its CLI: `install init` unloads legacy jobs and then migrates the data
+  # directory itself. Importing penpal modules here breaks whenever main is ahead of the release.
+  penpal install init
+  mkdir -p "$BIN_DIR"
+  penpal_install_compat_wrapper "$BIN_DIR/keypulse"
+
+  echo ""
+  echo -e "${BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${RESET}"
+  echo -e "${GREEN}${BOLD}  Penpal installed successfully!${RESET}"
+  echo -e "${BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${RESET}"
+  echo ""
+  echo "  Next steps:"
+  echo -e "     ${CYAN}penpal install onboard${RESET}   # 选择要导入的历史来源（之前不读取历史）"
+  echo -e "     ${CYAN}penpal doctor${RESET}"
+  echo ""
+  exit 0
+fi
+
+# Only the developer path needs a system Python; the Homebrew formula brings its own.
 # Select Python before unloading old jobs; migration itself must happen only after
 # the old KeyPulse launchd services have been booted out.
 PYTHON=""
@@ -146,60 +202,6 @@ except DataDirMigrationError as exc:
     exit 1
   fi
 }
-
-if [[ "$DEV_MODE" != true ]]; then
-  header "2/4  Checking Homebrew"
-  if ! command -v brew &>/dev/null; then
-    error "Homebrew is required for the public installer."
-    echo "  Install Homebrew first:"
-    echo '  /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"'
-    exit 1
-  fi
-  success "Homebrew $(brew --version | head -n 1 | awk '{print $2}')"
-
-  header "3/4  Installing Penpal"
-  # Pre-rename formula: remove it before touching taps so the qualified install below is
-  # unambiguous. Only the package is removed; user data in ~/.penpal is kept.
-  if brew list --formula keypulse &>/dev/null; then
-    info "Removing old keypulse formula (your data in ~/.penpal is not touched)…"
-    brew uninstall keypulse || warn "Could not uninstall keypulse; run manually: brew uninstall keypulse"
-  fi
-  # Users of the pre-rename tap (Longfellow1/keypulse) get it removed. brew refuses to untap
-  # while formulae from it are installed or it is untrusted; that is reported and tolerated.
-  old_taps="$(brew tap 2>/dev/null || true)"
-  if printf '%s\n' "$old_taps" | grep -qix 'longfellow1/keypulse'; then
-    info "Removing old tap Longfellow1/keypulse…"
-    if ! brew untap longfellow1/keypulse 2>/dev/null; then
-      warn "Could not remove old tap Longfellow1/keypulse; if the install below fails, run: brew untap longfellow1/keypulse"
-    fi
-  fi
-  # The fully qualified name auto-taps Longfellow1/penpal, so no separate tap step is needed.
-  if brew list --formula penpal &>/dev/null; then
-    info "Penpal already installed; upgrading…"
-    brew upgrade longfellow1/penpal/penpal || brew reinstall longfellow1/penpal/penpal
-  else
-    brew install longfellow1/penpal/penpal
-  fi
-  success "penpal executable installed"
-  # Use the formula's own Python: a piped run has no checkout to import penpal from.
-  check_data_dir_migration "$(brew --prefix penpal)/libexec/bin/python"
-
-  header "4/4  Initializing runtime"
-  penpal install init
-  mkdir -p "$BIN_DIR"
-  penpal_install_compat_wrapper "$BIN_DIR/keypulse"
-
-  echo ""
-  echo -e "${BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${RESET}"
-  echo -e "${GREEN}${BOLD}  Penpal installed successfully!${RESET}"
-  echo -e "${BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${RESET}"
-  echo ""
-  echo "  Next steps:"
-  echo -e "     ${CYAN}penpal install onboard${RESET}   # 选择要导入的历史来源（之前不读取历史）"
-  echo -e "     ${CYAN}penpal doctor${RESET}"
-  echo ""
-  exit 0
-fi
 
 # ── 3. Create venv ────────────────────────────────────────────────────────────
 export PYTHONPATH="$REPO_DIR${PYTHONPATH:+:$PYTHONPATH}"
