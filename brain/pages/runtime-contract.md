@@ -5,7 +5,7 @@ category: decision
 status: active
 tags: [runtime, health, hud, doctor, launchd, mcp]
 created: "2026-10-24T23:46:07"
-updated: "2026-10-26T14:42:11"
+updated: "2026-10-26T15:39:26"
 ---
 
 <!-- compiled_truth -->
@@ -76,3 +76,9 @@ Decision (D36, 2026-10-24, owner accepted all recommendations after a deep-fix a
   summary: "launchctl bootstrap may not spawn RunAtLoad jobs (speculative pending); always kickstart after bootstrap; fakes model bootstrap as load-only"
   source: "0.4.0 hand test, 2026-10-26"
   affects: [penpal/runtime/control.py]
+
+- time: 2026-10-26T15:39:26
+  kind: decision
+  summary: "Read-only commands must work in a fresh process; evaluate() owns its DB init; subprocess smoke guards it"
+  source: "0.4.0 hand test, 2026-10-26"
+  affects: [penpal/runtime/evaluate.py, tests/test_runtime_scenarios.py]

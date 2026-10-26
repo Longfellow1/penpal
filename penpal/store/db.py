@@ -52,6 +52,10 @@ def init_db(db_path: Path):
     run_migrations(conn)
 
 
+def is_initialized() -> bool:
+    return _db_path is not None
+
+
 def _get_conn() -> sqlite3.Connection:
     if not hasattr(_local, "conn") or _local.conn is None:
         if _db_path is None:

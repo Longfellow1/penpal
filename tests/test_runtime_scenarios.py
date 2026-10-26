@@ -366,3 +366,48 @@ def test_serve_rejects_second_real_process_with_distinct_exit_code(monkeypatch, 
         assert "already running" in second.stderr.lower() or "已经运行" in second.stderr
     finally:
         harness.stop()
+
+
+# Every read-only command, run as its own process the way a user runs it: a command that only works
+# after another one initialized process state (the DB, config) fails here, not on the owner's Mac.
+_READ_ONLY_COMMANDS = (
+    ["doctor"], ["doctor", "--plain"], ["doctor", "--json"],
+    ["status"], ["status", "--plain"], ["hud", "status"],
+    ["rules", "list"], ["rules", "projects"], ["mcp", "list"],
+)
+
+
+def _run_cli(env: dict[str, str], args: list[str]) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        [sys.executable, "-m", "penpal", *args],
+        cwd=ROOT, env=env, capture_output=True, text=True, timeout=60, check=False,
+    )
+
+
+def _assert_no_crash(env: dict[str, str], when: str) -> None:
+    for args in _READ_ONLY_COMMANDS:
+        result = _run_cli(env, args)
+        output = result.stdout + result.stderr
+        # Exit 1 is a reported failed check (doctor without TCC permissions); a traceback never is.
+        assert "Traceback" not in output and result.returncode in (0, 1), (
+            f"{when}: penpal {' '.join(args)} exited {result.returncode}\n{output[-2000:]}"
+        )
+
+
+@pytest.mark.integration
+def test_read_only_commands_run_in_a_fresh_process_with_and_without_a_live_daemon(monkeypatch, tmp_path):
+    home = tmp_path / "home"
+    executable = tmp_path / "bin" / "penpal"
+    _configure_parent(monkeypatch, home, executable)
+    executable.parent.mkdir()
+    executable.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+    env = _environment(home, executable)
+
+    _assert_no_crash(env, "no daemon")
+
+    harness = _ProcessHarness(home, executable)
+    try:
+        assert _wait_for(_running_status), _diagnostic(harness)
+        _assert_no_crash(env, "live daemon")
+    finally:
+        harness.stop()
