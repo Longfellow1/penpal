@@ -83,6 +83,8 @@ def test_restart_boots_out_then_retries_bootstrap_when_plist_differs(monkeypatch
                 return _completed(command, 5, "job still tearing down")
             state["loaded"] = True
             return _completed(command)
+        if command[1] == "kickstart":
+            return _completed(command)
         raise AssertionError(command)
 
     result = control.restart(
@@ -97,6 +99,8 @@ def test_restart_boots_out_then_retries_bootstrap_when_plist_differs(monkeypatch
     assert [call for call in calls if call[1] == "bootstrap"] == [
         ["launchctl", "bootstrap", control._domain_target(), str(path)],
     ] * 3
+    # bootstrap alone can leave the job pending; it is started explicitly, without -k.
+    assert calls[-1] == ["launchctl", "kickstart", control._target("com.penpal.daemon")]
     assert clock.sleeps == [0.25, 0.5]
 
 
@@ -174,3 +178,18 @@ def test_start_refuses_to_bootstrap_over_an_unmanaged_live_daemon(monkeypatch, t
     assert result.generation == "generation-live"
     assert result.error_zh and result.error_en
     assert calls == []
+
+
+def test_load_job_starts_the_bootstrapped_job_unless_it_is_only_a_login_item(tmp_path):
+    for spawn, expected in ((True, ["bootstrap", "kickstart"]), (False, ["bootstrap"])):
+        calls = []
+
+        def runner(command, **_kwargs):
+            calls.append(command)
+            return _completed(command)
+
+        assert control.load_job(
+            "com.penpal.healthcheck", tmp_path / "com.penpal.healthcheck.plist",
+            runner=runner, probe=lambda _label, **_kwargs: {"loaded": False}, spawn=spawn,
+        )
+        assert [command[1] for command in calls] == expected

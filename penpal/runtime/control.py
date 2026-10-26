@@ -111,6 +111,13 @@ def _wait_until(
         sleep(min(POLL_INTERVAL_SEC, max(0.0, deadline - monotonic())))
 
 
+def _spawn_loaded(label: str, runner: Runner) -> None:
+    """Start a job that bootstrap only loaded. launchd can leave a freshly bootstrapped job pending as a
+    "speculative" spawn (runs = 0) instead of honoring RunAtLoad; a plain kickstart starts it now and is a
+    no-op for a job already running. A failure here surfaces as the caller's generation wait timing out."""
+    _run(["launchctl", "kickstart", _target(label)], runner)
+
+
 def _bootstrap_with_retry(
     plist_path: Path, *, runner: Runner, sleep: Callable[[float], None],
 ) -> tuple[bool, str]:
@@ -118,6 +125,7 @@ def _bootstrap_with_retry(
     for attempt in range(BOOTSTRAP_ATTEMPTS):
         ok, detail = _run(["launchctl", "bootstrap", _domain_target(), str(plist_path)], runner)
         if ok:
+            _spawn_loaded(plist_path.stem, runner)
             return True, ""
         if attempt < len(BOOTSTRAP_BACKOFF_SEC):
             sleep(BOOTSTRAP_BACKOFF_SEC[attempt])
@@ -168,7 +176,7 @@ def start(
                 "The daemon is running outside launchd; stop it through its process supervisor.",
                 before.generation,
             )
-        ok, detail = _run(["launchctl", "bootstrap", _domain_target(), str(path)], runner)
+        ok, detail = _bootstrap_with_retry(path, runner=runner, sleep=sleep)
         action = "bootstrap"
     if not ok:
         return _result_error(action, f"启动后台服务失败：{detail or 'launchctl 返回错误'}", f"Could not start the daemon: {detail or 'launchctl returned an error'}")
@@ -247,11 +255,17 @@ def restart(
     return ControlResult(True, action, started.generation)
 
 
-def load_job(label: str, plist_path: Path, *, runner: Runner = _default_runner, probe: Probe = probe_label) -> bool:
-    """Load an auxiliary Penpal LaunchAgent, such as the periodic healthcheck."""
+def load_job(
+    label: str, plist_path: Path, *, runner: Runner = _default_runner, probe: Probe = probe_label,
+    spawn: bool = True,
+) -> bool:
+    """Load an auxiliary Penpal LaunchAgent, such as the periodic healthcheck. ``spawn=False`` only registers
+    it (a login item that should start at the next login, not now)."""
     if _loaded(label, runner, probe):
         return True
     ok, _ = _run(["launchctl", "bootstrap", _domain_target(), str(plist_path)], runner)
+    if ok and spawn:
+        _spawn_loaded(label, runner)
     return ok
 
 
