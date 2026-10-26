@@ -64,12 +64,22 @@ jobs:
           fetch-depth: 0
 
       - name: Run ${{ matrix.mode }} install and runtime drill
+        timeout-minutes: 30
         run: |
           set -euo pipefail
           TRANSCRIPT="$RUNNER_TEMP/upgrade-drill-${{ matrix.mode }}-transcript.txt"
           exec > >(tee -a "$TRANSCRIPT") 2>&1
           echo "\$ bash scripts/upgrade-drill.sh ${{ matrix.mode }}"
           bash scripts/upgrade-drill.sh "${{ matrix.mode }}"
+
+      - name: Diagnostics after failure or timeout
+        if: failure() || cancelled()
+        run: |
+          ps -axo pid,ppid,etime,command | grep -E 'penpal|launchctl|brew' | grep -v grep || true
+          launchctl print "gui/$(id -u)/com.penpal.daemon" || true
+          launchctl print "gui/$(id -u)/com.penpal.healthcheck" || true
+          tail -n 80 ~/.penpal/logs/* || true
+          cat ~/.penpal/run/daemon.json || true
 
       - name: Upload command transcript
         if: always()

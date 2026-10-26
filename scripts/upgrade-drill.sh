@@ -21,6 +21,43 @@ unset HOMEBREW_NO_INSTALL_CLEANUP
 DRILL_TMP="$(mktemp -d "${RUNNER_TEMP:-${TMPDIR:-/tmp}}/penpal-upgrade-drill.XXXXXX")"
 trap 'rm -rf "$DRILL_TMP"' EXIT
 
+# Every external call is bounded: a hung launchctl/penpal/brew must fail a check, not stall the job for 45 min.
+# No `timeout` binary on the runner, so poll a background child (5 polls per second).
+run_bounded() {
+  local limit="$1" pid rc=0 ticks=0
+  shift
+  "$@" &
+  pid=$!
+  while kill -0 "$pid" 2>/dev/null; do
+    if (( ticks >= limit * 5 )); then
+      kill -TERM "$pid" 2>/dev/null || true
+      sleep 3
+      kill -KILL "$pid" 2>/dev/null || true
+      wait "$pid" 2>/dev/null || true
+      printf 'TIMEOUT after %ss: %s\n' "$limit" "$*" >&2
+      return 124
+    fi
+    sleep 0.2
+    ticks=$((ticks + 1))
+  done
+  wait "$pid" || rc=$?
+  return "$rc"
+}
+
+launchctl() { run_bounded 15 command launchctl "$@"; }
+brew() {
+  case "${1:-}" in
+    install|upgrade|reinstall|cleanup|tap) run_bounded 900 command brew "$@" ;;
+    *) run_bounded 60 command brew "$@" ;;
+  esac
+}
+penpal() {
+  case "${1:-}" in
+    install|restart|start|stop) run_bounded 120 command penpal "$@" ;;
+    *) run_bounded 60 command penpal "$@" ;;
+  esac
+}
+
 CHECK_REASON=""
 BREW_PREFIX=""
 FORMULA_PATH=""
@@ -95,8 +132,8 @@ check_runner_tools() {
     fail_check "macOS is required"
     return 1
   fi
-  for tool in brew launchctl git tar ruby shasum python3 plutil awk grep sed tail; do
-    if ! command -v "$tool" >/dev/null 2>&1; then
+  for tool in brew launchctl git tar ruby shasum python3 plutil awk grep sed tail sqlite3; do
+    if ! type -P "$tool" >/dev/null 2>&1; then
       fail_check "required command is unavailable: $tool"
       return 1
     fi
@@ -175,13 +212,14 @@ job_is_running() {
 }
 
 wait_for_healthcheck_success() {
-  local baseline="$1" timeout="$2" deadline runs exit_code
+  # want_exit "0" for a healthy daemon; "any" when the daemon is stopped on purpose (healthcheck exits 1 then).
+  local baseline="$1" timeout="$2" want_exit="${3:-0}" deadline runs exit_code
   deadline=$((SECONDS + timeout))
   while true; do
     job_print "$HEALTH_TARGET"
     runs="$(job_runs)"
     exit_code="$(job_last_exit)"
-    if [[ "$JOB_RC" == 0 && "$runs" =~ ^[0-9]+$ ]] && (( runs > baseline )) && [[ "$exit_code" == "0" ]] && ! job_is_running; then
+    if [[ "$JOB_RC" == 0 && "$runs" =~ ^[0-9]+$ ]] && (( runs > baseline )) && [[ "$want_exit" == "any" || "$exit_code" == "$want_exit" ]] && ! job_is_running; then
       return 0
     fi
     if (( SECONDS >= deadline )); then
@@ -194,7 +232,7 @@ wait_for_healthcheck_success() {
 
 penpal_python() {
   local entrypoint shebang resolved
-  entrypoint="$(command -v penpal 2>/dev/null || true)"
+  entrypoint="$(type -P penpal 2>/dev/null || true)"
   if [[ -z "$entrypoint" || ! -f "$entrypoint" ]]; then
     return 1
   fi
@@ -347,7 +385,7 @@ RUBY
 
 install_from_checkout() {
   local log_path="$DRILL_TMP/install-$MODE.log"
-  if ! (cd "$HOME" && bash "$REPO_DIR/install.sh") > "$log_path" 2>&1; then
+  if ! (cd "$HOME" && run_bounded 900 bash "$REPO_DIR/install.sh") > "$log_path" 2>&1; then
     cat "$log_path"
     fail_check "candidate install.sh failed in public mode"
     return 1
@@ -388,7 +426,7 @@ PLIST
     fail_check "launchctl bootstrap failed for the planted legacy job"
     return 1
   fi
-  if ! launchctl kickstart -k "$LEGACY_TARGET"; then
+  if ! launchctl kickstart "$LEGACY_TARGET"; then
     fail_check "launchctl kickstart failed for the planted legacy job"
     return 1
   fi
@@ -545,7 +583,7 @@ check_healthcheck_after_upgrade() {
   fi
   exit_code="$(job_last_exit)"
   if (( runs <= HEALTH_RUNS_BEFORE_UPGRADE )) || { [[ "$exit_code" != "0" ]] && ! job_is_running; }; then
-    if ! launchctl kickstart -k "$HEALTH_TARGET"; then
+    if ! launchctl kickstart "$HEALTH_TARGET"; then
       fail_check "healthcheck had not completed successfully since upgrade and kickstart failed"
       return 1
     fi
@@ -600,8 +638,15 @@ check_database_state() {
     fail_check "status db_path changed across upgrade (before=$OLD_DB_PATH after=$db_path)"
     return 1
   fi
-  if [[ ! -s "$db_path" ]] || ! awk -v size="$size_mb" 'BEGIN { exit !(size + 0 > 0) }'; then
-    fail_check "status did not report a non-empty database (db_path=$db_path db_size_mb=$size_mb)"
+  # db_size_mb counts only the main file; a fresh WAL-mode DB keeps its pages in -wal, so size can read 0.
+  local integrity
+  integrity="$(sqlite3 -readonly "$db_path" 'PRAGMA quick_check;' 2>&1 || true)"
+  if [[ "$integrity" != "ok" ]]; then
+    fail_check "database does not open cleanly (db_path=$db_path db_size_mb=$size_mb quick_check=$integrity)"
+    return 1
+  fi
+  if [[ "$(sqlite3 -readonly "$db_path" "SELECT count(*) FROM sqlite_master WHERE type='table';" 2>/dev/null)" -lt 1 ]]; then
+    fail_check "database has no tables (db_path=$db_path)"
     return 1
   fi
 }
@@ -637,11 +682,11 @@ check_stop_watchdog_start() {
     fail_check "healthcheck job is not loaded before the stop/watchdog check"
     return 1
   fi
-  if ! launchctl kickstart -k "$HEALTH_TARGET"; then
+  if ! launchctl kickstart "$HEALTH_TARGET"; then
     fail_check "could not kickstart the healthcheck watchdog after stop"
     return 1
   fi
-  if ! wait_for_healthcheck_success "$runs_before" 20; then return 1; fi
+  if ! wait_for_healthcheck_success "$runs_before" 20 any; then return 1; fi
   local started_pid
   deadline=$((SECONDS + 30))
   while true; do
