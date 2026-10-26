@@ -231,6 +231,8 @@ wait_for_healthcheck_success() {
   done
 }
 
+# Callers run the installed interpreter with -I: from the checkout, a plain `python -c` would import the
+# checkout's penpal (cwd on sys.path) instead of the installed package and report the wrong identity.
 penpal_python() {
   local entrypoint shebang resolved
   entrypoint="$(type -P penpal 2>/dev/null || true)"
@@ -266,7 +268,7 @@ installed_fingerprint() {
   if ! python="$(penpal_python)"; then
     return 1
   fi
-  "$python" -c 'from penpal.foundation.runtime_identity import installed_fingerprint; print(installed_fingerprint())'
+  "$python" -I -c 'from penpal.foundation.runtime_identity import installed_fingerprint; print(installed_fingerprint())'
 }
 
 assert_daemon_identity_matches_install() {
@@ -275,7 +277,7 @@ assert_daemon_identity_matches_install() {
     fail_check "could not resolve the installed Penpal Python interpreter"
     return 1
   fi
-  if ! result="$("$python" - "$HOME/.penpal/run/daemon.json" <<'PY'
+  if ! result="$("$python" -I - "$HOME/.penpal/run/daemon.json" <<'PY'
 import json
 import sys
 from penpal.foundation.runtime_identity import installed_fingerprint, installed_package_version
@@ -436,7 +438,7 @@ PLIST
     return 1
   fi
   python="$(command -v python3)"
-  "$python" - "$LEGACY_PLIST" <<'PY'
+  "$python" -I - "$LEGACY_PLIST" <<'PY'
 import plistlib
 import sys
 with open(sys.argv[1], "rb") as handle:
@@ -531,7 +533,7 @@ check_stable_plist_entries() {
       fail_check "required launchd plist is missing: $plist"
       return 1
     fi
-    if ! "$python" - "$plist" "$EXPECTED_BIN" <<'PY'
+    if ! "$python" -I - "$plist" "$EXPECTED_BIN" <<'PY'
 import plistlib
 import sys
 with open(sys.argv[1], "rb") as handle:
@@ -564,7 +566,7 @@ check_candidate_running() {
     fail_check "could not resolve installed Python to verify the daemon identity"
     return 1
   fi
-  package_version="$("$python" -c 'from penpal.foundation.runtime_identity import installed_package_version; print(installed_package_version())')"
+  package_version="$("$python" -I -c 'from penpal.foundation.runtime_identity import installed_package_version; print(installed_package_version())')"
   if ! assert_daemon_identity_matches_install "$CANDIDATE_FINGERPRINT_1" "$package_version"; then
     return 1
   fi
@@ -613,7 +615,7 @@ check_read_only_commands() {
     fi
     if [[ "$line" == "doctor --json" ]]; then
       local python
-      if ! python="$(penpal_python)" || ! "$python" -c 'import json,sys; value=json.load(sys.stdin); assert isinstance(value.get("checks"), dict)' < "$output_path"; then
+      if ! python="$(penpal_python)" || ! "$python" -I -c 'import json,sys; value=json.load(sys.stdin); assert isinstance(value.get("checks"), dict)' < "$output_path"; then
         fail_check "penpal doctor --json did not emit the expected machine-readable checks object"
         return 1
       fi
@@ -763,7 +765,7 @@ check_self_reload() {
     fail_check "could not resolve installed Python after self-reload"
     return 1
   fi
-  package_version="$("$python" -c 'from penpal.foundation.runtime_identity import installed_package_version; print(installed_package_version())')"
+  package_version="$("$python" -I -c 'from penpal.foundation.runtime_identity import installed_package_version; print(installed_package_version())')"
   if ! assert_daemon_identity_matches_install "$fingerprint_after" "$package_version"; then return 1; fi
 }
 
