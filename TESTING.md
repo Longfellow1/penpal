@@ -19,6 +19,8 @@ Verify installation:
 penpal --help
 ```
 
+The `upgrade-drill` GitHub Actions workflow tests fresh installation and upgrading the previous public release on macOS, including daemon start/stop/restart, watchdog behavior, and in-place self-reload.
+
 ---
 
 ## 2. Pre-flight Check

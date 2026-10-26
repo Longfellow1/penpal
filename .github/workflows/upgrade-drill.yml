@@ -1,0 +1,81 @@
+name: upgrade-drill
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - install.sh
+      - README.md
+      - README.en.md
+      - scripts/compat-wrapper.sh
+      - scripts/upgrade-drill.sh
+      - tests/read_only_commands.txt
+      - pyproject.toml
+      - penpal/capture/**
+      - penpal/health/**
+      - penpal/runtime/**
+      - penpal/cli/**
+      - penpal/app.py
+      - penpal/foundation/**
+      - penpal/store/**
+      - penpal/config.py
+      - penpal/permissions.py
+      - penpal/utils/**
+      - penpal/__main__.py
+      - .github/workflows/upgrade-drill.yml
+  push:
+    branches: [main]
+    paths:
+      - install.sh
+      - README.md
+      - README.en.md
+      - scripts/compat-wrapper.sh
+      - scripts/upgrade-drill.sh
+      - tests/read_only_commands.txt
+      - pyproject.toml
+      - penpal/capture/**
+      - penpal/health/**
+      - penpal/runtime/**
+      - penpal/cli/**
+      - penpal/app.py
+      - penpal/foundation/**
+      - penpal/store/**
+      - penpal/config.py
+      - penpal/permissions.py
+      - penpal/utils/**
+      - penpal/__main__.py
+      - .github/workflows/upgrade-drill.yml
+
+permissions:
+  contents: read
+
+jobs:
+  upgrade-drill:
+    runs-on: macos-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        mode: [upgrade, fresh]
+    steps:
+      - name: Check out tested commit
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Run ${{ matrix.mode }} install and runtime drill
+        run: |
+          set -euo pipefail
+          TRANSCRIPT="$RUNNER_TEMP/upgrade-drill-${{ matrix.mode }}-transcript.txt"
+          exec > >(tee -a "$TRANSCRIPT") 2>&1
+          echo "\$ bash scripts/upgrade-drill.sh ${{ matrix.mode }}"
+          bash scripts/upgrade-drill.sh "${{ matrix.mode }}"
+
+      - name: Upload command transcript
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: upgrade-drill-${{ matrix.mode }}-transcript
+          path: ${{ runner.temp }}/upgrade-drill-${{ matrix.mode }}-transcript.txt
+          if-no-files-found: warn
+          retention-days: 30

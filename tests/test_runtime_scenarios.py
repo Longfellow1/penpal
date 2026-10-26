@@ -8,6 +8,7 @@ import subprocess
 import sys
 import time
 import importlib
+import shlex
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -375,10 +376,10 @@ def test_serve_rejects_second_real_process_with_distinct_exit_code(monkeypatch, 
 
 # Every read-only command, run as its own process the way a user runs it: a command that only works
 # after another one initialized process state (the DB, config) fails here, not on the owner's Mac.
-_READ_ONLY_COMMANDS = (
-    ["doctor"], ["doctor", "--plain"], ["doctor", "--json"],
-    ["status"], ["status", "--plain"], ["hud", "status"],
-    ["rules", "list"], ["rules", "projects"], ["mcp", "list"],
+_READ_ONLY_COMMANDS = tuple(
+    shlex.split(line)
+    for line in (ROOT / "tests" / "read_only_commands.txt").read_text(encoding="utf-8").splitlines()
+    if line.strip() and not line.lstrip().startswith("#")
 )
 
 
