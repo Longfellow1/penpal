@@ -1,0 +1,9 @@
+doctor
+doctor --plain
+doctor --json
+status
+status --plain
+hud status
+rules list
+rules projects
+mcp list

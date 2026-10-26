@@ -21,6 +21,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable, Optional
 
+from penpal.foundation.runtime_launchd import LAUNCHCTL_TIMEOUT_SEC
 from penpal.runtime.control import load_job, unload_job
 
 from penpal.utils.paths import get_apps_dir, get_launchd_agents_dir
@@ -52,6 +53,8 @@ def default_agents_dir() -> Path:
 
 
 def _run(cmd: list[str], **kwargs) -> "subprocess.CompletedProcess[str]":
+    if cmd and cmd[0] == "launchctl":
+        kwargs.setdefault("timeout", LAUNCHCTL_TIMEOUT_SEC)
     return subprocess.run(cmd, check=False, capture_output=True, text=True, **kwargs)
 
 
@@ -289,8 +292,8 @@ def uninstall_app(
 
 
 def _bootout(plist: Path, run: Runner) -> None:
-    unload_job(plist.stem, plist, runner=lambda command, **_kwargs: run(command))
+    unload_job(plist.stem, plist, runner=lambda command, **kwargs: run(command, **kwargs))
 
 
 def _bootstrap(plist: Path, run: Runner) -> bool:
-    return load_job(plist.stem, plist, runner=lambda command, **_kwargs: run(command), spawn=False)
+    return load_job(plist.stem, plist, runner=lambda command, **kwargs: run(command, **kwargs), spawn=False)

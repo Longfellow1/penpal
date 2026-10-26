@@ -366,3 +366,36 @@ def test_install_launchd_preserves_a_plist_naming_another_job_without_force(monk
     assert result.exit_code != 0
     assert "already exists and differs" in result.output
     assert foreign.read_bytes() == before
+
+
+def test_install_init_with_load_reloads_healthcheck_with_replace_even_when_unchanged(monkeypatch, tmp_path):
+    from penpal.runtime.control import ControlResult
+
+    executable = tmp_path / "bin" / "penpal"
+    executable.parent.mkdir(parents=True)
+    executable.write_text("#!/bin/sh\n", encoding="utf-8")
+    executable.chmod(0o755)
+
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    monkeypatch.setattr("penpal.cli.install._penpal_executable_path", lambda: executable)
+    monkeypatch.setattr("penpal.cli.install.unload_legacy_jobs", lambda: [])
+    monkeypatch.setattr("penpal.cli.install.control_restart", lambda *args, **kwargs: ControlResult(True, "restart"))
+    monkeypatch.setattr("penpal.cli.install.launchd_label_loaded", lambda _label: True)
+
+    # First, write unchanged plists via --no-load
+    runner = CliRunner()
+    result = runner.invoke(main, ["install", "launchd", "--no-load"])
+    assert result.exit_code == 0
+
+    load_calls = []
+    monkeypatch.setattr(cli, "_launchd_load_plist", lambda path, **kwargs: load_calls.append((path, kwargs)) or True)
+
+    # Run install init with load (default is load=True)
+    result = runner.invoke(main, ["install", "init"])
+    assert result.exit_code == 0
+
+    assert len(load_calls) == 1
+    path, kwargs = load_calls[0]
+    assert path.name == "com.penpal.healthcheck.plist"
+    assert kwargs.get("replace") is True

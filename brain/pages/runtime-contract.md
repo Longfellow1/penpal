@@ -5,7 +5,7 @@ category: decision
 status: active
 tags: [runtime, health, hud, doctor, launchd, mcp]
 created: "2026-10-24T23:46:07"
-updated: "2026-10-26T17:08:01"
+updated: "2026-10-26T19:09:51"
 ---
 
 <!-- compiled_truth -->
@@ -94,3 +94,15 @@ Decision (D36, 2026-10-24, owner accepted all recommendations after a deep-fix a
   summary: Public install.sh drives the Homebrew formula only through its CLI
   source: "PR #149; clean-install 2026-10-26 ModuleNotFoundError"
   affects: [install.sh, clean-install CI]
+
+- time: 2026-10-26T17:40:08
+  kind: decision
+  summary: "Every release candidate requires a green upgrade-drill run on its release commit, with both upgrade and fresh modes, before publishing."
+  source: "Upgrade drill release gate, 2026-10-26"
+  affects: [.github/workflows/upgrade-drill.yml, docs/releases/README.md]
+
+- time: 2026-10-26T19:09:51
+  kind: evidence
+  summary: "launchd keeps the plist it read at bootstrap; installs must bootout+bootstrap the healthcheck, and launchctl calls need a bound"
+  source: "upgrade-drill run 40309714106 (PR #150)"
+  affects: [penpal/runtime/control.py load_job, penpal/cli/install.py, penpal/foundation/runtime_launchd.py]

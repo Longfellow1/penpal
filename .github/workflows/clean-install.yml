@@ -57,7 +57,8 @@ jobs:
           set -euo pipefail
           TRANSCRIPT="$RUNNER_TEMP/clean-install-transcript.txt"
           exec > >(tee -a "$TRANSCRIPT") 2>&1
-          # --no-load: CI has no logged-in GUI session, so launchctl load is not reliable here.
+          # --no-load keeps this workflow focused on the published formula's fresh-install files.
+          # upgrade-drill.yml exercises the loaded daemon.
           # Plists are still written, which is what this step asserts.
           echo "\$ penpal install init --no-load"
           out="$(penpal install init --no-load --plain)"

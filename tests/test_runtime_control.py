@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import plistlib
+import inspect
 import subprocess
 from pathlib import Path
 
@@ -200,3 +201,78 @@ def test_load_job_starts_the_job_unless_it_is_only_a_login_item(tmp_path):
             runner=runner, probe=lambda _label, **_kwargs: {"loaded": loaded}, spawn=spawn,
         )
         assert [command[1] for command in calls] == expected
+
+
+def test_load_job_replace_reloads_job_when_already_loaded(tmp_path):
+    path = tmp_path / "com.penpal.healthcheck.plist"
+    path.write_text("plist")
+    calls = []
+
+    def runner(command, **_kwargs):
+        calls.append(command)
+        return _completed(command)
+
+    # replace=True on loaded job: issues bootout, then bootstrap, then kickstart
+    assert control.load_job(
+        "com.penpal.healthcheck", path, runner=runner,
+        probe=lambda _label, **_kwargs: {"loaded": True},
+        spawn=True, replace=True,
+    )
+    assert [command[1] for command in calls] == ["bootout", "bootstrap", "kickstart"]
+
+    # replace=False on loaded job: issues only kickstart (existing behavior)
+    calls.clear()
+    assert control.load_job(
+        "com.penpal.healthcheck", path, runner=runner,
+        probe=lambda _label, **_kwargs: {"loaded": True},
+        spawn=True, replace=False,
+    )
+    assert [command[1] for command in calls] == ["kickstart"]
+
+
+def test_run_returns_failure_on_timeout_expired():
+    def runner(command, **_kwargs):
+        raise subprocess.TimeoutExpired(cmd=command, timeout=15.0)
+
+    ok, message = control._run(["launchctl", "kickstart", "gui/501/com.penpal.healthcheck"], runner=runner)
+    assert ok is False
+    assert "timed out" in message.lower()
+    assert message.endswith("launchctl kickstart gui/501/com.penpal.healthcheck")
+
+
+def test_default_runner_bounds_launchctl_call(monkeypatch):
+    captured_kwargs = {}
+
+    def fake_run(command, **kwargs):
+        captured_kwargs.update(kwargs)
+        return _completed(command)
+
+    monkeypatch.delenv("PENPAL_ISOLATED", raising=False)
+    monkeypatch.setattr(control.sys, "platform", "darwin")
+    monkeypatch.setattr(control.subprocess, "run", fake_run)
+
+    control._default_runner(["launchctl", "print", "gui/501/com.penpal.daemon"])
+    assert captured_kwargs.get("timeout") == control.LAUNCHCTL_TIMEOUT_SEC
+
+
+def test_probe_label_bounds_call_and_handles_timeout(monkeypatch):
+    monkeypatch.delenv("PENPAL_RUNTIME_DISABLE_LAUNCHD_PROBE", raising=False)
+    captured = {}
+
+    def timeout_runner(command, **kwargs):
+        raise subprocess.TimeoutExpired(cmd=command, timeout=15.0)
+
+    result = control.probe_label("com.penpal.daemon", runner=timeout_runner)
+    assert result == {"loaded": False, "pid": None, "last_exit": None}
+
+    def fake_run(command, **kwargs):
+        captured.update(kwargs)
+        return _completed(command)
+
+    # The default runner carries the bound, so every caller of probe_label gets it.
+    from penpal.foundation import runtime_launchd
+
+    monkeypatch.setattr(runtime_launchd.subprocess, "run", fake_run)
+    runtime_launchd.run_launchctl(["launchctl", "print", "gui/501/com.penpal.daemon"])
+    assert captured.get("timeout") == control.LAUNCHCTL_TIMEOUT_SEC
+    assert inspect.signature(control.probe_label).parameters["runner"].default is runtime_launchd.run_launchctl
