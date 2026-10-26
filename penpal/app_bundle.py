@@ -293,4 +293,4 @@ def _bootout(plist: Path, run: Runner) -> None:
 
 
 def _bootstrap(plist: Path, run: Runner) -> bool:
-    return load_job(plist.stem, plist, runner=lambda command, **_kwargs: run(command))
+    return load_job(plist.stem, plist, runner=lambda command, **_kwargs: run(command), spawn=False)

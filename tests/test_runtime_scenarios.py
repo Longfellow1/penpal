@@ -220,7 +220,12 @@ def test_daemon_plist_restarts_only_unsuccessful_exits(monkeypatch, tmp_path):
 
 
 def _fake_restart(harness: _ProcessHarness, calls: list[list[str]]):
+    # Models real launchd: bootout stops the job, bootstrap only loads it (macOS can leave RunAtLoad as a
+    # pending "speculative" spawn), and a plain kickstart starts it unless it is already running.
     loaded = {"value": True}
+
+    def running() -> bool:
+        return bool(harness.processes) and harness.current.poll() is None
 
     def runner(command, **_kwargs):
         calls.append(command)
@@ -228,12 +233,17 @@ def _fake_restart(harness: _ProcessHarness, calls: list[list[str]]):
             harness.kill_current()
             harness.spawn()
             return subprocess.CompletedProcess(command, 0, "", "")
+        if command[1] == "kickstart":
+            if loaded["value"] and not running():
+                harness.spawn()
+            return subprocess.CompletedProcess(command, 0, "", "")
         if command[1] == "bootout":
             loaded["value"] = False
+            if running():
+                harness.kill_current(signal.SIGTERM)
             return subprocess.CompletedProcess(command, 0, "", "")
         if command[1] == "bootstrap":
             loaded["value"] = True
-            harness.spawn()
             return subprocess.CompletedProcess(command, 0, "", "")
         raise AssertionError(command)
 
