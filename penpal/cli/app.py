@@ -157,11 +157,10 @@ def _app_dir_option(func):
 @_app_dir_option
 def app_install(login, apps_dir, agents_dir):
     """Install Penpal.app."""
-    from penpal import __version__
     from penpal.app_bundle import AppBundleError, install_app
 
     try:
-        result = install_app(_penpal_executable_path(), version=__version__, apps_dir=apps_dir,
+        result = install_app(_penpal_executable_path(), apps_dir=apps_dir,
                              agents_dir=agents_dir, login=login)
     except AppBundleError as exc:
         raise click.ClickException(str(exc)) from exc

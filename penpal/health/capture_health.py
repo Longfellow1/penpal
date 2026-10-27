@@ -78,13 +78,19 @@ _PYTHON_BIN_RE = re.compile(r"^(?P<prefix>.*/Versions/[^/]+)/bin/python[0-9.]*$"
 
 
 def grant_target(path: str) -> str:
-    """The app macOS lists in Privacy panes for an interpreter path.
+    """The app macOS lists in Privacy panes for an interpreter path or bundle launcher.
 
     Homebrew/python.org builds ship ``.../Versions/3.13/bin/python3.13`` next to
     ``.../Versions/3.13/Resources/Python.app``. The TCC grant belongs to that ``.app`` bundle, not to the
     ``bin`` symlink target, so return the bundle when it exists.
+    When path points to a launcher inside an .app bundle (e.g. Penpal.app/Contents/MacOS/Penpal),
+    return the enclosing .app bundle path.
     """
     real = os.path.realpath(os.path.expanduser(path))
+    p = Path(real)
+    for parent in (p, *p.parents):
+        if parent.suffix == ".app" and parent.is_dir():
+            return str(parent)
     match = _PYTHON_BIN_RE.match(real)
     if match:
         bundle = Path(match.group("prefix")) / "Resources" / "Python.app"

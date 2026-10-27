@@ -4,7 +4,9 @@ import shutil
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
+import os
 from typing import Any
+
 import click
 from rich.table import Table
 from penpal.config import Config, write_default_config
@@ -19,7 +21,7 @@ from penpal.runtime.control import (
     unload_job,
     unload_legacy_jobs,
 )
-from penpal.app_bundle import installed_app, open_app
+from penpal.app_bundle import AppBundleError, ensure_app_bundle, installed_app, open_app, remove_launcher_stamp
 from penpal.foundation.runtime_plist import launchd_jobs, resolve_penpal_executable
 from penpal.capture.keyboard_notice import mark_notice_shown, notice_pending, notice_text
 from penpal.i18n import T
@@ -99,13 +101,18 @@ def _write_launchd_plist(label: str, payload: dict[str, Any], *, force: bool = F
 def _launchd_load_plist(path: Path, *, replace: bool = False) -> bool:
     return load_job(path.stem, path, replace=replace)
 
-def _install_launchd_jobs(*, load: bool, force: bool) -> list[tuple[str, Path, str, bool]]:
+def _install_launchd_jobs(
+    *,
+    load: bool,
+    force: bool,
+    launcher_path: Path | None = None,
+) -> list[tuple[str, Path, str, bool]]:
     executable = _penpal_executable_path()
     _install_logs_dir().mkdir(parents=True, exist_ok=True)
     _remove_legacy_launchd_jobs()
     results: list[tuple[str, Path, str, bool]] = []
     pending: list[tuple[str, Path, str]] = []
-    for label, payload in _launchd_jobs(executable).items():
+    for label, payload in launchd_jobs(executable, launcher_path=launcher_path).items():
         status = _write_launchd_plist(label, payload, force=force)
         path = _launchd_plist_path(label)
         pending.append((label, path, status))
@@ -189,6 +196,31 @@ def _stale_moved_dev_venv_script() -> tuple[Path, str] | None:
             return script, first_line[2:].strip()
     return None
 
+def _isolated() -> bool:
+    return os.environ.get("PENPAL_ISOLATED") == "1"
+
+
+def _ensure_daemon_launcher(executable: Path) -> tuple[Path | None, str]:
+    """Build or keep Penpal.app. The daemon runs from its launcher so macOS lists its privacy grants under Penpal;
+    without it the daemon keeps the stable entry and the grants show as Python."""
+    if _isolated():
+        return None, "skipped"  # tests never compile or sign
+    try:
+        launcher, state, _result = ensure_app_bundle(executable)
+    except (AppBundleError, OSError) as exc:
+        console.print(T(
+            f"警告：无法构建 Penpal.app（{exc}），权限列表将显示为 Python。",
+            f"Warning: could not build Penpal.app ({exc}); the permission list will show Python.",
+        ))
+        return None, "fallback"
+    if state == "fallback":
+        console.print(T(
+            "未能构建原生启动器，权限列表将显示为 Python。",
+            "Native launcher unavailable; the permission list will show Python.",
+        ))
+    return launcher, state
+
+
 def _cleanup_legacy_huds() -> list[int]:
     """Close a HUD that predates the HUD runtime record: it cannot self-reload and `hud status` cannot see it."""
     try:
@@ -247,12 +279,23 @@ def install_init(no_launchd, no_load, force_config, force_launchd, plain):
     cfg = Config.load()
     init_db(cfg.db_path_expanded)
 
+    bundle_launcher, launcher_state = _ensure_daemon_launcher(_penpal_executable_path())
+
     launchd_results: list[tuple[str, Path, str, bool]] = []
     if not no_launchd:
-        launchd_results = _install_launchd_jobs(load=not no_load, force=force_launchd)
+        launchd_results = _install_launchd_jobs(
+            load=not no_load,
+            force=force_launchd,
+            launcher_path=bundle_launcher,
+        )
 
     if not no_launchd and not no_load:
         _cleanup_legacy_huds()
+        if launcher_state in {"built", "rebuilt"}:
+            console.print(T(
+                "请在「系统设置 → 隐私与安全性」中为 Penpal 授予「输入监控」、「辅助功能」和「完全磁盘访问权限」；旧的 python3.13 项目可移除。",
+                "Grant Input Monitoring, Accessibility and Full Disk Access to \"Penpal\" in System Settings → Privacy & Security; the old python3.13 entry can be removed.",
+            ))
 
     _show_keyboard_notice_once()
     from penpal.sources.history_gate import historical_imports_allowed
@@ -573,6 +616,7 @@ def install_uninstall(remove_runtime, remove_data, force, plain):
             removed.append(str(path))
 
     if remove_runtime:
+        remove_launcher_stamp()
         for path in (
             get_pid_path(),
             get_hud_pid_path(),
@@ -582,6 +626,13 @@ def install_uninstall(remove_runtime, remove_data, force, plain):
         ):
             if _remove_legacy_path(path):
                 removed.append(str(path))
+
+    # Full uninstall always removes the app bundle and the stamp
+    bundle = installed_app()
+    if bundle is not None and bundle.exists():
+        shutil.rmtree(bundle)
+        remove_launcher_stamp()
+        removed.append(str(bundle))
 
     if remove_data:
         cfg = Config.load()

@@ -10,6 +10,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 from penpal.capabilities.base import HealthState
+from penpal.foundation.native_launcher import native_launcher
 from penpal.capabilities.capture_facts import CAPTURE_FACT_CAPS
 from penpal.capabilities.registry import CapabilityRegistry
 from penpal.capabilities.store import save_states as save_capability_states
@@ -53,7 +54,7 @@ def record_daemon_permissions() -> dict[str, Any]:
     snapshot = {
         "checked_at": datetime.now(timezone.utc).isoformat(),
         "pid": os.getpid(),
-        "host_executable": os.path.realpath(sys.executable),
+        "host_executable": native_launcher() or os.path.realpath(sys.executable),
         "permissions": results,
     }
     set_state(DAEMON_PERMISSIONS_KEY, json.dumps(snapshot, ensure_ascii=False))

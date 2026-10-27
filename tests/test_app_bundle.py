@@ -49,12 +49,12 @@ def _install(*args, **kwargs):
 def test_install_builds_a_launcher_bundle(dirs):
     apps, agents = dirs
     run = Recorder()
-    result = _install(EXE, version="0.2.0", apps_dir=apps, agents_dir=agents, run=run)
+    result = _install(EXE, apps_dir=apps, agents_dir=agents, run=run)
     bundle = apps / "Penpal.app"
     assert result.bundle == bundle and bundle.is_dir()
     info = plistlib.loads((bundle / "Contents" / "Info.plist").read_bytes())
     assert info["CFBundleIdentifier"] == "com.penpal.app" and info["LSUIElement"] is True
-    assert info["CFBundleExecutable"] == "Penpal" and info["CFBundleShortVersionString"] == "0.2.0"
+    assert info["CFBundleExecutable"] == "Penpal" and info["CFBundleShortVersionString"] == "1"
     assert not [k for k in info if k.startswith("NS") and k.endswith("UsageDescription")]  # needs no permission of its own
     script = bundle / "Contents" / "MacOS" / "Penpal"
     assert os.access(script, os.X_OK)
@@ -66,14 +66,14 @@ def test_install_builds_a_launcher_bundle(dirs):
 
 def test_executable_path_with_spaces_is_quoted(dirs):
     apps, _ = dirs
-    _install(Path("/Users/some one/bin/penpal"), version="1", apps_dir=apps, run=Recorder())
+    _install(Path("/Users/some one/bin/penpal"), apps_dir=apps, run=Recorder())
     assert (apps / "Penpal.app/Contents/MacOS/Penpal").read_text().splitlines()[1] == "exec '/Users/some one/bin/penpal' hud"
 
 
 def test_login_registers_the_hud_launch_agent(dirs):
     apps, agents = dirs
     run = Recorder()
-    result = _install(EXE, version="0.2.0", apps_dir=apps, agents_dir=agents, login=True, run=run)
+    result = _install(EXE, apps_dir=apps, agents_dir=agents, login=True, run=run)
     plist = plistlib.loads((agents / "com.penpal.hud.plist").read_bytes())
     assert plist["Label"] == "com.penpal.hud" and plist["RunAtLoad"] is True
     assert plist["ProgramArguments"] == [str(apps / "Penpal.app/Contents/MacOS/Penpal")]
@@ -84,15 +84,15 @@ def test_login_registers_the_hud_launch_agent(dirs):
 
 def test_reinstall_replaces_our_bundle_but_never_a_foreign_one(dirs):
     apps, _ = dirs
-    _install(EXE, version="0.1.0", apps_dir=apps, run=Recorder())
-    _install(EXE, version="0.2.0", apps_dir=apps, run=Recorder())
-    assert plistlib.loads((apps / "Penpal.app/Contents/Info.plist").read_bytes())["CFBundleShortVersionString"] == "0.2.0"
+    _install(EXE, apps_dir=apps, run=Recorder())
+    _install(EXE, apps_dir=apps, run=Recorder())
+    assert plistlib.loads((apps / "Penpal.app/Contents/Info.plist").read_bytes())["CFBundleShortVersionString"] == "1"
 
     foreign = apps / "Penpal.app"
     (foreign / "Contents").mkdir(parents=True, exist_ok=True)
     (foreign / "Contents" / "Info.plist").write_bytes(plistlib.dumps({"CFBundleIdentifier": "com.someone.else"}))
     with pytest.raises(AppBundleError, match="not a Penpal app"):
-        _install(EXE, version="0.2.0", apps_dir=apps, run=Recorder())
+        _install(EXE, apps_dir=apps, run=Recorder())
     assert (foreign / "Contents" / "Info.plist").exists()
     with pytest.raises(AppBundleError):
         uninstall_app(apps_dir=apps, run=Recorder())
@@ -102,19 +102,19 @@ def test_reinstall_replaces_our_bundle_but_never_a_foreign_one(dirs):
 def test_codesign_failure_leaves_nothing_behind(dirs):
     apps, _ = dirs
     with pytest.raises(AppBundleError, match="codesign failed"):
-        _install(EXE, version="0.2.0", apps_dir=apps, run=Recorder(fail=[("codesign", "codesign")]))
+        _install(EXE, apps_dir=apps, run=Recorder(fail=[("codesign", "codesign")]))
     assert not (apps / "Penpal.app").exists()
 
 
 def test_launchctl_failure_is_reported(dirs):
     apps, agents = dirs
     with pytest.raises(AppBundleError, match="launchctl"):
-        _install(EXE, version="0.2.0", apps_dir=apps, agents_dir=agents, login=True, run=Recorder(fail=[("launchctl", "bootstrap"), ("launchctl", "load")]))
+        _install(EXE, apps_dir=apps, agents_dir=agents, login=True, run=Recorder(fail=[("launchctl", "bootstrap"), ("launchctl", "load")]))
 
 
 def test_uninstall_removes_bundle_and_agent_only(dirs):
     apps, agents = dirs
-    _install(EXE, version="0.2.0", apps_dir=apps, agents_dir=agents, login=True, run=Recorder())
+    _install(EXE, apps_dir=apps, agents_dir=agents, login=True, run=Recorder())
     (apps / "Other.app").mkdir()
     run = Recorder()
     result = uninstall_app(apps_dir=apps, agents_dir=agents, run=run)
@@ -158,7 +158,7 @@ def test_default_locations_are_the_users_not_the_repos(monkeypatch, tmp_path):
 
 def test_missing_clang_uses_bilingual_python_fallback(dirs):
     apps, _agents = dirs
-    result = install_app(EXE, version="1", apps_dir=apps, run=Recorder(), clang_path="", codesign_available=False)
+    result = install_app(EXE, apps_dir=apps, run=Recorder(), clang_path="", codesign_available=False)
     launcher = apps / "Penpal.app/Contents/MacOS/Penpal"
     assert launcher.read_text(encoding="utf-8").startswith("#!/bin/sh\nexec ")
     fallback = next(action for action in result.actions if "Native launcher unavailable" in action)
@@ -171,7 +171,7 @@ def test_native_launcher_builds_a_macho_bundle_without_executing_it(dirs):
     if not clang:
         pytest.skip("clang is unavailable")
     apps, _agents = dirs
-    result = install_app(EXE, version="1", apps_dir=apps, clang_path=clang, codesign_available=False)
+    result = install_app(EXE, apps_dir=apps, clang_path=clang, codesign_available=False)
     fallback = next((action for action in result.actions if "Native launcher unavailable" in action), None)
     if fallback:
         pytest.skip(fallback)
@@ -185,6 +185,106 @@ def test_native_launcher_builds_a_macho_bundle_without_executing_it(dirs):
     assert info["CFBundleExecutable"] == "Penpal" and info["CFBundleIdentifier"] == "com.penpal.app"
     assert info["LSUIElement"] is True
     assert not [key for key in info if key.startswith("NS") and key.endswith("UsageDescription")]
+
+
+def test_idempotent_install_skips_rebuild_and_codesign(dirs, tmp_path):
+    apps, agents = dirs
+    stamp_file = tmp_path / "launcher.json"
+    run = Recorder()
+    res1 = _install(EXE, apps_dir=apps, agents_dir=agents, run=run, stamp_path=stamp_file)
+    assert res1.launcher_state in {"built", "fallback"}
+    bundle = apps / "Penpal.app"
+    mtime = (bundle / "Contents" / "Info.plist").stat().st_mtime_ns
+    codesign_calls1 = [cmd for cmd in run.cmds if cmd[0] == "codesign"]
+    assert len(codesign_calls1) == 1
+
+    # Second install with same inputs
+    run2 = Recorder()
+    res2 = _install(EXE, apps_dir=apps, agents_dir=agents, run=run2, stamp_path=stamp_file)
+    assert res2.launcher_state == "unchanged"
+    assert (bundle / "Contents" / "Info.plist").stat().st_mtime_ns == mtime
+    codesign_calls2 = [cmd for cmd in run2.cmds if cmd[0] == "codesign"]
+    assert len(codesign_calls2) == 0
+
+
+def test_changing_main_c_or_python_minor_rebuilds(dirs, tmp_path, monkeypatch):
+    apps, agents = dirs
+    stamp_file = tmp_path / "launcher.json"
+    run = Recorder()
+    _install(EXE, apps_dir=apps, agents_dir=agents, run=run, stamp_path=stamp_file)
+
+    # Change main.c
+    monkeypatch.setattr(app_bundle, "launcher_source_bytes", lambda: b"modified main.c bytes")
+    run_change = Recorder()
+    res_changed = _install(EXE, apps_dir=apps, agents_dir=agents, run=run_change, stamp_path=stamp_file)
+    assert res_changed.launcher_state in {"rebuilt", "fallback"}
+    assert any(cmd[0] == "codesign" for cmd in run_change.cmds)
+
+    # Change python minor version
+    monkeypatch.setattr(app_bundle.sys, "version_info", (3, 99))
+    run_change2 = Recorder()
+    res_changed2 = _install(EXE, apps_dir=apps, agents_dir=agents, run=run_change2, stamp_path=stamp_file)
+    assert res_changed2.launcher_state in {"rebuilt", "fallback"}
+    assert any(cmd[0] == "codesign" for cmd in run_change2.cmds)
+
+
+def test_app_uninstall_keeps_bundle_when_daemon_plist_uses_it(dirs, tmp_path):
+    apps, agents = dirs
+    res = _install(EXE, apps_dir=apps, agents_dir=agents, run=Recorder())
+    bundle = res.bundle
+    launcher = bundle / "Contents" / "MacOS" / "Penpal"
+
+    daemon_plist = tmp_path / "com.penpal.daemon.plist"
+    daemon_plist.write_bytes(plistlib.dumps({
+        "Label": "com.penpal.daemon",
+        "ProgramArguments": [str(launcher), "serve"],
+    }))
+
+    unres = uninstall_app(apps_dir=apps, agents_dir=agents, daemon_plist_path=daemon_plist, run=Recorder())
+    assert bundle.exists()
+    assert any("后台服务正在使用" in a or "Preserving" in a for a in unres.actions)
+
+
+def test_self_reload_exec_target(monkeypatch, tmp_path):
+    from penpal import app
+
+    calls = []
+    monkeypatch.setattr(app.os, "execv", lambda exe, args: calls.append((exe, args)))
+    monkeypatch.setattr("penpal.foundation.runtime_plist.resolve_penpal_executable", lambda: Path("/opt/penpal"))
+
+    launcher_bin = tmp_path / "Penpal"
+    launcher_bin.write_text("bin")
+
+    # Started from the launcher -> re-enter through it
+    monkeypatch.setattr("penpal.foundation.native_launcher._LAUNCHER", str(launcher_bin))
+    with pytest.raises(SystemExit):
+        app._reload_in_place()
+    assert calls[-1] == (str(launcher_bin), [str(launcher_bin), "serve"])
+
+    # Launcher gone -> stable entry
+    monkeypatch.setattr("penpal.foundation.native_launcher._LAUNCHER", str(tmp_path / "nonexistent"))
+    with pytest.raises(SystemExit):
+        app._reload_in_place()
+    assert calls[-1] == ("/opt/penpal", ["/opt/penpal", "serve"])
+
+
+def test_legacy_hud_finder_ignores_daemon_serve():
+    from penpal.runtime.control import find_legacy_hud_pids
+
+    def fake_runner(cmd, **kwargs):
+        if cmd[0] == "pgrep":
+            return subprocess.CompletedProcess(cmd, 0, stdout="100\n200\n", stderr="")
+        if cmd[0] == "ps":
+            pid = cmd[2]
+            if pid == "100":
+                return subprocess.CompletedProcess(cmd, 0, stdout="/Applications/Penpal.app/Contents/MacOS/Penpal serve\n", stderr="")
+            if pid == "200":
+                return subprocess.CompletedProcess(cmd, 0, stdout="/usr/local/bin/penpal hud\n", stderr="")
+        return subprocess.CompletedProcess(cmd, 1, stdout="", stderr="")
+
+    pids = find_legacy_hud_pids(runner=fake_runner, current_pid=1, active_pid_finder=lambda: None)
+    assert pids == [200]
+    assert 100 not in pids
 
 
 def test_stable_install_path_prefers_the_homebrew_opt_link(tmp_path):

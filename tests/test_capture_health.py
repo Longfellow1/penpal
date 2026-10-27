@@ -159,6 +159,14 @@ def _fake_specs(monkeypatch, status_by_key):
 G, D = PermissionStatus.GRANTED, PermissionStatus.DENIED
 
 
+def test_grant_target_maps_bundle_launcher_to_app(tmp_path):
+    bundle = tmp_path / "Penpal.app"
+    launcher = bundle / "Contents" / "MacOS" / "Penpal"
+    launcher.parent.mkdir(parents=True)
+    launcher.touch()
+    assert ch.grant_target(str(launcher)) == str(bundle)
+
+
 def test_report_lists_granted_and_missing_with_binaries(monkeypatch):
     _fake_specs(monkeypatch, {"accessibility": G, "input_monitoring": D, "screen_recording": D})
     findings = {f.key: f for f in ch.permission_report(_cfg(keyboard_chunk=True), disabled=frozenset(), daemon_denied=set())}

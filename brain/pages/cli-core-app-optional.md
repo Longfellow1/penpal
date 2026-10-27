@@ -5,7 +5,7 @@ category: decision
 status: active
 tags: [product, distribution, hud, app]
 created: "2026-10-14T13:52:22"
-updated: "2026-10-24T23:29:12"
+updated: "2026-10-27T12:22:09"
 ---
 
 <!-- compiled_truth -->
@@ -47,3 +47,9 @@ updated: "2026-10-24T23:29:12"
   summary: "Website exclusions can be managed with privacy block-site / unblock-site / blocked-sites; the HUD lists configured hosts read-only, and live capture picks changes up after daemon restart."
   source: owner feature request 2026-10-24
   affects: [cli-core-app-optional]
+
+- time: 2026-10-27T12:22:09
+  kind: decision
+  summary: "Daemon runs from Penpal.app's launcher so grants show as Penpal; bundle identity is stable across upgrades"
+  source: "owner decision 2026-10-27 (hand test: privacy list shows python3.13)"
+  affects: [penpal/app_bundle.py]
