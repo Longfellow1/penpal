@@ -77,7 +77,7 @@ def test_hud_stop_terminates_running_instance(monkeypatch, tmp_path):
             return 4242 if state["running"] else None
 
     monkeypatch.setattr("penpal.cli.app._hud_lock", FakeLock)
-    monkeypatch.setattr("penpal.cli.app._find_legacy_hud_pid", lambda: 4242)
+    monkeypatch.setattr("penpal.cli.app._running_hud_pids", lambda: [4242])
 
     def fake_kill(pid, sig):
         calls.append((pid, sig))
@@ -110,7 +110,7 @@ def test_hud_stop_falls_back_to_legacy_process_lookup(monkeypatch, tmp_path):
     calls = []
 
     monkeypatch.setattr("penpal.cli.app.get_hud_pid_path", lambda: pid_path)
-    monkeypatch.setattr("penpal.cli.app._find_legacy_hud_pid", lambda: 5151)
+    monkeypatch.setattr("penpal.cli.app._running_hud_pids", lambda: [5151])
 
     def fake_kill(pid, sig):
         calls.append((pid, sig))
@@ -208,3 +208,13 @@ def test_start_hud_refuses_when_legacy_hud_running(monkeypatch):
     assert "9999" in result.output
     assert "already running" in result.output.lower()
 
+
+
+def test_running_hud_pids_includes_the_current_hud_from_its_record(monkeypatch):
+    # The current HUD's command line is "<bundle>/Contents/MacOS/Penpal", which the legacy finder never matches.
+    from penpal.cli import app as app_cli
+
+    monkeypatch.setattr("penpal.cli.app.active_hud_pid", lambda: 4242)
+    monkeypatch.setattr("penpal.cli.app.find_legacy_hud_pids", lambda: [5151, 4242])
+
+    assert app_cli._running_hud_pids() == [4242, 5151]
