@@ -44,12 +44,12 @@ def _default_runner(command: list[str], **kwargs):
     return run_launchctl(command, **kwargs)
 
 
-def _default_process_runner(command: list[str], **kwargs) -> subprocess.CompletedProcess[str]:
+def _default_process_runner(command: list[str]) -> subprocess.CompletedProcess[str]:
     if os.environ.get("PENPAL_ISOLATED") == "1":
         raise OSError("Process inspection is disabled in isolated environments")
     if sys.platform != "darwin":
         raise OSError("Process inspection is only available on macOS")
-    return subprocess.run(command, check=False, capture_output=True, text=True, **kwargs)
+    return subprocess.run(command, check=False, capture_output=True, text=True, timeout=10)
 
 
 def _default_killer(pid: int, sig: int) -> None:
@@ -78,8 +78,8 @@ def find_legacy_hud_pids(
 ) -> list[int]:
     """Return all running HUD process PIDs that are not the current HUD or this process."""
     try:
-        result = runner(["pgrep", "-f", "hud"], check=False, capture_output=True, text=True)
-    except Exception:
+        result = runner(["pgrep", "-f", "hud"])
+    except (OSError, subprocess.SubprocessError):
         return []
 
     current = current_pid if current_pid is not None else os.getpid()
@@ -109,13 +109,8 @@ def find_legacy_hud_pids(
         if active_pid is not None and pid == active_pid:
             continue
         try:
-            command_result = runner(
-                ["ps", "-p", str(pid), "-o", "command="],
-                check=False,
-                capture_output=True,
-                text=True,
-            )
-        except Exception:
+            command_result = runner(["ps", "-p", str(pid), "-o", "command="])
+        except (OSError, subprocess.SubprocessError):
             continue
         command = (command_result.stdout or "").strip()
         if not command:

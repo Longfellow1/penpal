@@ -491,7 +491,7 @@ def test_install_legacy_unload_and_healthcheck_failures_use_simplified_chinese(m
     executable.chmod(0o755)
 
     monkeypatch.setenv("HOME", str(tmp_path))
-    monkeypatch.setenv("PENPAL_LANG", "zh")
+    monkeypatch.setattr("penpal.i18n._LANG_CACHE", "zh")  # the language is detected once per process
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
     monkeypatch.setattr("penpal.cli.install._penpal_executable_path", lambda: executable)
 
