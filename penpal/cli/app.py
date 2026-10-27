@@ -11,7 +11,7 @@ from penpal.utils.paths import get_hud_lock_path, get_hud_pid_path
 from penpal.utils.lock import SingleInstanceLock
 from penpal.hud import run_hud
 from penpal.i18n import T
-from penpal.runtime import evaluate
+from penpal.runtime import evaluate, find_legacy_hud_pids
 from . import main
 from ._shared import PLAIN_HELP, console, err_console, get_config, require_db
 from .install import _penpal_executable_path
@@ -21,38 +21,8 @@ def _hud_lock() -> SingleInstanceLock:
     return SingleInstanceLock(get_hud_lock_path(), get_hud_pid_path())
 
 def _find_legacy_hud_pid() -> int | None:
-    try:
-        result = subprocess.run(["pgrep", "-f", "penpal hud"], check=False, capture_output=True, text=True)
-    except Exception:
-        return None
-
-    current_pid = os.getpid()
-    for line in (result.stdout or "").splitlines():
-        try:
-            pid = int(line.strip())
-        except ValueError:
-            continue
-        if pid == current_pid:
-            continue
-        try:
-            command_result = subprocess.run(
-                ["ps", "-p", str(pid), "-o", "command="],
-                check=False,
-                capture_output=True,
-                text=True,
-            )
-        except Exception:
-            continue
-        command = (command_result.stdout or "").strip()
-        if not command:
-            continue
-        if "penpal hud" not in command:
-            continue
-        if any(marker in command for marker in [" hud status", " hud stop", " hud close", " hud start"]):
-            continue
-        if command.rstrip().endswith("penpal hud") or command.rstrip().endswith("penpal.cli hud"):
-            return pid
-    return None
+    pids = find_legacy_hud_pids()
+    return pids[0] if pids else None
 
 def _start_hud():
     cfg = get_config()

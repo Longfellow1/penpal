@@ -5,16 +5,24 @@ from penpal.runtime.evaluate import (
     HudStatus,
     RuntimeState,
     RuntimeStatus,
+    active_hud_pid,
     evaluate,
     launchd_label_loaded,
     state_message,
     state_text,
     watcher_recently_emitted,
 )
-from penpal.runtime.control import ControlResult, restart, start, stop
+from penpal.runtime.control import (
+    ControlResult,
+    find_legacy_hud_pids,
+    restart,
+    start,
+    stop,
+    stop_legacy_huds,
+)
 
 __all__ = [
-    "Issue", "HudStatus", "RuntimeState", "RuntimeStatus", "evaluate", "launchd_label_loaded",
+    "Issue", "HudStatus", "RuntimeState", "RuntimeStatus", "active_hud_pid", "evaluate", "launchd_label_loaded",
     "state_message", "state_text", "watcher_recently_emitted",
-    "ControlResult", "start", "stop", "restart",
+    "ControlResult", "find_legacy_hud_pids", "stop_legacy_huds", "start", "stop", "restart",
 ]

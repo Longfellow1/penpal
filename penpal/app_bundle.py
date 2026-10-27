@@ -9,6 +9,7 @@ Every location is a parameter (apps dir, LaunchAgents dir, subprocess runner) so
 from __future__ import annotations
 
 import json
+import os
 import plistlib
 import re
 import shlex
@@ -64,6 +65,20 @@ def _is_ours(bundle: Path) -> bool:
     except (OSError, plistlib.InvalidFileException, ValueError):
         return False
     return info.get("CFBundleIdentifier") == BUNDLE_ID
+
+
+def installed_app(apps_dir: Optional[Path] = None) -> Path | None:
+    """Our Penpal.app if it is installed, else None."""
+    bundle = (apps_dir or default_apps_dir()) / APP_NAME
+    return bundle if _is_ours(bundle) else None
+
+
+def open_app(bundle: Path) -> None:
+    if os.environ.get("PENPAL_ISOLATED") == "1":
+        raise OSError("opening apps is disabled in isolated environments")
+    result = subprocess.run(["open", str(bundle)], check=False, capture_output=True, text=True)
+    if result.returncode != 0:
+        raise OSError((result.stderr or "open failed").strip()[:200])
 
 
 def info_plist(version: str) -> dict:

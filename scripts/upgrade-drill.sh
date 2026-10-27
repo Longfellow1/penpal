@@ -513,6 +513,46 @@ check_candidate_version() {
   fi
 }
 
+LEGACY_HUD_PID=""
+
+# The previous release ships a HUD that predates the HUD runtime record and cannot self-reload; an upgrade must
+# close it. Whether an AppKit HUD can start on the runner is not ours to assert, so a HUD that never comes up skips
+# the follow-up check instead of failing the drill.
+start_previous_hud() {
+  local log="$DRILL_TMP/previous-hud.log" pid deadline
+  command penpal hud > "$log" 2>&1 &
+  pid=$!
+  deadline=$((SECONDS + 20))
+  while (( SECONDS < deadline )); do
+    if ! kill -0 "$pid" 2>/dev/null; then
+      printf 'previous release HUD exited early; legacy_hud_closed will be skipped\n'
+      tail -20 "$log" || true
+      return 0
+    fi
+    if (( SECONDS + 10 >= deadline )); then
+      LEGACY_HUD_PID="$pid"
+      printf 'previous release HUD running: pid=%s\n' "$pid"
+      return 0
+    fi
+    sleep 1
+  done
+}
+
+check_legacy_hud_closed() {
+  if [[ -z "$LEGACY_HUD_PID" ]]; then
+    printf 'SKIP legacy_hud_closed: the previous release HUD did not start on this runner\n'
+    return 0
+  fi
+  local state
+  # The HUD is this shell's child: once killed it stays a zombie until reaped, which kill -0 still sees.
+  state="$(ps -o stat= -p "$LEGACY_HUD_PID" 2>/dev/null | tr -d ' ' || true)"
+  if [[ -n "$state" && "$state" != Z* ]]; then
+    fail_check "previous release HUD (pid $LEGACY_HUD_PID) is still running after install.sh"
+    ps -o pid,args -p "$LEGACY_HUD_PID" || true
+    return 1
+  fi
+}
+
 check_legacy_removed() {
   if launchctl print "$LEGACY_TARGET" >/dev/null 2>&1; then
     fail_check "legacy launchd job remains loaded after install.sh"
@@ -806,6 +846,7 @@ if [[ "$MODE" == "upgrade" ]]; then
   check previous_release_running install_previous_release
   # Planted after the previous release, whose own init removes legacy jobs: this tests the candidate.
   check legacy_job_planted plant_legacy_job
+  check previous_release_hud_started start_previous_hud
   check candidate_upgrade_install_sh upgrade_to_candidate_one
 else
   check candidate_formula_prepared prepare_fresh_candidate
@@ -815,6 +856,7 @@ fi
 
 if [[ "$MODE" == "upgrade" ]]; then
   check legacy_job_removed check_legacy_removed
+  check legacy_hud_closed check_legacy_hud_closed
 fi
 check stable_plist_entries check_stable_plist_entries
 check candidate_daemon_running_and_identity check_candidate_running

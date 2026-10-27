@@ -11,7 +11,15 @@ from penpal.config import Config, write_default_config
 from penpal.store.db import init_db
 from penpal.utils.paths import get_data_dir, get_pid_path, get_hud_pid_path, get_log_path, get_config_path, get_launchd_plist_path, get_legacy_venv_dir
 from penpal.runtime import evaluate, launchd_label_loaded
-from penpal.runtime.control import LEGACY_LAUNCHD_LABELS, load_job, restart as control_restart, unload_job, unload_legacy_jobs
+from penpal.runtime.control import (
+    LEGACY_LAUNCHD_LABELS,
+    load_job,
+    restart as control_restart,
+    stop_legacy_huds,
+    unload_job,
+    unload_legacy_jobs,
+)
+from penpal.app_bundle import installed_app, open_app
 from penpal.foundation.runtime_plist import launchd_jobs, resolve_penpal_executable
 from penpal.capture.keyboard_notice import mark_notice_shown, notice_pending, notice_text
 from penpal.i18n import T
@@ -108,7 +116,7 @@ def _install_launchd_jobs(*, load: bool, force: bool) -> list[tuple[str, Path, s
             raise click.ClickException(T(result.error_zh, result.error_en))
     for label, path, status in pending:
         if load and label == "com.penpal.healthcheck" and not _launchd_load_plist(path, replace=True):
-            raise click.ClickException(T(f"無法載入健康檢查工作：{path}", f"Could not load healthcheck job: {path}"))
+            raise click.ClickException(T(f"无法加载健康检查任务：{path}", f"Could not load healthcheck job: {path}"))
         results.append((label, path, status, launchd_label_loaded(label) if load else False))
     return results
 
@@ -123,7 +131,7 @@ def install_group(ctx):
         failures = unload_legacy_jobs()
         if failures:
             raise click.ClickException(T(
-                f"無法卸載舊版 launchd 服務：{'; '.join(failures)}",
+                f"无法卸载旧版 launchd 服务：{'; '.join(failures)}",
                 f"Could not unload legacy launchd jobs: {'; '.join(failures)}",
             ))
     try:
@@ -181,6 +189,35 @@ def _stale_moved_dev_venv_script() -> tuple[Path, str] | None:
             return script, first_line[2:].strip()
     return None
 
+def _cleanup_legacy_huds() -> list[int]:
+    """Close a HUD that predates the HUD runtime record: it cannot self-reload and `hud status` cannot see it."""
+    try:
+        stopped = stop_legacy_huds()
+    except OSError as exc:
+        console.print(T(f"警告：无法停止旧版 HUD：{exc}", f"Warning: could not stop legacy HUD: {exc}"))
+        return []
+
+    if not stopped:
+        return []
+
+    pids_str = ", ".join(str(p) for p in stopped)
+    console.print(T(f"已停止旧版菜单栏 HUD（PID {pids_str}）。", f"Stopped legacy menu bar HUD (PID {pids_str})."))
+
+    bundle = installed_app()
+    if bundle is not None:
+        try:
+            open_app(bundle)
+        except OSError as exc:
+            console.print(T(f"警告：无法重新打开 Penpal.app：{exc}", f"Warning: could not reopen Penpal.app: {exc}"))
+    else:
+        console.print(T(
+            "旧版菜单栏 HUD 已关闭，运行 penpal app install 可安装新版应用。",
+            "Old menu bar HUD was closed; run penpal app install to install the new one.",
+        ))
+
+    return stopped
+
+
 @install_group.command("launchd", help="Write and load Penpal launchd jobs.")
 @click.option("--no-load", is_flag=True, default=False, help="Write plists without loading launchd")
 @click.option("--force", is_flag=True, default=False, help="Also replace a file at the plist path that Penpal did not write")
@@ -213,6 +250,9 @@ def install_init(no_launchd, no_load, force_config, force_launchd, plain):
     launchd_results: list[tuple[str, Path, str, bool]] = []
     if not no_launchd:
         launchd_results = _install_launchd_jobs(load=not no_load, force=force_launchd)
+
+    if not no_launchd and not no_load:
+        _cleanup_legacy_huds()
 
     _show_keyboard_notice_once()
     from penpal.sources.history_gate import historical_imports_allowed

@@ -50,3 +50,27 @@ def project_from_metadata_json(metadata_json: str | None) -> str | None:
     except (TypeError, ValueError):
         return None
     return project_from_metadata(metadata)
+
+
+def fold_project_rows(
+    counts: Mapping[tuple[str, str, str], int],
+) -> list[tuple[tuple[str, str, str], int]]:
+    """Fold encoded Claude Code project keys into the folder name they stand for, for listing only.
+
+    Rows recorded before the folder name was known carry the encoded projects dir ("-Users-alice-Go-life-admin");
+    a rule on "life-admin" already covers them (project_matches), so the listing shows them as one project. The
+    longest matching name of the same source wins; an encoded key that matches no name stays as it is.
+    """
+    names: dict[str, set[str]] = {}
+    for source, project, _bucket in counts:
+        if not project.startswith("-"):
+            names.setdefault(source, set()).add(project)
+    folded: dict[tuple[str, str, str], int] = {}
+    for (source, project, bucket), count in counts.items():
+        if project.startswith("-"):
+            matches = [name for name in names.get(source, ()) if project_matches(name, project)]
+            if matches:
+                project = max(matches, key=lambda name: (len(name), name))
+        key = (source, project, bucket)
+        folded[key] = folded.get(key, 0) + count
+    return sorted(folded.items(), key=lambda item: (item[0][0], item[0][1].casefold(), item[0][2]))

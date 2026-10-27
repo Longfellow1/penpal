@@ -276,3 +276,43 @@ def test_probe_label_bounds_call_and_handles_timeout(monkeypatch):
     runtime_launchd.run_launchctl(["launchctl", "print", "gui/501/com.penpal.daemon"])
     assert captured.get("timeout") == control.LAUNCHCTL_TIMEOUT_SEC
     assert inspect.signature(control.probe_label).parameters["runner"].default is runtime_launchd.run_launchctl
+
+
+def test_stop_legacy_huds_terminates_then_kills_a_hud_that_ignores_sigterm():
+    import signal
+
+    signals: list[tuple[int, int]] = []
+    clock = iter(range(100))
+
+    stopped = control.stop_legacy_huds(
+        runner=lambda command, **kwargs: subprocess.CompletedProcess(
+            command, 0, stdout="41\n" if command[0] == "pgrep" else "/usr/local/bin/penpal hud\n", stderr=""
+        ),
+        killer=lambda pid, sig: signals.append((pid, sig)),
+        is_running=lambda pid: True,
+        active_pid_finder=lambda: None,
+        current_pid=1,
+        sleep=lambda _seconds: None,
+        monotonic=lambda: float(next(clock)),
+    )
+
+    assert stopped == [41]
+    assert signals == [(41, signal.SIGTERM), (41, signal.SIGKILL)]
+
+
+def test_find_legacy_hud_pids_through_the_default_process_runner(monkeypatch):
+    # The real runner owns the subprocess options; a caller passing them again once raised TypeError, which a broad
+    # except turned into "no legacy HUD" (caught by the upgrade drill, not by fake runners).
+    calls: list[list[str]] = []
+
+    def fake_run(command, **kwargs):
+        calls.append(command)
+        output = "41\n" if command[0] == "pgrep" else "/usr/local/bin/penpal hud\n"
+        return subprocess.CompletedProcess(command, 0, stdout=output, stderr="")
+
+    monkeypatch.delenv("PENPAL_ISOLATED", raising=False)
+    monkeypatch.setattr(control.sys, "platform", "darwin")
+    monkeypatch.setattr(control.subprocess, "run", fake_run)
+
+    assert control.find_legacy_hud_pids(active_pid_finder=lambda: None, current_pid=1) == [41]
+    assert calls == [["pgrep", "-f", "hud"], ["ps", "-p", "41", "-o", "command="]]

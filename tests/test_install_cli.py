@@ -399,3 +399,115 @@ def test_install_init_with_load_reloads_healthcheck_with_replace_even_when_uncha
     path, kwargs = load_calls[0]
     assert path.name == "com.penpal.healthcheck.plist"
     assert kwargs.get("replace") is True
+
+
+def _install_init_with_loaded_jobs(monkeypatch, tmp_path):
+    from penpal.runtime.control import ControlResult
+
+    executable = tmp_path / "bin" / "penpal"
+    executable.parent.mkdir(parents=True)
+    executable.write_text("#!/bin/sh\n", encoding="utf-8")
+    executable.chmod(0o755)
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    monkeypatch.setattr("penpal.cli.install._penpal_executable_path", lambda: executable)
+    monkeypatch.setattr("penpal.cli.install.unload_legacy_jobs", lambda: [])
+    monkeypatch.setattr("penpal.cli.install.control_restart", lambda *args, **kwargs: ControlResult(True, "restart"))
+    monkeypatch.setattr("penpal.cli.install.launchd_label_loaded", lambda _label: True)
+    monkeypatch.setattr("penpal.cli.install._launchd_load_plist", lambda path, **kwargs: True)
+
+
+def test_install_init_stops_legacy_hud_and_reopens_app_when_present(monkeypatch, tmp_path):
+    _install_init_with_loaded_jobs(monkeypatch, tmp_path)
+    bundle = tmp_path / "Applications" / "Penpal.app"
+    opened: list[Path] = []
+    monkeypatch.setattr("penpal.cli.install.stop_legacy_huds", lambda: [7777])
+    monkeypatch.setattr("penpal.cli.install.installed_app", lambda: bundle)
+    monkeypatch.setattr("penpal.cli.install.open_app", opened.append)
+
+    result = CliRunner().invoke(main, ["install", "init"])
+
+    assert result.exit_code == 0, result.output
+    assert opened == [bundle]
+    assert "7777" in result.output
+    assert "penpal app install" not in result.output
+
+
+def test_install_init_stops_legacy_hud_and_prints_notice_when_app_absent(monkeypatch, tmp_path):
+    _install_init_with_loaded_jobs(monkeypatch, tmp_path)
+    opened: list[Path] = []
+    monkeypatch.setattr("penpal.cli.install.stop_legacy_huds", lambda: [8888])
+    monkeypatch.setattr("penpal.cli.install.installed_app", lambda: None)
+    monkeypatch.setattr("penpal.cli.install.open_app", opened.append)
+
+    result = CliRunner().invoke(main, ["install", "init"])
+
+    assert result.exit_code == 0, result.output
+    assert opened == []
+    assert "8888" in result.output
+    assert "penpal app install" in result.output
+
+
+def test_install_init_failure_to_stop_warns_and_continues(monkeypatch, tmp_path):
+    _install_init_with_loaded_jobs(monkeypatch, tmp_path)
+
+    def failing_stop():
+        raise PermissionError("fake permission denied")
+
+    monkeypatch.setattr("penpal.cli.install.stop_legacy_huds", failing_stop)
+
+    result = CliRunner().invoke(main, ["install", "init"])
+
+    assert result.exit_code == 0, result.output
+    assert "fake permission denied" in result.output
+
+
+def test_install_init_no_load_does_not_cleanup_legacy_hud(monkeypatch, tmp_path):
+    executable = tmp_path / "bin" / "penpal"
+    executable.parent.mkdir(parents=True)
+    executable.write_text("#!/bin/sh\n", encoding="utf-8")
+    executable.chmod(0o755)
+
+    called = []
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    monkeypatch.setattr("penpal.cli.install._penpal_executable_path", lambda: executable)
+    monkeypatch.setattr("penpal.cli.install.unload_legacy_jobs", lambda: [])
+    monkeypatch.setattr("penpal.cli.install._cleanup_legacy_huds", lambda: called.append("cleanup"))
+
+    runner = CliRunner()
+    result = runner.invoke(main, ["install", "init", "--no-load"])
+
+    assert result.exit_code == 0
+    assert called == []
+
+
+def test_install_legacy_unload_and_healthcheck_failures_use_simplified_chinese(monkeypatch, tmp_path):
+    from penpal.runtime.control import ControlResult
+
+    executable = tmp_path / "bin" / "penpal"
+    executable.parent.mkdir(parents=True)
+    executable.write_text("#!/bin/sh\n", encoding="utf-8")
+    executable.chmod(0o755)
+
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setattr("penpal.i18n._LANG_CACHE", "zh")  # the language is detected once per process
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    monkeypatch.setattr("penpal.cli.install._penpal_executable_path", lambda: executable)
+
+    # 1. Test unload_legacy_jobs failure message in Simplified Chinese
+    monkeypatch.setattr("penpal.cli.install.unload_legacy_jobs", lambda: ["mock failure"])
+    runner = CliRunner()
+    result = runner.invoke(main, ["install", "init"])
+    assert result.exit_code != 0
+    assert "无法卸载旧版 launchd 服务：" in result.output
+    assert "無法" not in result.output
+
+    # 2. Test healthcheck load failure message in Simplified Chinese
+    monkeypatch.setattr("penpal.cli.install.unload_legacy_jobs", lambda: [])
+    monkeypatch.setattr("penpal.cli.install.control_restart", lambda *args, **kwargs: ControlResult(True, "restart"))
+    monkeypatch.setattr("penpal.cli.install._launchd_load_plist", lambda path, **kwargs: False)
+    result = runner.invoke(main, ["install", "init"])
+    assert result.exit_code != 0
+    assert "无法加载健康检查任务：" in result.output
+    assert "無法" not in result.output

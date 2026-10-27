@@ -5,7 +5,7 @@ category: decision
 status: active
 tags: [runtime, health, hud, doctor, launchd, mcp]
 created: "2026-10-24T23:46:07"
-updated: "2026-10-26T19:40:18"
+updated: "2026-10-27T11:07:47"
 ---
 
 <!-- compiled_truth -->
@@ -112,3 +112,9 @@ Decision (D36, 2026-10-24, owner accepted all recommendations after a deep-fix a
   summary: "Installed code identity follows the stable entry, not the loaded keg"
   source: "PR: identity follows stable entry (upgrade drill run 5)"
   affects: [penpal/foundation/runtime_identity.py]
+
+- time: 2026-10-27T11:07:47
+  kind: decision
+  summary: install init closes HUDs that predate the HUD runtime record and reopens Penpal.app
+  source: "owner hand test 2026-10-27 (no menu bar icon)"
+  affects: [penpal/cli/install.py]
