@@ -11,7 +11,7 @@ from penpal.utils.paths import get_hud_lock_path, get_hud_pid_path
 from penpal.utils.lock import SingleInstanceLock
 from penpal.hud import run_hud
 from penpal.i18n import T
-from penpal.runtime import evaluate, find_legacy_hud_pids
+from penpal.runtime import active_hud_pid, evaluate, find_legacy_hud_pids
 from . import main
 from ._shared import PLAIN_HELP, console, err_console, get_config, require_db
 from .install import _penpal_executable_path
@@ -42,20 +42,34 @@ def _start_hud():
     finally:
         lock.release()
 
+def _running_hud_pids() -> list[int]:
+    """The current HUD (its runtime record, start time checked) and any HUD that predates the record.
+
+    The current HUD runs from Penpal.app's launcher, whose command line is not "penpal hud", so only its
+    record identifies it."""
+    current = active_hud_pid()
+    return ([current] if current else []) + [pid for pid in find_legacy_hud_pids() if pid != current]
+
+
 def _stop_hud():
     lock = _hud_lock()
-    pid = _find_legacy_hud_pid()
+    pids = _running_hud_pids()
 
-    if not lock.is_running() and not pid:
+    if not lock.is_running() and not pids:
         console.print("[yellow]HUD is not running.[/yellow]")
         return
-    if not pid:
+    if not pids:
         err_console.print("[yellow]HUD is running, but its process could not be identified safely.[/yellow]")
         raise SystemExit(1)
 
-    try:
-        os.kill(pid, signal.SIGTERM)
-    except ProcessLookupError:
+    signalled = False
+    for pid in pids:
+        try:
+            os.kill(pid, signal.SIGTERM)
+            signalled = True
+        except ProcessLookupError:
+            continue
+    if not signalled:
         console.print("[yellow]HUD is not running.[/yellow]")
         return
 
