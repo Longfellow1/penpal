@@ -219,7 +219,7 @@ job_is_running() {
 
 wait_for_healthcheck_success() {
   # want_exit "0" for a healthy daemon; "any" when the daemon is stopped on purpose (healthcheck exits 1 then).
-  local baseline="$1" timeout="$2" want_exit="${3:-0}" deadline runs exit_code
+  local baseline="$1" timeout="$2" want_exit="${3:-0}" quiet="${4:-}" deadline runs exit_code
   deadline=$((SECONDS + timeout))
   while true; do
     job_print "$HEALTH_TARGET"
@@ -229,6 +229,10 @@ wait_for_healthcheck_success() {
       return 0
     fi
     if (( SECONDS >= deadline )); then
+      if [[ "$quiet" == quiet ]]; then
+        printf 'healthcheck not yet successful (baseline=%s current=%s last_exit=%s); retrying\n' "$baseline" "$runs" "$exit_code"
+        return 1
+      fi
       fail_check "healthcheck has not completed successfully (baseline=$baseline current=$runs last_exit=$exit_code)"
       return 1
     fi
@@ -686,7 +690,36 @@ check_healthcheck_after_upgrade() {
       return 1
     fi
   fi
-  if ! wait_for_healthcheck_success "$HEALTH_RUNS_BEFORE_UPGRADE" 20; then return 1; fi
+  if wait_for_healthcheck_success "$HEALTH_RUNS_BEFORE_UPGRADE" 20 0 quiet; then return 0; fi
+  # The RunAtLoad run can land while install is still restarting the daemon; one more run must then pass.
+  print_healthcheck_alerts
+  runs="$(job_runs)"
+  if ! launchctl kickstart "$HEALTH_TARGET"; then
+    fail_check "healthcheck kickstart failed"
+    return 1
+  fi
+  if ! wait_for_healthcheck_success "$runs" 30; then
+    print_healthcheck_alerts
+    return 1
+  fi
+}
+
+print_healthcheck_alerts() {
+  local python
+  python="$(penpal_python)" || return 0
+  printf '=== healthcheck alerts (fresh run) ===\n'
+  penpal healthcheck 2>&1 | "$python" -I -c '
+import json, sys
+text = sys.stdin.read()
+try:
+    report = json.loads(text)
+except ValueError:
+    print(text[-2000:])
+    raise SystemExit(0)
+print("overall:", report.get("overall"))
+for alert in report.get("alerts", []):
+    print(json.dumps(alert, ensure_ascii=False))
+' || true
 }
 
 check_read_only_commands() {
