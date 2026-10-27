@@ -62,6 +62,9 @@ CHECK_REASON=""
 BREW_PREFIX=""
 FORMULA_PATH=""
 EXPECTED_BIN=""
+APP_BUNDLE="$HOME/Applications/Penpal.app"
+APP_LAUNCHER="$APP_BUNDLE/Contents/MacOS/Penpal"
+APP_CDHASH=""
 GUI_DOMAIN="gui/$(id -u)"
 DAEMON_TARGET="$GUI_DOMAIN/com.penpal.daemon"
 HEALTH_TARGET="$GUI_DOMAIN/com.penpal.healthcheck"
@@ -216,7 +219,7 @@ job_is_running() {
 
 wait_for_healthcheck_success() {
   # want_exit "0" for a healthy daemon; "any" when the daemon is stopped on purpose (healthcheck exits 1 then).
-  local baseline="$1" timeout="$2" want_exit="${3:-0}" deadline runs exit_code
+  local baseline="$1" timeout="$2" want_exit="${3:-0}" quiet="${4:-}" deadline runs exit_code
   deadline=$((SECONDS + timeout))
   while true; do
     job_print "$HEALTH_TARGET"
@@ -226,6 +229,10 @@ wait_for_healthcheck_success() {
       return 0
     fi
     if (( SECONDS >= deadline )); then
+      if [[ "$quiet" == quiet ]]; then
+        printf 'healthcheck not yet successful (baseline=%s current=%s last_exit=%s); retrying\n' "$baseline" "$runs" "$exit_code"
+        return 1
+      fi
       fail_check "healthcheck has not completed successfully (baseline=$baseline current=$runs last_exit=$exit_code)"
       return 1
     fi
@@ -570,13 +577,17 @@ check_stable_plist_entries() {
     fail_check "could not resolve installed Python for plist validation"
     return 1
   fi
+  local label plist expected
   for label in com.penpal.daemon com.penpal.healthcheck; do
     plist="$HOME/Library/LaunchAgents/$label.plist"
     if [[ ! -f "$plist" ]]; then
       fail_check "required launchd plist is missing: $plist"
       return 1
     fi
-    if ! "$python" -I - "$plist" "$EXPECTED_BIN" <<'PY'
+    # The daemon runs from Penpal.app's launcher so macOS lists its grants under Penpal; the healthcheck needs none.
+    expected="$EXPECTED_BIN"
+    [[ "$label" == com.penpal.daemon ]] && expected="$APP_LAUNCHER"
+    if ! "$python" -I - "$plist" "$expected" <<'PY'
 import plistlib
 import sys
 with open(sys.argv[1], "rb") as handle:
@@ -584,10 +595,55 @@ with open(sys.argv[1], "rb") as handle:
 assert value.get("ProgramArguments", [None])[0] == sys.argv[2]
 PY
     then
-      fail_check "$label ProgramArguments[0] does not equal $EXPECTED_BIN"
+      fail_check "$label ProgramArguments[0] does not equal $expected"
       return 1
     fi
   done
+}
+
+app_cdhash() {
+  codesign -dr - "$APP_BUNDLE" 2>&1 | sed -n 's/.*cdhash H"\([0-9a-f]*\)".*/\1/p'
+}
+
+check_daemon_runs_from_app() {
+  local pid executable
+  read_status
+  pid="$(status_field pid)"
+  executable="$(ps -o comm= -p "$pid" 2>/dev/null || true)"
+  if [[ "$executable" != "$APP_LAUNCHER" ]]; then
+    fail_check "daemon pid ${pid:-none} runs '$executable', expected the Penpal.app launcher $APP_LAUNCHER"
+    return 1
+  fi
+  APP_CDHASH="$(app_cdhash)"
+  if [[ -z "$APP_CDHASH" ]]; then
+    fail_check "could not read the cdhash of $APP_BUNDLE"
+    codesign -dr - "$APP_BUNDLE" 2>&1 || true
+    return 1
+  fi
+  printf 'Penpal.app cdhash=%s\n' "$APP_CDHASH"
+}
+
+# An upgrading user runs install init again. The grants are keyed to the ad-hoc signature, so the bundle must come
+# out byte-identical: same cdhash, launcher not rewritten, and the daemon back on the launcher.
+check_reinit_keeps_app_identity() {
+  local before_mtime after_mtime cdhash
+  before_mtime="$(stat -f %m "$APP_LAUNCHER")"
+  if ! penpal install init; then
+    fail_check "penpal install init failed after the upgrade"
+    return 1
+  fi
+  after_mtime="$(stat -f %m "$APP_LAUNCHER")"
+  cdhash="$(app_cdhash)"
+  if [[ "$cdhash" != "$APP_CDHASH" ]]; then
+    fail_check "Penpal.app cdhash changed across the upgrade: $APP_CDHASH -> ${cdhash:-none} (grants would be lost)"
+    return 1
+  fi
+  if [[ "$after_mtime" != "$before_mtime" ]]; then
+    fail_check "install init rewrote the launcher although nothing it is built from changed"
+    return 1
+  fi
+  if ! wait_for_state running 90; then return 1; fi
+  check_daemon_runs_from_app
 }
 
 check_candidate_running() {
@@ -634,7 +690,36 @@ check_healthcheck_after_upgrade() {
       return 1
     fi
   fi
-  if ! wait_for_healthcheck_success "$HEALTH_RUNS_BEFORE_UPGRADE" 20; then return 1; fi
+  if wait_for_healthcheck_success "$HEALTH_RUNS_BEFORE_UPGRADE" 20 0 quiet; then return 0; fi
+  # The RunAtLoad run can land while install is still restarting the daemon; one more run must then pass.
+  print_healthcheck_alerts
+  runs="$(job_runs)"
+  if ! launchctl kickstart "$HEALTH_TARGET"; then
+    fail_check "healthcheck kickstart failed"
+    return 1
+  fi
+  if ! wait_for_healthcheck_success "$runs" 30; then
+    print_healthcheck_alerts
+    return 1
+  fi
+}
+
+print_healthcheck_alerts() {
+  local python
+  python="$(penpal_python)" || return 0
+  printf '=== healthcheck alerts (fresh run) ===\n'
+  penpal healthcheck 2>&1 | "$python" -I -c '
+import json, sys
+text = sys.stdin.read()
+try:
+    report = json.loads(text)
+except ValueError:
+    print(text[-2000:])
+    raise SystemExit(0)
+print("overall:", report.get("overall"))
+for alert in report.get("alerts", []):
+    print(json.dumps(alert, ensure_ascii=False))
+' || true
 }
 
 check_read_only_commands() {
@@ -860,6 +945,7 @@ if [[ "$MODE" == "upgrade" ]]; then
 fi
 check stable_plist_entries check_stable_plist_entries
 check candidate_daemon_running_and_identity check_candidate_running
+check daemon_runs_from_penpal_app check_daemon_runs_from_app
 check healthcheck_ran_successfully_after_install check_healthcheck_after_upgrade
 check database_opens_and_reports_size check_database_state
 check readonly_commands_do_not_traceback check_read_only_commands
@@ -867,6 +953,7 @@ check restart_reaches_running_with_new_pid check_restart_cycle
 check stop_is_not_revived_by_watchdog_and_start_works check_stop_watchdog_start
 if [[ "$MODE" == "upgrade" ]]; then
   check self_reload_with_old_keg_kept check_self_reload_keeping_old_keg
+  check reinit_after_upgrade_keeps_app_identity check_reinit_keeps_app_identity
   check self_reload_after_brew_cleanup check_self_reload_after_cleanup
 fi
 

@@ -38,7 +38,7 @@ AI 自己能读本机文件，只给已有文件建个索引，没必要单独�
 | 安装 | 见下方快速开始 | 先装好 CLI，再 `penpal app install`（加 `--login` 开机自启） |
 | 核心能力 | 装好就能在 AI 里用全部核心能力 | 不多不少，同一套核心换一种用法 |
 
-App 能做的事，CLI 都能做。`penpal app install` 会编译一个原生启动器，在 Penpal 安装环境的进程里运行 HUD；系统菜单栏应显示 **Penpal**。如果本机缺少 clang 或 libpython，会退回脚本启动器并提示菜单栏可能显示 **Python**。App 自己不需要任何系统权限，采集所需的权限仍由后台服务持有。首次安装后从 Finder 打开 `~/Applications/Penpal.app`，并在系统设置的「菜单栏」里确认 Penpal 可见；CLI 仍可通过 doctor/status 检查 HUD 状态。
+App 能做的事，CLI 都能做。Penpal 会在 `~/Applications/Penpal.app` 编译一个原生启动器，在独立应用身份下运行后台服务与 HUD；系统权限与菜单栏均显示为 **Penpal**。如果本机缺少 clang 或 libpython，会退回脚本启动器并提示权限列表与菜单栏可能显示 **Python**。首次安装后从 Finder 打开 `~/Applications/Penpal.app`，并在系统设置的「菜单栏」里确认 Penpal 可见；CLI 仍可通过 doctor/status 检查 HUD 状态。
 
 ## 快速开始
 

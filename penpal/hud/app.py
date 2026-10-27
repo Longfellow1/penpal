@@ -33,6 +33,7 @@ from penpal.hud.controller import HudController, HudModelWorker
 from penpal.hud.render import HUD_HEIGHT, HUD_WIDTH, build_html
 from penpal.hud.reload import HUDReloader, hud_exec_command
 from penpal.foundation.hud_record import HudRecordStore
+from penpal.foundation.native_launcher import native_launcher
 from penpal.foundation.runtime_launchd import process_start_time
 from penpal.runtime.evaluate import current_identity, loaded_identity
 from penpal.store.repository import get_state, set_state
@@ -219,8 +220,7 @@ class PenpalHUDApp(NSObject):
                     self._record_store.initialize(started, identity)
                 except OSError as exc:
                     logging.getLogger(__name__).warning("HUD runtime record write failed: %s", type(exc).__name__)
-            launcher = os.environ.get("PENPAL_HUD_NATIVE_LAUNCHER")
-            launcher = os.path.realpath(launcher) if launcher else None
+            launcher = native_launcher()
             executable, arguments = hud_exec_command(launcher, sys.argv)
             self._hud_reloader = HUDReloader(
                 identity, lambda: current_identity(self.cfg), executable=executable, argv=arguments,

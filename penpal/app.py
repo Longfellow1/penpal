@@ -49,12 +49,14 @@ def _reload_in_place() -> None:
     that removed the old versioned files. If exec fails, exit 75 and let launchd or the watchdog
     relaunch.
     """
+    from penpal.foundation.native_launcher import native_launcher
     from penpal.foundation.runtime_plist import resolve_penpal_executable
 
     for handler in logging.getLogger().handlers:
         handler.flush()
     try:
-        executable = str(resolve_penpal_executable())
+        # Re-enter through Penpal.app's launcher when started from it: exec'ing Python would drop the Penpal identity.
+        executable = native_launcher() or str(resolve_penpal_executable())
         os.execv(executable, [executable, "serve"])
     except OSError as exc:
         logger.error("in-place reload failed (%s); exiting for launchd to relaunch", type(exc).__name__)

@@ -448,7 +448,92 @@ def test_install_init_stops_legacy_hud_and_prints_notice_when_app_absent(monkeyp
     assert "penpal app install" in result.output
 
 
-def test_install_init_failure_to_stop_warns_and_continues(monkeypatch, tmp_path):
+def test_install_init_native_launcher_sets_daemon_program_arguments_and_prints_notice(monkeypatch, tmp_path):
+    executable = tmp_path / "bin" / "penpal"
+    executable.parent.mkdir(parents=True)
+    executable.write_text("#!/bin/sh\n", encoding="utf-8")
+    executable.chmod(0o755)
+
+    apps_dir = tmp_path / "Applications"
+    launcher = apps_dir / "Penpal.app" / "Contents" / "MacOS" / "Penpal"
+    launcher.parent.mkdir(parents=True)
+    launcher.touch()
+
+    from penpal.app_bundle import AppResult
+    app_res = AppResult(bundle=apps_dir / "Penpal.app", launcher_state="built", native=True)
+
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    monkeypatch.setattr("penpal.cli.install._penpal_executable_path", lambda: executable)
+    monkeypatch.setattr("penpal.cli.install.unload_legacy_jobs", lambda: [])
+    monkeypatch.setattr("penpal.cli.install._isolated", lambda: False)
+    monkeypatch.setattr("penpal.cli.install.ensure_app_bundle", lambda exe: (launcher, "built", app_res))
+    from penpal.runtime.control import ControlResult
+    monkeypatch.setattr("penpal.cli.install.control_restart", lambda *args, **kwargs: ControlResult(True, "restart"))
+    monkeypatch.setattr("penpal.cli.install._launchd_load_plist", lambda path, **kwargs: True)
+
+    result = CliRunner().invoke(main, ["install", "init"])
+    assert result.exit_code == 0, result.output
+
+    daemon_plist = tmp_path / "Library" / "LaunchAgents" / "com.penpal.daemon.plist"
+    payload = plistlib.loads(daemon_plist.read_bytes())
+    assert payload["ProgramArguments"] == [str(launcher), "serve"]
+
+    health_plist = tmp_path / "Library" / "LaunchAgents" / "com.penpal.healthcheck.plist"
+    h_payload = plistlib.loads(health_plist.read_bytes())
+    assert h_payload["ProgramArguments"] == [str(executable), "healthcheck"]
+
+    assert "输入监控" in result.output or "Input Monitoring" in result.output
+    assert "完全磁盘访问权限" in result.output or "Full Disk Access" in result.output
+    assert "python3.13" in result.output
+
+
+def test_install_init_fallback_keeps_stable_entry_and_warns(monkeypatch, tmp_path):
+    executable = tmp_path / "bin" / "penpal"
+    executable.parent.mkdir(parents=True)
+    executable.write_text("#!/bin/sh\n", encoding="utf-8")
+    executable.chmod(0o755)
+
+    from penpal.app_bundle import AppResult
+    app_res = AppResult(bundle=tmp_path / "Applications" / "Penpal.app", launcher_state="fallback", native=False)
+
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    monkeypatch.setattr("penpal.cli.install._penpal_executable_path", lambda: executable)
+    monkeypatch.setattr("penpal.cli.install.unload_legacy_jobs", lambda: [])
+    monkeypatch.setattr("penpal.cli.install._isolated", lambda: False)
+    monkeypatch.setattr("penpal.cli.install.ensure_app_bundle", lambda exe: (None, "fallback", app_res))
+    from penpal.runtime.control import ControlResult
+    monkeypatch.setattr("penpal.cli.install.control_restart", lambda *args, **kwargs: ControlResult(True, "restart"))
+    monkeypatch.setattr("penpal.cli.install._launchd_load_plist", lambda path, **kwargs: True)
+
+    result = CliRunner().invoke(main, ["install", "init"])
+    assert result.exit_code == 0, result.output
+
+    daemon_plist = tmp_path / "Library" / "LaunchAgents" / "com.penpal.daemon.plist"
+    payload = plistlib.loads(daemon_plist.read_bytes())
+    assert payload["ProgramArguments"] == [str(executable), "serve"]
+    assert "权限列表将显示为 Python" in result.output or "permission list will show Python" in result.output
+
+
+def test_install_uninstall_removes_bundle_and_stamp(monkeypatch, tmp_path):
+    apps_dir = tmp_path / "Applications"
+    bundle = apps_dir / "Penpal.app"
+    bundle.mkdir(parents=True)
+    (bundle / "Contents").mkdir(parents=True)
+    (bundle / "Contents" / "Info.plist").write_bytes(plistlib.dumps({"CFBundleIdentifier": "com.penpal.app"}))
+
+    stamp = tmp_path / ".penpal" / "run" / "launcher.json"
+    stamp.parent.mkdir(parents=True)
+    stamp.write_text('{"stamp": "abc"}')
+
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+
+    result = CliRunner().invoke(main, ["install", "uninstall", "--remove-runtime"])
+    assert result.exit_code == 0, result.output
+    assert not bundle.exists()
+    assert not stamp.exists()
     _install_init_with_loaded_jobs(monkeypatch, tmp_path)
 
     def failing_stop():
@@ -511,3 +596,22 @@ def test_install_legacy_unload_and_healthcheck_failures_use_simplified_chinese(m
     assert result.exit_code != 0
     assert "无法加载健康检查任务：" in result.output
     assert "無法" not in result.output
+
+
+def test_install_init_app_build_failure_warns_and_keeps_stable_entry(monkeypatch, tmp_path):
+    from penpal.app_bundle import AppBundleError
+
+    _install_init_with_loaded_jobs(monkeypatch, tmp_path)
+    monkeypatch.setattr("penpal.cli.install._isolated", lambda: False)
+
+    def failing_build(_executable):
+        raise AppBundleError("codesign failed")
+
+    monkeypatch.setattr("penpal.cli.install.ensure_app_bundle", failing_build)
+
+    result = CliRunner().invoke(main, ["install", "init"])
+
+    assert result.exit_code == 0, result.output
+    assert "codesign failed" in result.output
+    payload = plistlib.loads((tmp_path / "Library" / "LaunchAgents" / "com.penpal.daemon.plist").read_bytes())
+    assert payload["ProgramArguments"] == [str(tmp_path / "bin" / "penpal"), "serve"]

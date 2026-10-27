@@ -38,7 +38,7 @@ An AI can already read local files, so indexing files that already exist is not 
 | Install | See Quick start below | Install the CLI first, then `penpal app install` (add `--login` to start at login) |
 | Core capability | Everything works in your AI once installed | Same core, different interface |
 
-Anything the app can do, the CLI can do. `penpal app install` compiles a native launcher that runs the HUD inside the installed Penpal environment, so the menu-bar identity should be **Penpal**. If clang or libpython is unavailable, it falls back to a script launcher and warns that the item may appear as **Python**. The app itself needs no system permission; capture permissions stay with the background service. After installing, open `~/Applications/Penpal.app` from Finder and confirm it is allowed and visible in Menu Bar settings. The CLI can still check HUD health through doctor and status.
+Anything the app can do, the CLI can do. Penpal compiles a native launcher inside `~/Applications/Penpal.app` that runs the background service and HUD under a distinct application identity, so system permissions and the menu bar display **Penpal**. If clang or libpython is unavailable, it falls back to a script launcher and warns that the permission list and menu bar may appear as **Python**. After installing, open `~/Applications/Penpal.app` from Finder and confirm it is allowed and visible in Menu Bar settings. The CLI can still check HUD health through doctor and status.
 
 ## Quick start
 

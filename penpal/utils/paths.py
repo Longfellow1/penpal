@@ -317,6 +317,10 @@ def get_health_report_path() -> Path:
     return _guard_penpal_path(Path.home() / ".penpal" / "health.json")
 
 
+def get_launcher_stamp_path() -> Path:
+    return _guard_penpal_path(get_run_dir() / "launcher.json")
+
+
 def get_apps_dir() -> Path:
     return _guard_penpal_path(Path.home() / "Applications")
 

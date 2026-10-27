@@ -34,8 +34,13 @@ def resolve_penpal_executable() -> Path:
     )
 
 
-def launchd_jobs(executable: Path | None = None) -> dict[str, dict[str, Any]]:
+def launchd_jobs(
+    executable: Path | None = None,
+    *,
+    launcher_path: Path | None = None,
+) -> dict[str, dict[str, Any]]:
     executable = executable or resolve_penpal_executable()
+    daemon_executable = launcher_path if launcher_path is not None else executable
     logs = get_logs_dir()
     env = {
         "PATH": ":".join(dict.fromkeys((
@@ -46,7 +51,7 @@ def launchd_jobs(executable: Path | None = None) -> dict[str, dict[str, Any]]:
     return {
         "com.penpal.daemon": {
             "Label": "com.penpal.daemon",
-            "ProgramArguments": [str(executable), "serve"],
+            "ProgramArguments": [str(daemon_executable), "serve"],
             "RunAtLoad": True,
             "KeepAlive": {"SuccessfulExit": False},
             "ThrottleInterval": 10,
