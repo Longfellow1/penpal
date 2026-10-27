@@ -179,6 +179,71 @@ def test_project_rules_cli_alias_and_projects_listing_are_read_only(db, monkeypa
     ]).exit_code != 0
 
 
+def test_rules_projects_folds_encoded_rows_into_decoded_name(db, monkeypatch) -> None:
+    from penpal import cli
+    from penpal.cli import privacy as privacy_cli
+
+    monkeypatch.setattr(privacy_cli, "get_config", lambda: Config())
+    monkeypatch.setattr(privacy_cli, "require_db", lambda cfg: None)
+
+    # Decoded row: "life-admin" (2 events)
+    _ev("claude_code", "event 1", metadata={"project": "life-admin"})
+    _ev("claude_code", "event 2", metadata={"project": "life-admin"})
+
+    # Encoded row matching "life-admin": "-Users-alice-Go-life-admin" (3 events)
+    _ev("claude_code", "legacy 1", metadata={"project": "-Users-alice-Go-life-admin"})
+    _ev("claude_code", "legacy 2", metadata={"project": "-Users-alice-Go-life-admin"})
+    _ev("claude_code", "legacy 3", metadata={"project": "-Users-alice-Go-life-admin"})
+
+    # Another encoded row matching "life-admin": "-tmp-proj-life-admin" (1 event)
+    _ev("claude_code", "legacy 4", metadata={"project": "-tmp-proj-life-admin"})
+
+    # Encoded row matching nothing: "-Users-alice-Go-unmatched-proj" (1 event)
+    _ev("claude_code", "unmatched", metadata={"project": "-Users-alice-Go-unmatched-proj"})
+
+    runner = CliRunner()
+    result = runner.invoke(cli.main, ["rules", "projects", "--plain"])
+    assert result.exit_code == 0, result.output
+
+    lines = [line.strip() for line in result.output.strip().splitlines() if line.strip()]
+    assert len(lines) == 2
+    assert lines[0] == "claude_code\t-Users-alice-Go-unmatched-proj\t1\tWork"
+    assert lines[1] == "claude_code\tlife-admin\t6\tWork"
+
+    # Also test table output
+    table_result = runner.invoke(cli.main, ["rules", "projects"])
+    assert table_result.exit_code == 0
+    assert "life-admin" in table_result.output
+    assert "6" in table_result.output
+    assert "-Users-alice-Go-life-admin" not in table_result.output
+
+
+def test_rules_projects_picks_longest_name_when_several_match(db, monkeypatch) -> None:
+    from penpal import cli
+    from penpal.cli import privacy as privacy_cli
+
+    monkeypatch.setattr(privacy_cli, "get_config", lambda: Config())
+    monkeypatch.setattr(privacy_cli, "require_db", lambda cfg: None)
+
+    # Two decoded names where both match "-Users-alice-Go-life-admin":
+    # "admin" (5 chars) and "life-admin" (10 chars)
+    _ev("claude_code", "admin event", metadata={"project": "admin"})
+    _ev("claude_code", "life-admin event", metadata={"project": "life-admin"})
+
+    # Encoded row: "-Users-alice-Go-life-admin" (4 events)
+    for i in range(4):
+        _ev("claude_code", f"enc {i}", metadata={"project": "-Users-alice-Go-life-admin"})
+
+    runner = CliRunner()
+    result = runner.invoke(cli.main, ["rules", "projects", "--plain"])
+    assert result.exit_code == 0, result.output
+
+    lines = [line.strip() for line in result.output.strip().splitlines() if line.strip()]
+    assert len(lines) == 2
+    assert "claude_code\tadmin\t1\tWork" in lines
+    assert "claude_code\tlife-admin\t5\tWork" in lines
+
+
 # ── migration v21 ────────────────────────────────────────────────────────────────────────────
 def test_v21_adds_grant_scope_backfills_buckets_and_is_idempotent(tmp_path: Path) -> None:
     path = tmp_path / "old.db"

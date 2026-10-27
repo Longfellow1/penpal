@@ -4,6 +4,7 @@ from __future__ import annotations
 import plistlib
 import logging
 import os
+import signal
 import subprocess
 import sys
 import time
@@ -13,7 +14,7 @@ from typing import Callable
 
 from penpal.foundation.runtime_launchd import LAUNCHCTL_TIMEOUT_SEC, probe_label, run_launchctl
 from penpal.foundation.runtime_plist import launchd_jobs
-from penpal.runtime.evaluate import RuntimeState, RuntimeStatus, evaluate
+from penpal.runtime.evaluate import RuntimeState, RuntimeStatus, active_hud_pid, evaluate
 from penpal.utils.paths import get_launchd_plist_path
 
 DAEMON_LABEL = "com.penpal.daemon"
@@ -31,6 +32,9 @@ Runner = Callable[..., subprocess.CompletedProcess]
 Probe = Callable[..., dict]
 Evaluator = Callable[[], RuntimeStatus]
 
+_HUD_PATTERNS = ("penpal hud", "penpal.cli hud", "keypulse hud", "keypulse.cli hud")
+_HUD_EXCLUDE_SUBCOMMANDS = (" hud status", " hud stop", " hud close", " hud start")
+
 
 def _default_runner(command: list[str], **kwargs):
     if os.environ.get("PENPAL_ISOLATED") == "1":
@@ -38,6 +42,144 @@ def _default_runner(command: list[str], **kwargs):
     if sys.platform != "darwin":
         raise OSError("LaunchAgent control is only available on macOS")
     return run_launchctl(command, **kwargs)
+
+
+def _default_process_runner(command: list[str], **kwargs) -> subprocess.CompletedProcess[str]:
+    if os.environ.get("PENPAL_ISOLATED") == "1":
+        raise OSError("Process inspection is disabled in isolated environments")
+    if sys.platform != "darwin":
+        raise OSError("Process inspection is only available on macOS")
+    return subprocess.run(command, check=False, capture_output=True, text=True, **kwargs)
+
+
+def _default_killer(pid: int, sig: int) -> None:
+    if os.environ.get("PENPAL_ISOLATED") == "1":
+        raise OSError("Process signalling is disabled in isolated environments")
+    os.kill(pid, sig)
+
+
+def _default_pid_is_running(pid: int) -> bool:
+    try:
+        os.kill(pid, 0)
+        return True
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+
+
+def find_legacy_hud_pids(
+    *,
+    runner: Runner = _default_process_runner,
+    active_pid_finder: Callable[[], int | None] | None = None,
+    hud_record_reader: Callable | None = None,
+    process_start_reader: Callable | None = None,
+    current_pid: int | None = None,
+) -> list[int]:
+    """Return all running HUD process PIDs that are not the current HUD or this process."""
+    try:
+        result = runner(["pgrep", "-f", "hud"], check=False, capture_output=True, text=True)
+    except Exception:
+        return []
+
+    current = current_pid if current_pid is not None else os.getpid()
+    if active_pid_finder is not None:
+        active_pid = active_pid_finder()
+    else:
+        kwargs: dict = {}
+        if hud_record_reader is not None:
+            kwargs["hud_record_reader"] = hud_record_reader
+        if process_start_reader is not None:
+            kwargs["process_start_reader"] = process_start_reader
+        active_pid = active_hud_pid(**kwargs)
+
+    found: list[int] = []
+    seen: set[int] = set()
+    for line in (result.stdout or "").splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            pid = int(line)
+        except ValueError:
+            continue
+        if pid in seen or pid == current:
+            continue
+        seen.add(pid)
+        if active_pid is not None and pid == active_pid:
+            continue
+        try:
+            command_result = runner(
+                ["ps", "-p", str(pid), "-o", "command="],
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+        except Exception:
+            continue
+        command = (command_result.stdout or "").strip()
+        if not command:
+            continue
+        if any(marker in command for marker in _HUD_EXCLUDE_SUBCOMMANDS):
+            continue
+        if any(command.rstrip().endswith(pat) for pat in _HUD_PATTERNS):
+            found.append(pid)
+    return found
+
+
+def stop_legacy_huds(
+    *,
+    runner: Runner = _default_process_runner,
+    killer: Callable[[int, int], None] = _default_killer,
+    is_running: Callable[[int], bool] | None = None,
+    active_pid_finder: Callable[[], int | None] | None = None,
+    hud_record_reader: Callable | None = None,
+    process_start_reader: Callable | None = None,
+    current_pid: int | None = None,
+    sleep: Callable[[float], None] = time.sleep,
+    monotonic: Callable[[], float] = time.monotonic,
+    timeout: float = 5.0,
+) -> list[int]:
+    """Stop legacy HUD processes with SIGTERM, waiting up to timeout seconds before SIGKILL.
+
+    Returns the list of PIDs that were stopped.
+    """
+    pids = find_legacy_hud_pids(
+        runner=runner,
+        active_pid_finder=active_pid_finder,
+        hud_record_reader=hud_record_reader,
+        process_start_reader=process_start_reader,
+        current_pid=current_pid,
+    )
+    if not pids:
+        return []
+
+    pid_alive = is_running if is_running is not None else _default_pid_is_running
+    stopped: list[int] = []
+
+    for pid in pids:
+        try:
+            killer(pid, signal.SIGTERM)
+        except ProcessLookupError:
+            continue
+
+        deadline = monotonic() + timeout
+        exited = False
+        while monotonic() < deadline:
+            if not pid_alive(pid):
+                exited = True
+                break
+            sleep(min(POLL_INTERVAL_SEC, max(0.0, deadline - monotonic())))
+
+        if not exited and pid_alive(pid):
+            try:
+                killer(pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+
+        stopped.append(pid)
+
+    return stopped
 
 
 @dataclass(frozen=True)

@@ -291,6 +291,21 @@ def _state_issue(state: RuntimeState) -> Issue | None:
     return Issue("daemon", severity, text[2], text[3], text[4], "后台服务", "Background service")
 
 
+def active_hud_pid(
+    *,
+    hud_record_reader: Callable[[], HudRecord | None] = read_hud_record,
+    process_start_reader: Callable[[int], str | None] = process_start_time,
+) -> int | None:
+    """Return the PID of the active HUD if its record exists and process start time matches."""
+    record = hud_record_reader()
+    if record is None:
+        return None
+    current_start = process_start_reader(record.pid)
+    if current_start is not None and current_start == record.process_start_time:
+        return record.pid
+    return None
+
+
 def _hud_status(
     record: HudRecord | None,
     *,

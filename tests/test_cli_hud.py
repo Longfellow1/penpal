@@ -138,3 +138,73 @@ def test_hud_status_does_not_report_normal_when_status_item_is_hidden(monkeypatc
     assert "status=issue" in result.output
     assert "status_item_visible=False" in result.output
     assert "菜单栏图标被系统隐藏" in result.output
+
+
+def test_find_legacy_hud_pids_detects_variants_and_excludes_subcommands_and_valid_current():
+    from subprocess import CompletedProcess
+    from penpal.foundation.hud_record import HudRecord
+    from penpal.foundation.runtime_identity import RuntimeIdentity
+    from penpal.runtime.control import find_legacy_hud_pids
+
+    commands = {
+        101: "/opt/homebrew/bin/penpal hud",
+        102: "/opt/homebrew/bin/keypulse hud",
+        103: "/Users/alice/.local/venv/bin/python -m penpal.cli hud",
+        104: "/opt/homebrew/bin/penpal hud status",
+        105: "/opt/homebrew/bin/penpal hud stop",
+        106: "/opt/homebrew/bin/penpal hud close",
+        107: "/opt/homebrew/bin/penpal hud start",
+        108: "/opt/homebrew/bin/penpal hud",
+        109: "/opt/homebrew/bin/penpal hud",
+        110: "/opt/homebrew/bin/penpal hud",
+    }
+
+    def fake_runner(cmd, **kwargs):
+        if cmd[0] == "pgrep":
+            return CompletedProcess(args=cmd, returncode=0, stdout="\n".join(str(p) for p in commands.keys()))
+        if cmd[0] == "ps":
+            pid = int(cmd[2])
+            return CompletedProcess(args=cmd, returncode=0, stdout=commands.get(pid, ""))
+        raise AssertionError(f"Unexpected command: {cmd}")
+
+    ident = RuntimeIdentity("code", "0.3.0", "cfg", 34, 34)
+    current_record = HudRecord(
+        pid=109, process_start_time="t109", generation="g1", identity=ident,
+        last_model_built_at=None, last_main_thread_tick_at=None, status_item_created=True, status_item_visible=True,
+    )
+    start_times = {
+        101: "t101",
+        102: "t102",
+        103: "t103",
+        108: "t108",
+        109: "t109",
+        110: "t_reused",
+    }
+
+    pids = find_legacy_hud_pids(
+        runner=fake_runner,
+        hud_record_reader=lambda: current_record,
+        process_start_reader=lambda pid: start_times.get(pid),
+        current_pid=108,
+    )
+
+    assert pids == [101, 102, 103, 110]
+
+
+def test_start_hud_refuses_when_legacy_hud_running(monkeypatch):
+    class FakeLock:
+        def acquire(self):
+            return True
+
+        def release(self):
+            pass
+
+    monkeypatch.setattr("penpal.cli.app.get_config", lambda: None)
+    monkeypatch.setattr("penpal.cli.app._hud_lock", FakeLock)
+    monkeypatch.setattr("penpal.cli.app.find_legacy_hud_pids", lambda: [9999])
+
+    result = CliRunner().invoke(main, ["hud", "start"])
+    assert result.exit_code == 1
+    assert "9999" in result.output
+    assert "already running" in result.output.lower()
+

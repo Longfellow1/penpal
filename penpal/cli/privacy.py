@@ -206,7 +206,7 @@ def rules_projects(plain):
     """List known project keys from event metadata, without reading event content."""
     from collections import Counter
 
-    from penpal.foundation.project import project_from_metadata_json
+    from penpal.foundation.project import fold_project_rows, project_from_metadata_json
 
     cfg = get_config()
     require_db(cfg)
@@ -218,7 +218,7 @@ def rules_projects(plain):
         if project:
             counts[(row["source"], project, row["bucket"] or "—")] += 1
 
-    rows = sorted(counts.items(), key=lambda item: (item[0][0], item[0][1].casefold(), item[0][2]))
+    rows = fold_project_rows(counts)
     if plain:
         for (source, project, bucket), count in rows:
             print(f"{source}\t{project}\t{count}\t{bucket}")

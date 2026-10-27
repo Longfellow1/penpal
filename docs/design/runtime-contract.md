@@ -69,7 +69,7 @@
 - 可由公开信号确认已创建但不可见时，evaluator 报告并引导到"系统设置 → 菜单栏 → Penpal"；主线程 tick 超过 45 秒且进程启动时间仍匹配时，报告 HUD 无响应。
 
 ## 4. 删除清单（PR 1–5 已完成）
-PID 文件作存活依据（含 `keypulse*.pid` 兼容读取）；self-heal 的扫描 PID 杀进程与"5 分钟内必须有事件"判据；无人读取的 `alerts.json`、`capability_status.json`；`HealthFreshnessCapability`；`install.sh` 中从未调用的 `reload_launchd_plist` 与 `--dev` 自写 plist 分支（统一走 `penpal install init`）；`penpal start` 的手动 fork 守护模式；健康检查里已停用的自愈分支与 streak；`keypulse.log` fallback 读取（首次解析时仅在 `penpal.log` 不存在时迁移一次，之后只读写 `penpal.log` 并轮转）。
+PID 文件作存活依据（含 `keypulse*.pid` 兼容读取）；self-heal 的扫描 PID 杀进程与"5 分钟内必须有事件"判据；无人读取的 `alerts.json`、`capability_status.json`；`HealthFreshnessCapability`；`install.sh` 中从未调用的 `reload_launchd_plist` 与 `--dev` 自写 plist 分支（统一走 `penpal install init`）；`penpal start` 的手动 fork 守护模式；健康检查里已停用的自愈分支与 streak；`keypulse.log` fallback 读取（首次解析时仅在 `penpal.log` 不存在时迁移一次，之后只读写 `penpal.log` 并轮转）。升级清理：`penpal install init` 关闭早于 HUD 运行记录（hud.json）的旧版 HUD 进程并在已安装 Penpal.app 时重新打开它。
 
 ## 5. 实施顺序（5 个 PR，各自可验证）
 

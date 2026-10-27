@@ -276,3 +276,25 @@ def test_probe_label_bounds_call_and_handles_timeout(monkeypatch):
     runtime_launchd.run_launchctl(["launchctl", "print", "gui/501/com.penpal.daemon"])
     assert captured.get("timeout") == control.LAUNCHCTL_TIMEOUT_SEC
     assert inspect.signature(control.probe_label).parameters["runner"].default is runtime_launchd.run_launchctl
+
+
+def test_stop_legacy_huds_terminates_then_kills_a_hud_that_ignores_sigterm():
+    import signal
+
+    signals: list[tuple[int, int]] = []
+    clock = iter(range(100))
+
+    stopped = control.stop_legacy_huds(
+        runner=lambda command, **kwargs: subprocess.CompletedProcess(
+            command, 0, stdout="41\n" if command[0] == "pgrep" else "/usr/local/bin/penpal hud\n", stderr=""
+        ),
+        killer=lambda pid, sig: signals.append((pid, sig)),
+        is_running=lambda pid: True,
+        active_pid_finder=lambda: None,
+        current_pid=1,
+        sleep=lambda _seconds: None,
+        monotonic=lambda: float(next(clock)),
+    )
+
+    assert stopped == [41]
+    assert signals == [(41, signal.SIGTERM), (41, signal.SIGKILL)]
