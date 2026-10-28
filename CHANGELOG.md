@@ -5,7 +5,23 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)，
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
-## [Unreleased] - Penpal 改名
+## [0.4.0] - 2026-10-28
+
+完整说明见 `docs/releases/v0.4.0.md`。
+
+### 变更
+
+- 后台 daemon 由 `~/Applications/Penpal.app` 的原生启动器运行，系统权限列表显示为 Penpal。App 的签名身份在普通升级中保持不变，已授予的权限继续有效。缺少 clang 时回退到稳定入口，权限列表仍显示为 Python。
+- D36 运行时：daemon、HUD、MCP 共用一份运行状态记录和一个评估器；升级后原地换成新代码；新增 `penpal restart`；看门狗限制拉起次数；`penpal stop` 之后不会被重新拉起。
+- 安装：launchd 配置指向稳定入口，不再指向带版本号的 Homebrew 目录；升级时重写 Penpal 自己写的 plist；关闭没有运行记录的旧版 HUD。
+- 隐私：D37 按项目分桶（`penpal rules projects` / `rebucket`）；网站屏蔽命令；排除名单在历史导入中同样生效。
+- 新增首次使用引导 `penpal install onboard`、可选菜单栏 App（`penpal app install [--login]`）、各 AI 助手独立 token，并为读不到的来源说明原因。
+
+### 升级须知
+
+- 从 v0.2.0-preview.1 升级需要运行一次 `install.sh` 或 `penpal install init`，然后在系统设置里给 Penpal 授予输入监控、辅助功能和完全磁盘访问。
+
+## [0.2.0-preview.1] - 2026-10-19 - Penpal 改名
 
 ### 破坏性变更
 
