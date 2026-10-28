@@ -205,6 +205,8 @@ async def _serve_async(
     if isinstance(init_params, dict):
         synthetic_id = f"penpal-handoff-{secrets.token_hex(8)}"
         tracker.synthetic_initialize_id = synthetic_id
+        # Carry the host's initialize forward: the next exec must hand it over again.
+        tracker.initialize_params = init_params
 
     current_tools = await server.list_tools()
     current_signature_payload = [

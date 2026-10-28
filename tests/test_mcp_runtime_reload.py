@@ -211,6 +211,16 @@ def test_mcp_exec_handoff_keeps_session_and_notifies_tool_list_change(tmp_path):
             "name": "search_context_after_reload", "arguments": {"keywords": ["r4-empty-after"]},
         })
         assert next_call["result"]["isError"] is False
+
+        # A second reload must hand the session over again (it once handed over None and every later call failed).
+        tools_path = package / "mcp" / "tools.py"
+        tools_path.write_text(tools_path.read_text(encoding="utf-8") + "\n# second reload\n", encoding="utf-8")
+        _read_stderr_until(process, b"reload generation=2", timeout=10)
+        third_call, _ = client.request("tools/call", {
+            "name": "search_context_after_reload", "arguments": {"keywords": ["r4-empty-second"]},
+        }, timeout=8)
+        assert "error" not in third_call
+        assert third_call["result"]["isError"] is False
         assert process.pid == original_pid
     finally:
         _stop_process(process)
