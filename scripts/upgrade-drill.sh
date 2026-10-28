@@ -521,6 +521,7 @@ check_candidate_version() {
 }
 
 LEGACY_HUD_PID=""
+PREVIOUS_HUD_PID=""
 
 # The previous release ships a HUD that predates the HUD runtime record and cannot self-reload; an upgrade must
 # close it. Whether an AppKit HUD can start on the runner is not ours to assert, so a HUD that never comes up skips
@@ -537,6 +538,12 @@ start_previous_hud() {
       return 0
     fi
     if (( SECONDS + 10 >= deadline )); then
+      # A HUD that writes the runtime record self-reloads on upgrade instead of being closed (0.4.0 and later).
+      if grep -Eq "\"pid\": $pid[,}]" "$HOME/.penpal/run/hud.json" 2>/dev/null; then
+        printf 'previous release HUD has a runtime record (pid=%s); legacy_hud_closed does not apply\n' "$pid"
+        PREVIOUS_HUD_PID="$pid"
+        return 0
+      fi
       LEGACY_HUD_PID="$pid"
       printf 'previous release HUD running: pid=%s\n' "$pid"
       return 0
@@ -546,6 +553,11 @@ start_previous_hud() {
 }
 
 check_legacy_hud_closed() {
+  if [[ -n "$PREVIOUS_HUD_PID" ]]; then
+    printf 'SKIP legacy_hud_closed: the previous release HUD has a runtime record and self-reloads\n'
+    command kill "$PREVIOUS_HUD_PID" 2>/dev/null || true
+    return 0
+  fi
   if [[ -z "$LEGACY_HUD_PID" ]]; then
     printf 'SKIP legacy_hud_closed: the previous release HUD did not start on this runner\n'
     return 0
