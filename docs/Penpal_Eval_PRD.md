@@ -335,7 +335,7 @@ R1 HUD 一致性补充矩阵（无记录代表可选 HUD 未安装，不产生 H
 | 存在 | 是 | tick > 45 秒 | `hud` issue：HUD 无响应 | 全部复用同一 issue；doctor 与 `penpal hud status` 不得报正常 |
 | 存在 | 否 | 任意 | 视为 HUD 进程已退出，不把旧记录判成卡死 | 不显示活 HUD 问题 |
 
-可见信号限制：macOS 26 的 System Settings 可以关闭第三方 status item，但当前公开 API 无法读取该设置，且 `NSStatusItem.isVisible` 可能仍为 true。此情况下矩阵中的 false 状态无法由应用确认；R7 必须由负责人手动确认 System Settings 与菜单栏中的实际图标。
+可见信号限制：macOS 26 的 System Settings 可以关闭第三方 status item，但当前公开 API 无法读取该设置，且 `NSStatusItem.isVisible` 可能仍为 true。macOS 26 的菜单栏图标由「控制中心」绘制，App 自己的窗口遮挡状态不代表用户能否看到，HUD 在 macOS 26 上只用 `isVisible`。此情况下矩阵中的 false 状态无法由应用确认；R7 必须由负责人手动确认 System Settings 与菜单栏中的实际图标。
 
 R1–R6 进 CI；R7 依赖真实桌面，发版前手测一次。
 

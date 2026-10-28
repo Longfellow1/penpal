@@ -160,3 +160,32 @@ def test_reload_after_timer_exec_does_not_remove_status_item_or_terminate(shell,
     assert removed == []
     assert shell.status_item is fake_item
     assert terminated == []
+
+
+def _status_item(visible, occlusion):
+    window = types.SimpleNamespace(occlusionState=lambda: occlusion)
+    button = types.SimpleNamespace(window=lambda: window)
+    return types.SimpleNamespace(isVisible=lambda: visible, button=lambda: button)
+
+
+@pytest.mark.parametrize("system_hosts_items,visible,occlusion,expected", [
+    # macOS 26: Control Center draws the item; the app's own button window is never on screen.
+    (True, True, 0, True),
+    (True, False, 0, False),
+    # Earlier macOS: the button window is the item, so its occlusion state is meaningful.
+    (False, True, 0, False),
+    (False, True, 2, True),
+])
+def test_status_item_visibility_ignores_window_occlusion_when_the_system_hosts_status_items(
+    shell, monkeypatch, system_hosts_items, visible, occlusion, expected,
+):
+    monkeypatch.setattr(hud_app, "_system_hosts_status_items", lambda: system_hosts_items)
+    shell.status_item = _status_item(visible, occlusion)
+    assert shell._status_item_visibility() is expected
+
+
+@pytest.mark.parametrize("version,expected", [((15, 6, 0), False), ((16, 0, 0), True), ((26, 7, 0), True)])
+def test_system_hosts_status_items_from_macos_26(monkeypatch, version, expected):
+    info = types.SimpleNamespace(operatingSystemVersion=lambda: version)
+    monkeypatch.setattr(hud_app.AppKit, "NSProcessInfo", types.SimpleNamespace(processInfo=lambda: info))
+    assert hud_app._system_hosts_status_items() is expected
