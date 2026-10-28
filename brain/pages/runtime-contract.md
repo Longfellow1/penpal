@@ -5,7 +5,7 @@ category: decision
 status: active
 tags: [runtime, health, hud, doctor, launchd, mcp]
 created: "2026-10-24T23:46:07"
-updated: "2026-10-28T12:22:52"
+updated: "2026-10-28T20:03:52"
 ---
 
 <!-- compiled_truth -->
@@ -124,3 +124,9 @@ Decision (D36, 2026-10-24, owner accepted all recommendations after a deep-fix a
   summary: "Bundle-launched HUD reloads by quit + LaunchServices relaunch, not execv (macOS 26 hides an exec'd process's status item)"
   source: "owner Mac field evidence 2026-10-28; PR fix/hud-relaunch-not-exec"
   affects: [penpal/hud/reload.py, penpal/hud/app.py, docs/design/runtime-contract.md]
+
+- time: 2026-10-28T20:03:52
+  kind: decision
+  summary: "macOS 26: HUD visibility uses isVisible() only; Control Center draws status items, so app-window occlusion is meaningless"
+  source: "owner Mac 2026-10-28: eye check vs CGWindowList owners; PR fix/hud-visibility-macos26"
+  affects: [penpal/hud/app.py, docs/design/runtime-contract.md, docs/Penpal_Eval_PRD.md]

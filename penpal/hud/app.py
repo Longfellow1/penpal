@@ -58,6 +58,13 @@ def _terminate_app() -> None:
     AppKit.NSApp.terminate_(None)
 
 
+def _system_hosts_status_items() -> bool:
+    """macOS 26 draws every status item in Control Center's windows; the app's own button window never reaches the
+    screen, so its occlusion state says nothing about what the user sees (owner Mac, 2026-10-28)."""
+    # Binaries linked against an older SDK see macOS 26 as 16, so anything from 16 up counts.
+    return AppKit.NSProcessInfo.processInfo().operatingSystemVersion()[0] >= 16
+
+
 def _plain(value):
     """NSDictionary / NSArray / NSString coming from JS -> plain Python containers."""
     if isinstance(value, dict) or hasattr(value, "keys"):
@@ -200,6 +207,8 @@ class PenpalHUDApp(NSObject):
             return None
         if not visible:
             return False
+        if _system_hosts_status_items():
+            return True
         try:
             button = item.button()
             window = button.window() if button is not None else None
