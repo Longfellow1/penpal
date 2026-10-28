@@ -333,8 +333,8 @@ def _hud_status(
     if alive and record.status_item_created and record.status_item_visible is False:
         issues.append(Issue(
             "hud", "error",
-            "菜单栏图标被系统隐藏：系统设置 → 菜单栏 → 打开 Penpal。",
-            "The menu bar item is hidden. Open System Settings → Menu Bar and enable Penpal.",
+            "菜单栏图标被系统隐藏：系统设置 → 菜单栏 → 把 Penpal 的开关关掉再打开。",
+            "The menu bar item is hidden. In System Settings → Menu Bar, turn Penpal off and on again.",
             label_zh="菜单栏 HUD", label_en="Menu bar HUD",
         ))
     # Unknown visibility is not reported: macOS 26 exposes no API for the System Settings toggle, so a
