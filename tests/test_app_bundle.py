@@ -134,7 +134,8 @@ def test_cli_install_and_uninstall_in_tmp_dirs(dirs, monkeypatch):
     out = CliRunner().invoke(main, ["app", "install", "--login", "--dir", str(apps), "--agents-dir", str(agents)])
     assert out.exit_code == 0, out.output
     assert (apps / "Penpal.app/Contents/Info.plist").exists() and (agents / "com.penpal.hud.plist").exists()
-    assert "授予 Penpal" in out.output or "grant capture permissions to Penpal" in out.output
+    text = " ".join(out.output.split())  # rich wraps lines at the terminal width
+    assert "授予 Penpal" in text or "grant capture permissions to Penpal" in text
     out = CliRunner().invoke(main, ["app", "uninstall", "--dir", str(apps), "--agents-dir", str(agents)])
     assert out.exit_code == 0, out.output
     assert not (apps / "Penpal.app").exists() and not (agents / "com.penpal.hud.plist").exists()
