@@ -45,7 +45,7 @@
 ### 2.4 代码身份与自我换新
 - 每个常驻进程启动时记下代码指纹，每分钟与磁盘上已安装代码比对；不一致时：
   - 后台服务：完成当前落库后以约定退出码退出，launchd（`KeepAlive` + `SuccessfulExit=false`）从稳定路径（Homebrew `opt` 符号链接，#119）拉起新代码。
-  - HUD：`execv` 原地换新。
+  - HUD：从 Penpal.app 启动时，先移除菜单栏图标并正常退出，由一个分离的辅助进程等它退出后用 `open` 重新打开 App。macOS 26 会把原地 `execv` 的进程的菜单栏图标隐藏，直到用户在「系统设置 → 菜单栏」里把开关关掉再打开（2026-10-28 实测两次）。从终端以 `penpal hud` 启动时没有 App 可打开，仍 `execv` 原地换新；辅助进程启动失败时同样回退到 `execv`。
   - MCP `serve`：在**没有进行中请求**的边界 `exec`，保留 stdio 管道，交接已协商的协议状态；若工具目录有变，发 `notifications/tools/list_changed`。各宿主行为不同（Claude Code 不会自动重连 stdio，Cursor 刷新工具列表不可靠），**必须逐个宿主实测**（Claude Code、Codex、Cursor）。
 - 数据库结构版本纳入身份：旧代码发现库结构比自己新，按 `outdated` 处理。
 - 配置纳入身份：`config.toml` 的指纹变化时，后台服务同样自我换新，配置改动（如 `block-site`）无需用户手动重启；CLI 提示改为"约 1 分钟内生效"。
@@ -67,7 +67,7 @@
 - HUD 只有一个后台 worker 串行构建 snapshot、view-model 与 JSON；NSTimer 只更新时间戳、记录可见性并投递刷新。AppKit / WKWebView 仅在主线程读取或修改。
 - HUD 原子写 `~/.penpal/run/hud.json`，字段包含 pid、进程启动时间、generation、共享 `RuntimeIdentity`、最近模型构建时间、最近主线程 tick、status item 是否创建及可见性信号。`penpal.runtime.evaluate` 是唯一解释者；没有 HUD 记录时不增加问题。
 - 可见性是 best-effort。HUD 读取 `NSStatusItem.isVisible()`；若 status item button 有 `window`，再检查 `window.occlusionState` 的 visible 位。macOS 15 可用这两个公开 AppKit 信号，但它们只能描述 status item / 窗口当前状态。macOS 26 的 System Settings「Allow in the Menu Bar」开关没有公开读取 API；Apple DTS 确认系统关闭该项时 `isVisible` 仍可能为 true。因此这些信号不能证明 Tahoe 系统开关已开启；未知时提示手动检查，不伪报为已确认隐藏。验收必须从 Finder / Launch Services 启动，不能只跑可执行文件。
-- 可由公开信号确认已创建但不可见时，evaluator 报告并引导到"系统设置 → 菜单栏 → Penpal"；主线程 tick 超过 45 秒且进程启动时间仍匹配时，报告 HUD 无响应。
+- 可由公开信号确认已创建但不可见时（HUD 进程启动 30 秒以后；刚启动的 10–15 秒内图标还没画出来，信号一律为不可见），evaluator 报告并引导到"系统设置 → 菜单栏 → Penpal"；主线程 tick 超过 45 秒且进程启动时间仍匹配时，报告 HUD 无响应。
 
 ## 4. 删除清单（PR 1–5 已完成）
 PID 文件作存活依据（含 `keypulse*.pid` 兼容读取）；self-heal 的扫描 PID 杀进程与"5 分钟内必须有事件"判据；无人读取的 `alerts.json`、`capability_status.json`；`HealthFreshnessCapability`；`install.sh` 中从未调用的 `reload_launchd_plist` 与 `--dev` 自写 plist 分支（统一走 `penpal install init`）；`penpal start` 的手动 fork 守护模式；健康检查里已停用的自愈分支与 streak；`keypulse.log` fallback 读取（首次解析时仅在 `penpal.log` 不存在时迁移一次，之后只读写 `penpal.log` 并轮转）。升级清理：`penpal install init` 关闭早于 HUD 运行记录（hud.json）的旧版 HUD 进程并在已安装 Penpal.app 时重新打开它。

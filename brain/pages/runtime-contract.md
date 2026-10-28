@@ -5,7 +5,7 @@ category: decision
 status: active
 tags: [runtime, health, hud, doctor, launchd, mcp]
 created: "2026-10-24T23:46:07"
-updated: "2026-10-27T11:07:47"
+updated: "2026-10-28T12:22:52"
 ---
 
 <!-- compiled_truth -->
@@ -118,3 +118,9 @@ Decision (D36, 2026-10-24, owner accepted all recommendations after a deep-fix a
   summary: install init closes HUDs that predate the HUD runtime record and reopens Penpal.app
   source: "owner hand test 2026-10-27 (no menu bar icon)"
   affects: [penpal/cli/install.py]
+
+- time: 2026-10-28T12:22:52
+  kind: decision
+  summary: "Bundle-launched HUD reloads by quit + LaunchServices relaunch, not execv (macOS 26 hides an exec'd process's status item)"
+  source: "owner Mac field evidence 2026-10-28; PR fix/hud-relaunch-not-exec"
+  affects: [penpal/hud/reload.py, penpal/hud/app.py, docs/design/runtime-contract.md]

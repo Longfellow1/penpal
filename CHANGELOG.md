@@ -12,7 +12,7 @@
 ### 变更
 
 - 后台 daemon 由 `~/Applications/Penpal.app` 的原生启动器运行，系统权限列表显示为 Penpal。App 的签名身份在普通升级中保持不变，已授予的权限继续有效。缺少 clang 时回退到稳定入口，权限列表仍显示为 Python。
-- D36 运行时：daemon、HUD、MCP 共用一份运行状态记录和一个评估器；升级后原地换成新代码；新增 `penpal restart`；看门狗限制拉起次数；`penpal stop` 之后不会被重新拉起。
+- D36 运行时：daemon、HUD、MCP 共用一份运行状态记录和一个评估器；升级后自动换成新代码（Penpal.app 的 HUD 改为关闭后重新打开，原地换新会让 macOS 26 隐藏菜单栏图标）；新增 `penpal restart`；看门狗限制拉起次数；`penpal stop` 之后不会被重新拉起。
 - 安装：launchd 配置指向稳定入口，不再指向带版本号的 Homebrew 目录；升级时重写 Penpal 自己写的 plist；关闭没有运行记录的旧版 HUD。
 - 隐私：D37 按项目分桶（`penpal rules projects` / `rebucket`）；网站屏蔽命令；排除名单在历史导入中同样生效。
 - 新增首次使用引导 `penpal install onboard`、可选菜单栏 App（`penpal app install [--login]`）、各 AI 助手独立 token，并为读不到的来源说明原因。

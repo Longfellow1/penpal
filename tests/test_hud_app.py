@@ -124,3 +124,39 @@ def test_navigation_is_limited_to_the_loaded_page(shell):
                              ("file", hud_app.WKNavigationActionPolicyCancel)]:
         shell.webView_decidePolicyForNavigationAction_decisionHandler_(None, action(types.SimpleNamespace(scheme=lambda s=scheme: s)), decisions.append)
         assert decisions[-1] == expected
+
+
+def test_reload_after_timer_relaunch_removes_status_item_and_terminates(shell, monkeypatch):
+    removed = []
+    terminated = []
+
+    fake_item = object()
+    shell.status_item = fake_item
+    shell._hud_reloader = types.SimpleNamespace(reload=lambda: "relaunch")
+
+    monkeypatch.setattr(hud_app, "_remove_status_item", lambda item: removed.append(item))
+    monkeypatch.setattr(hud_app, "_terminate_app", lambda: terminated.append(True))
+
+    shell.reloadAfterTimer_(None)
+
+    assert removed == [fake_item]
+    assert shell.status_item is None
+    assert terminated == [True]
+
+
+def test_reload_after_timer_exec_does_not_remove_status_item_or_terminate(shell, monkeypatch):
+    removed = []
+    terminated = []
+
+    fake_item = object()
+    shell.status_item = fake_item
+    shell._hud_reloader = types.SimpleNamespace(reload=lambda: "exec")
+
+    monkeypatch.setattr(hud_app, "_remove_status_item", lambda item: removed.append(item))
+    monkeypatch.setattr(hud_app, "_terminate_app", lambda: terminated.append(True))
+
+    shell.reloadAfterTimer_(None)
+
+    assert removed == []
+    assert shell.status_item is fake_item
+    assert terminated == []

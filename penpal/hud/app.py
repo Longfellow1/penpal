@@ -49,6 +49,15 @@ def _copy_to_pasteboard(text: str) -> None:
     board.setString_forType_(text, AppKit.NSPasteboardTypeString)
 
 
+def _remove_status_item(item) -> None:
+    if item is not None:
+        AppKit.NSStatusBar.systemStatusBar().removeStatusItem_(item)
+
+
+def _terminate_app() -> None:
+    AppKit.NSApp.terminate_(None)
+
+
 def _plain(value):
     """NSDictionary / NSArray / NSString coming from JS -> plain Python containers."""
     if isinstance(value, dict) or hasattr(value, "keys"):
@@ -223,7 +232,11 @@ class PenpalHUDApp(NSObject):
             launcher = native_launcher()
             executable, arguments = hud_exec_command(launcher, sys.argv)
             self._hud_reloader = HUDReloader(
-                identity, lambda: current_identity(self.cfg), executable=executable, argv=arguments,
+                identity,
+                lambda: current_identity(self.cfg),
+                executable=executable,
+                argv=arguments,
+                launcher=launcher,
             )
             self._controller_prepared = True
         if self._hud_reloader is not None and self._hud_reloader.check():
@@ -317,8 +330,16 @@ class PenpalHUDApp(NSObject):
         self._worker.refresh(fresh=True)
 
     def reloadAfterTimer_(self, _sender):
-        """Replace the process on the next run-loop turn, after the timer callback has returned."""
-        self._hud_reloader.exec()
+        """Reload on the next run-loop turn, after the timer callback has returned: relaunch (quit here) or exec in place."""
+        if self._hud_reloader is None:
+            return
+        action = self._hud_reloader.reload()
+        if action == "relaunch":
+            item = getattr(self, "status_item", None)
+            if item is not None:
+                _remove_status_item(item)
+                self.status_item = None
+            _terminate_app()
 
     # ── right-click menu (candidate approval, daemon restart, quit) ─────────
 

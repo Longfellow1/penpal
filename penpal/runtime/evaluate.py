@@ -29,6 +29,8 @@ from penpal.store.migrations import SCHEMA_VERSION
 HUNG_AFTER_SEC = RECORD_WRITE_INTERVAL_SEC * 3
 STARTING_GRACE_SEC = RECORD_WRITE_INTERVAL_SEC * 3
 HUD_MAIN_THREAD_STALE_SEC = 45.0
+# A freshly launched HUD reads not-visible for ~10-15 s until its status item is drawn (owner Mac, 2026-10-28).
+HUD_VISIBILITY_GRACE_SEC = 30.0
 WATCHER_PERMISSION_EVIDENCE_SEC = 30 * 60
 CORE_LOOP_NAME = "core_loop"
 
@@ -330,7 +332,9 @@ def _hud_status(
         main_thread_tick_age_sec=age,
     )
     issues: list[Issue] = []
-    if alive and record.status_item_created and record.status_item_visible is False:
+    started = _process_started_at(record.process_start_time)
+    starting = started is not None and (now - started).total_seconds() < HUD_VISIBILITY_GRACE_SEC
+    if alive and not starting and record.status_item_created and record.status_item_visible is False:
         issues.append(Issue(
             "hud", "error",
             "菜单栏图标被系统隐藏：系统设置 → 菜单栏 → 把 Penpal 的开关关掉再打开。",
