@@ -101,15 +101,18 @@ jobs:
           set -euo pipefail
           TRANSCRIPT="$RUNNER_TEMP/clean-install-transcript.txt"
           exec > >(tee -a "$TRANSCRIPT") 2>&1
-          expected="$(which penpal)"
-          echo "expected executable=$expected"
-          case "$expected" in */Cellar/*) echo "FAIL: expected the stable brew symlink, got a versioned Cellar path"; exit 1;; esac
+          brew_penpal="$(which penpal)"
+          # The daemon runs from Penpal.app so macOS lists its grants as Penpal (#153); the healthcheck runs penpal.
+          app_launcher="$HOME/Applications/Penpal.app/Contents/MacOS/Penpal"
+          echo "brew penpal=$brew_penpal app launcher=$app_launcher"
+          case "$brew_penpal" in */Cellar/*) echo "FAIL: expected the stable brew symlink, got a versioned Cellar path"; exit 1;; esac
           for label in com.penpal.daemon com.penpal.healthcheck; do
             plist="$HOME/Library/LaunchAgents/$label.plist"
             args="$(python3 -c 'import plistlib,sys; print("\n".join(plistlib.load(open(sys.argv[1],"rb"))["ProgramArguments"]))' "$plist")"
             echo "--- $label ProgramArguments:"
             echo "$args"
             first="$(head -n1 <<<"$args")"
+            expected="$brew_penpal"; [ "$label" = com.penpal.daemon ] && expected="$app_launcher"
             if [ "$first" != "$expected" ]; then
               echo "FAIL: $label runs '$first', expected '$expected'"; exit 1
             fi
@@ -117,7 +120,13 @@ jobs:
               echo "FAIL: $label points at python or a checkout"; exit 1
             fi
           done
-          echo "OK: both plists run the brew-installed penpal"
+          # The launcher has its interpreter path compiled in; a versioned Cellar path would break on brew upgrade.
+          echo "--- launcher paths:"
+          strings -a "$app_launcher" | grep -E '^/.*/penpal' || true
+          if strings -a "$app_launcher" | grep -q '/Cellar/penpal/'; then
+            echo "FAIL: Penpal.app launcher pins a versioned Cellar path"; exit 1
+          fi
+          echo "OK: the daemon runs Penpal.app, the healthcheck runs the brew-installed penpal, no Cellar pin"
 
       - name: 5. mcp grant prints config, status works
         run: |
