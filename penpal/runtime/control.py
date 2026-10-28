@@ -28,6 +28,8 @@ RESTART_SUCCESS_TIMEOUT_SEC = 40.0
 BOOTSTRAP_ATTEMPTS = 3
 BOOTSTRAP_BACKOFF_SEC = (0.25, 0.5)
 POLL_INTERVAL_SEC = 0.1
+# A Runner has subprocess.run's signature: callers may pass its options (check, capture_output, text, timeout)
+# and a runner only fills defaults (kwargs.setdefault), so any runner works with any caller.
 Runner = Callable[..., subprocess.CompletedProcess]
 Probe = Callable[..., dict]
 Evaluator = Callable[[], RuntimeStatus]
@@ -44,12 +46,14 @@ def _default_runner(command: list[str], **kwargs):
     return run_launchctl(command, **kwargs)
 
 
-def _default_process_runner(command: list[str]) -> subprocess.CompletedProcess[str]:
+def _default_process_runner(command: list[str], **kwargs) -> subprocess.CompletedProcess[str]:
     if os.environ.get("PENPAL_ISOLATED") == "1":
         raise OSError("Process inspection is disabled in isolated environments")
     if sys.platform != "darwin":
         raise OSError("Process inspection is only available on macOS")
-    return subprocess.run(command, check=False, capture_output=True, text=True, timeout=10)
+    for name, value in (("check", False), ("capture_output", True), ("text", True), ("timeout", 10)):
+        kwargs.setdefault(name, value)
+    return subprocess.run(command, **kwargs)
 
 
 def _default_killer(pid: int, sig: int) -> None:

@@ -59,9 +59,12 @@ def default_agents_dir() -> Path:
 
 
 def _run(cmd: list[str], **kwargs) -> "subprocess.CompletedProcess[str]":
+    # A Runner (penpal.runtime.control): callers may pass subprocess.run options; this only fills defaults.
     if cmd and cmd[0] == "launchctl":
         kwargs.setdefault("timeout", LAUNCHCTL_TIMEOUT_SEC)
-    return subprocess.run(cmd, check=False, capture_output=True, text=True, **kwargs)
+    for name, value in (("check", False), ("capture_output", True), ("text", True)):
+        kwargs.setdefault(name, value)
+    return subprocess.run(cmd, **kwargs)
 
 
 def _is_ours(bundle: Path) -> bool:
@@ -453,11 +456,11 @@ def uninstall_app(
 
 
 def _bootout(plist: Path, run: Runner) -> None:
-    unload_job(plist.stem, plist, runner=lambda command, **kwargs: run(command, **kwargs))
+    unload_job(plist.stem, plist, runner=run)
 
 
 def _bootstrap(plist: Path, run: Runner) -> bool:
-    return load_job(plist.stem, plist, runner=lambda command, **kwargs: run(command, **kwargs), spawn=False)
+    return load_job(plist.stem, plist, runner=run, spawn=False)
 
 
 def ensure_app_bundle(

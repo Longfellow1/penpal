@@ -316,3 +316,16 @@ def test_find_legacy_hud_pids_through_the_default_process_runner(monkeypatch):
 
     assert control.find_legacy_hud_pids(active_pid_finder=lambda: None, current_pid=1) == [41]
     assert calls == [["pgrep", "-f", "hud"], ["ps", "-p", "41", "-o", "command="]]
+
+
+def test_default_process_runner_accepts_caller_options(monkeypatch):
+    from penpal.runtime import control
+
+    seen = {}
+    monkeypatch.delenv("PENPAL_ISOLATED", raising=False)
+    monkeypatch.setattr(control.sys, "platform", "darwin")
+    monkeypatch.setattr(control.subprocess, "run", lambda cmd, **kwargs: seen.update(kwargs) or subprocess.CompletedProcess(cmd, 0, "", ""))
+
+    control._default_process_runner(["ps"], check=False, capture_output=True, text=True)
+
+    assert seen == {"check": False, "capture_output": True, "text": True, "timeout": 10}

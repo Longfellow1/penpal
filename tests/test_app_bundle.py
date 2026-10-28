@@ -134,7 +134,7 @@ def test_cli_install_and_uninstall_in_tmp_dirs(dirs, monkeypatch):
     out = CliRunner().invoke(main, ["app", "install", "--login", "--dir", str(apps), "--agents-dir", str(agents)])
     assert out.exit_code == 0, out.output
     assert (apps / "Penpal.app/Contents/Info.plist").exists() and (agents / "com.penpal.hud.plist").exists()
-    assert "不需要任何系统权限" in out.output or "needs no system permission" in out.output
+    assert "授予 Penpal" in out.output or "grant capture permissions to Penpal" in out.output
     out = CliRunner().invoke(main, ["app", "uninstall", "--dir", str(apps), "--agents-dir", str(agents)])
     assert out.exit_code == 0, out.output
     assert not (apps / "Penpal.app").exists() and not (agents / "com.penpal.hud.plist").exists()
@@ -321,3 +321,23 @@ def test_native_launcher_falls_back_to_the_penpal_command_when_its_python_is_gon
     completed = subprocess.run([str(binary), "--flag"], capture_output=True, text=True, timeout=20)
     assert completed.returncode == 0, completed.stderr
     assert argv_log.read_text(encoding="utf-8").split() == ["hud", "--flag"]
+
+
+def test_login_agent_registers_through_the_real_runner(tmp_path, monkeypatch):
+    # The launchctl helpers pass subprocess.run options themselves; the bundle's runner must accept them
+    # (it used to set them too, so `penpal app install --login` died with a duplicate-keyword TypeError).
+    calls = []
+
+    def fake_subprocess_run(cmd, **kwargs):
+        calls.append((cmd, kwargs))
+        return subprocess.CompletedProcess(cmd, 0, "", "")
+
+    monkeypatch.setattr(app_bundle.subprocess, "run", fake_subprocess_run)
+    plist = tmp_path / "com.penpal.hud.plist"
+    plist.write_bytes(b"")
+
+    app_bundle._bootout(plist, app_bundle._run)
+    assert app_bundle._bootstrap(plist, app_bundle._run)
+
+    launchctl = [kwargs for cmd, kwargs in calls if cmd[0] == "launchctl"]
+    assert launchctl and all(kw["check"] is False and kw["text"] is True and "timeout" in kw for kw in launchctl)
