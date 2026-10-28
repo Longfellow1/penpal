@@ -22,7 +22,7 @@
 
 负责人本机样本（只统计文件数，未读内容）：
 
-- **已采集**：Claude Code（62 个会话）、Codex（73 个）。
+- **已采集**：Claude Code（62 个会话）；Codex 只采到 73 个。Codex 实有 314 个会话，其余 241 个是 zstd 压缩的 `.jsonl.zst`，现有插件只读 `.jsonl`，一直漏采。
 - **有本地历史但未采集**：
   - Antigravity：200 个会话
   - WorkBuddy：38 个
@@ -121,7 +121,7 @@ config = "~/.workbuddy/mcp.json"    # 配置文件位置与格式，供 §3.4 �
 style = "json_mcpServers"
 ```
 
-- 支持格式：
+- 支持格式（zstd 解压需要新增依赖 `zstandard`：Python 3.13 标准库没有 zstd，Codex、OpenClaw、Zed、DeepSeek Harness 都在用它；Homebrew 公式要同步加 resource）：
   - `jsonl`：每行一条，字段用点路径。
   - `json`：用 `records_path` 选消息数组。
   - `sqlite`：一条只读 `SELECT`，可用 SQLite JSON 函数展平，例如 Cursor 的 `cursorDiskKV`。
@@ -208,7 +208,7 @@ style = "json_mcpServers"
 ### 5.1 两个指标
 
 1. **主指标：会话覆盖率**（可测量）。在一台真实 Mac 上，统计目录里所有工具留在磁盘上的 AI 会话数，算其中已被 Penpal 自动入库的比例。新增 `penpal sources coverage` 命令，只输出各工具的会话数和已入库数，不输出内容。
-   - 负责人本机基线：可按文件计数的会话约 437 个，已入库 135 个，**约 31%**。数据库型存储（Cursor、opencode、Hermes）的会话数还没算进分母。
+   - 负责人本机基线：可按文件计数的会话约 668 个，已入库 135 个，**约 20%**。其中 Codex 的压缩会话漏采 241 个；数据库型存储（Cursor、opencode、Hermes）的会话数还没算进分母。
    - 第一阶段目标 ≥ 80%。种子用户的 Mac 用同一命令复测。
 2. **辅指标：加权工具覆盖率**（估算）。对下表的主流工具按权重求和：
    - 自动采集覆盖率 = 已自动采集的工具权重 / 全部权重；
@@ -221,7 +221,7 @@ style = "json_mcpServers"
 | 档 | 工具 | 本地历史 | 格式 / 位置（摘要） | MCP | 第一阶段做法 |
 |---|---|---|---|---|---|
 | 高 | Claude Code | 可读 | `~/.claude/projects/**/*.jsonl` | `~/.claude.json` | 已有，迁入目录 |
-| 高 | Codex CLI / 桌面 | 可读 | `~/.codex/sessions/**/rollout-*.jsonl(.zst)` | `~/.codex/config.toml` | 已有，补 zstd 和 archived_sessions |
+| 高 | Codex CLI / 桌面 | 可读 | `~/.codex/sessions/**/rollout-*.jsonl(.zst)` | `~/.codex/config.toml` | 已有；**补 zstd（本机 77% 的会话是压缩的）**和 archived_sessions |
 | 高 | Cursor | 可读（无官方格式） | `state.vscdb` 中的 `cursorDiskKV`；`~/.cursor/projects/**/agent-transcripts` | `~/.cursor/mcp.json` | 内置配方，只读快照打开 |
 | 高 | VS Code Copilot Chat | 部分 | `workspaceStorage/*/chatSessions/*.json(l)` | 用户级 `mcp.json`（键 `servers`） | 内置配方，两种格式都支持 |
 | 高 | Claude 桌面 | 部分 | 本地只有 Agent / Code 会话目录，聊天在云端 | `claude_desktop_config.json` | 接入 MCP；读本地 Agent 会话 |
