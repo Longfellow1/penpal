@@ -5,7 +5,7 @@ category: decision
 status: active
 tags: [positioning, roadmap]
 created: "2026-10-12T15:20:36"
-updated: "2026-10-14T13:52:22"
+updated: "2026-10-28T20:08:53"
 ---
 
 <!-- compiled_truth -->
@@ -22,7 +22,7 @@ Milestones after M1 (user decision 2026-10-12):
 - M3 = Memory Control Center (HUD), including content-level rebucketing/manual correction and per-AI access/audit view.
 - M4 = release, gated by external validation: 10-15 heavy AI users on Mac, 14 days, ≥5 real recall questions each; the signal is unprompted return in week 2; any permission leak is a severe failure.
 
-Not adopted yet: claims that KeyPulse "subsumes" Pieces/Memmy (unverified); agent write-back of long-term memory (V1 is read-only; revisit after M4); proactive machine discovery (after trust is established, via a user-confirmed candidate inbox).
+Reversed 2026-10-28 (user): absorbing Memmy-class cross-AI-IDE memory is in scope now, before promotion. Agent write-back of long-term memory and adaptive multi-AI-tool capture are V1 work; design in docs/design/memory-write-architecture.md. Still not adopted: proactive machine discovery outside the user-confirmed candidate inbox.
 
 
 ## Timeline
@@ -62,3 +62,15 @@ Not adopted yet: claims that KeyPulse "subsumes" Pieces/Memmy (unverified); agen
   summary: "D33: distribution split — CLI minimal install (core via MCP), desktop app optional superset (HUD first, later reports/graph in app layer). See cli-core-app-optional."
   source: owner decision 2026-10-14
   affects: [cli-core-app-optional]
+
+- time: 2026-10-28T20:08:53
+  kind: decision
+  summary: "Memmy-class write-back and multi-AI-tool capture moved into V1 (reverses the 2026-10-12 deferral)"
+  source: "user 2026-10-28: 吃掉memmy放在当下做"
+  affects: [product-positioning-memory-infra]
+
+- time: 2026-10-28T20:08:53
+  kind: reversal
+  summary: "Memmy-class write-back + adaptive multi-AI-tool capture moved into V1, before promotion"
+  source: user 2026-10-28
+  affects: [product-positioning-memory-infra, memory-distillation-by-agent, docs/Penpal_Eval_PRD.md, issue #24]
