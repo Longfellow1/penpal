@@ -165,8 +165,8 @@ def _app_dir_option(func):
     return click.option("--dir", "apps_dir", type=click.Path(path_type=Path), default=None,
                         help=T("安装目录（默认 ~/Applications）", "Install directory (default ~/Applications)"))(func)
 
-@app_group.command("install", help=T("安装 Penpal.app（原生启动已安装环境里的 HUD；自身不需要系统权限）。",
-                                     "Install Penpal.app (a native launcher runs the HUD from the installed environment; it needs no system permission itself)."))
+@app_group.command("install", help=T("安装 Penpal.app（原生启动器，HUD 和后台 daemon 都从它运行）。",
+                                     "Install Penpal.app (the native launcher that runs the HUD and the background daemon)."))
 @click.option("--login", is_flag=True, default=False, help=T("登录时自动启动（注册 com.penpal.hud 启动项）", "Start at login (registers the com.penpal.hud launch agent)"))
 @_app_dir_option
 def app_install(login, apps_dir, agents_dir):
@@ -180,8 +180,8 @@ def app_install(login, apps_dir, agents_dir):
         raise click.ClickException(str(exc)) from exc
     for line in result.actions:
         console.print(f"[green]{line}[/green]")
-    console.print(T("提示：App 只是 HUD 的入口，不需要任何系统权限；采集权限仍由后台 daemon 持有。",
-                    "Note: the App is only a HUD launcher and needs no system permission; capture permissions stay with the daemon."))
+    console.print(T("提示：后台 daemon 也从这个 App 运行，系统设置里的采集权限请授予 Penpal。",
+                    "Note: the background daemon also runs from this App; grant capture permissions to Penpal in System Settings."))
 
 @app_group.command("uninstall", help=T("卸载 Penpal.app 和登录启动项（不影响 daemon 与数据）。", "Remove Penpal.app and its login agent (the daemon and your data are untouched)."))
 @_app_dir_option

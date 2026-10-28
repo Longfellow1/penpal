@@ -68,3 +68,7 @@ Go/
 docs/*-eval-*.json
 evals/report.json
 eval-report.json
+
+# Local runtime data and sandbox homes created by dev runs; never commit them (real user data).
+.keypulse/
+.sandbox-home/
