@@ -45,7 +45,7 @@
 ### 2.4 代码身份与自我换新
 - 每个常驻进程启动时记下代码指纹，每分钟与磁盘上已安装代码比对；不一致时：
   - 后台服务：完成当前落库后以约定退出码退出，launchd（`KeepAlive` + `SuccessfulExit=false`）从稳定路径（Homebrew `opt` 符号链接，#119）拉起新代码。
-  - HUD：`execv` 原地换新。
+  - HUD：从 Penpal.app 启动时，先移除菜单栏图标并正常退出，由一个分离的辅助进程等它退出后用 `open` 重新打开 App。macOS 26 会把原地 `execv` 的进程的菜单栏图标隐藏，直到用户在「系统设置 → 菜单栏」里把开关关掉再打开（2026-10-28 实测两次）。从终端以 `penpal hud` 启动时没有 App 可打开，仍 `execv` 原地换新；辅助进程启动失败时同样回退到 `execv`。
   - MCP `serve`：在**没有进行中请求**的边界 `exec`，保留 stdio 管道，交接已协商的协议状态；若工具目录有变，发 `notifications/tools/list_changed`。各宿主行为不同（Claude Code 不会自动重连 stdio，Cursor 刷新工具列表不可靠），**必须逐个宿主实测**（Claude Code、Codex、Cursor）。
 - 数据库结构版本纳入身份：旧代码发现库结构比自己新，按 `outdated` 处理。
 - 配置纳入身份：`config.toml` 的指纹变化时，后台服务同样自我换新，配置改动（如 `block-site`）无需用户手动重启；CLI 提示改为"约 1 分钟内生效"。
