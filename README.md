@@ -1,5 +1,6 @@
 # Penpal MCP（笔友）— 给 AI Agent 的本地记忆
 ｜写下的东西，会留下回响
+
 Penpal MCP 是面向 macOS AI Agent 的本地优先记忆层，也是 stdio MCP server。它连接 Claude Code、Codex、Cursor，按你启用的来源记录应用与窗口切换、剪贴板和过滤后的键盘文本，并导入支持的本地历史、会话、Git 与 Markdown 数据。Penpal 服务与数据库完全在 Mac 本机运行，不内置大模型；返回内容会进入你所用 AI Host 的对话，也可能被发送到该 Host 的云端模型服务。
 
 [English](README.en.md) · [快速开始](#快速开始) · [记什么不记什么](#记什么不记什么) · [现在做到哪](#现在做到哪)
