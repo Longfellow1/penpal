@@ -330,6 +330,7 @@ R1 HUD 一致性补充矩阵（无记录代表可选 HUD 未安装，不产生 H
 | 不存在 | — | — | 不产生 HUD issue | 不显示 HUD 问题 |
 | 存在 | 是 | 已创建、可见信号为 true，tick ≤ 45 秒 | HUD 响应 | 正常显示 HUD 状态 |
 | 存在 | 是 | 已创建、可见信号为 false | `hud` issue：菜单栏图标被隐藏并给出设置路径 | 全部复用同一 issue；doctor 与 `penpal hud status` 不得报正常 |
+| 存在 | 是 | 进程启动不到 30 秒、可见信号为 false | 不产生 HUD issue（图标还没画出来，实测约 10–15 秒） | 不显示 HUD 问题 |
 | 存在 | 是 | 已创建、可见信号未知 | `hud` issue：提示负责人手动检查系统设置 | 全部复用同一 issue；不得将未知标成已确认可见 |
 | 存在 | 是 | tick > 45 秒 | `hud` issue：HUD 无响应 | 全部复用同一 issue；doctor 与 `penpal hud status` 不得报正常 |
 | 存在 | 否 | 任意 | 视为 HUD 进程已退出，不把旧记录判成卡死 | 不显示活 HUD 问题 |

@@ -67,7 +67,7 @@
 - HUD 只有一个后台 worker 串行构建 snapshot、view-model 与 JSON；NSTimer 只更新时间戳、记录可见性并投递刷新。AppKit / WKWebView 仅在主线程读取或修改。
 - HUD 原子写 `~/.penpal/run/hud.json`，字段包含 pid、进程启动时间、generation、共享 `RuntimeIdentity`、最近模型构建时间、最近主线程 tick、status item 是否创建及可见性信号。`penpal.runtime.evaluate` 是唯一解释者；没有 HUD 记录时不增加问题。
 - 可见性是 best-effort。HUD 读取 `NSStatusItem.isVisible()`；若 status item button 有 `window`，再检查 `window.occlusionState` 的 visible 位。macOS 15 可用这两个公开 AppKit 信号，但它们只能描述 status item / 窗口当前状态。macOS 26 的 System Settings「Allow in the Menu Bar」开关没有公开读取 API；Apple DTS 确认系统关闭该项时 `isVisible` 仍可能为 true。因此这些信号不能证明 Tahoe 系统开关已开启；未知时提示手动检查，不伪报为已确认隐藏。验收必须从 Finder / Launch Services 启动，不能只跑可执行文件。
-- 可由公开信号确认已创建但不可见时，evaluator 报告并引导到"系统设置 → 菜单栏 → Penpal"；主线程 tick 超过 45 秒且进程启动时间仍匹配时，报告 HUD 无响应。
+- 可由公开信号确认已创建但不可见时（HUD 进程启动 30 秒以后；刚启动的 10–15 秒内图标还没画出来，信号一律为不可见），evaluator 报告并引导到"系统设置 → 菜单栏 → Penpal"；主线程 tick 超过 45 秒且进程启动时间仍匹配时，报告 HUD 无响应。
 
 ## 4. 删除清单（PR 1–5 已完成）
 PID 文件作存活依据（含 `keypulse*.pid` 兼容读取）；self-heal 的扫描 PID 杀进程与"5 分钟内必须有事件"判据；无人读取的 `alerts.json`、`capability_status.json`；`HealthFreshnessCapability`；`install.sh` 中从未调用的 `reload_launchd_plist` 与 `--dev` 自写 plist 分支（统一走 `penpal install init`）；`penpal start` 的手动 fork 守护模式；健康检查里已停用的自愈分支与 streak；`keypulse.log` fallback 读取（首次解析时仅在 `penpal.log` 不存在时迁移一次，之后只读写 `penpal.log` 并轮转）。升级清理：`penpal install init` 关闭早于 HUD 运行记录（hud.json）的旧版 HUD 进程并在已安装 Penpal.app 时重新打开它。

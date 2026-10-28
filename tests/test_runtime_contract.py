@@ -172,24 +172,26 @@ def test_wake_time_is_the_core_progress_staleness_anchor(
     assert len(calls) == 1
 
 
-@pytest.mark.parametrize("hud_state", ["absent", "visible", "hidden", "unknown", "stale", "woke", "dead"])
+@pytest.mark.parametrize("hud_state", ["absent", "visible", "hidden", "starting", "unknown", "stale", "woke", "dead"])
 def test_r1_hud_state_matrix_is_shared_by_status_and_doctor(monkeypatch, temporary_home, tmp_path, hud_state):
     tick = NOW - timedelta(seconds=46 if hud_state in {"stale", "woke", "dead"} else 5)
+    # "starting": launched 10 s ago, before macOS has drawn the status item.
+    start = str((NOW - timedelta(seconds=10)).timestamp()) if hud_state == "starting" else START
     record = None if hud_state == "absent" else HudRecord(
         pid=PID + 10,
-        process_start_time=START,
+        process_start_time=start,
         generation="hud-generation",
         identity=RuntimeIdentity(FINGERPRINT, __version__, "config-hash", SCHEMA_VERSION, SCHEMA_VERSION),
         last_model_built_at=(NOW - timedelta(seconds=60)).isoformat(),
         last_main_thread_tick_at=tick.isoformat(),
         status_item_created=True,
-        status_item_visible=None if hud_state == "unknown" else hud_state not in {"hidden", "dead"},
+        status_item_visible=None if hud_state == "unknown" else hud_state not in {"hidden", "starting", "dead"},
     )
     monkeypatch.setattr(EVALUATOR, "is_installed", lambda: True)
     monkeypatch.setattr(
         EVALUATOR,
         "process_start_time",
-        lambda pid: None if hud_state == "dead" and pid == PID + 10 else START,
+        lambda pid: None if hud_state == "dead" and pid == PID + 10 else (start if pid == PID + 10 else START),
     )
     identity = RuntimeIdentity(FINGERPRINT, __version__, "config-hash", SCHEMA_VERSION, SCHEMA_VERSION)
     runtime = evaluate(
@@ -208,6 +210,7 @@ def test_r1_hud_state_matrix_is_shared_by_status_and_doctor(monkeypatch, tempora
         "absent": None,
         "visible": None,
         "hidden": "菜单栏图标被系统隐藏",
+        "starting": None,
         "unknown": None,  # macOS exposes no API for the Menu Bar toggle; a standing warning would be noise
         "stale": "HUD 无响应",
         "woke": None,
