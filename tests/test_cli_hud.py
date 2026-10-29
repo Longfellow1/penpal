@@ -6,6 +6,7 @@ from click.testing import CliRunner
 
 from penpal.cli import main
 from penpal.runtime import RuntimeState, RuntimeStatus
+from penpal.runtime.control import ControlResult
 from penpal.runtime.evaluate import HudStatus, Issue
 
 
@@ -35,30 +36,74 @@ def test_hud_invokes_hud_runner_by_default(monkeypatch, tmp_path):
     assert "hud_cfg" in captured
 
 
-def test_hud_start_invokes_hud_runner(monkeypatch, tmp_path):
-    captured = {}
-    pid_path = tmp_path / "hud.pid"
+def test_hud_start_opens_bundle_and_reports_pid_and_never_calls_run_hud(monkeypatch):
+    relaunch_called = []
+    run_hud_called = []
 
-    def fake_load():
-        return type("Cfg", (), {"db_path_expanded": object(), "log_path_expanded": object()})()
-
-    def fake_require_db(cfg):
-        captured["db_cfg"] = cfg
-
-    def fake_run_hud(cfg):
-        captured["hud_cfg"] = cfg
-
-    monkeypatch.setattr("penpal.cli.app.get_config", fake_load)
-    monkeypatch.setattr("penpal.cli.app.require_db", fake_require_db)
-    monkeypatch.setattr("penpal.cli.app.run_hud", fake_run_hud)
+    monkeypatch.setattr("penpal.cli.app.active_hud_pid", lambda: 4242 if relaunch_called else None)
     monkeypatch.setattr("penpal.cli.app._find_legacy_hud_pid", lambda: None)
-    monkeypatch.setattr("penpal.cli.app.get_hud_pid_path", lambda: pid_path)
+    monkeypatch.setattr(
+        "penpal.cli.app.relaunch_hud",
+        lambda: (relaunch_called.append(True) or ControlResult(True, "relaunch_hud")),
+    )
+    monkeypatch.setattr("penpal.cli.app.wait_for_hud_ready", lambda: True)
+    monkeypatch.setattr("penpal.cli.app.run_hud", lambda cfg=None: run_hud_called.append(True))
 
     result = CliRunner().invoke(main, ["hud", "start"])
 
     assert result.exit_code == 0
-    assert "db_cfg" in captured
-    assert "hud_cfg" in captured
+    assert relaunch_called == [True]
+    assert run_hud_called == []
+    assert "4242" in result.output
+    assert ("HUD 已启动（PID 4242）。" in result.output or "HUD started (PID 4242)." in result.output)
+
+
+def test_hud_start_relaunch_error_exits_one(monkeypatch):
+    monkeypatch.setattr("penpal.cli.app.active_hud_pid", lambda: None)
+    monkeypatch.setattr("penpal.cli.app._find_legacy_hud_pid", lambda: None)
+    monkeypatch.setattr(
+        "penpal.cli.app.relaunch_hud",
+        lambda: ControlResult(
+            False,
+            "relaunch_hud",
+            error_zh="未找到安装的 Penpal.app，请运行 penpal app install。",
+            error_en="Penpal.app is not installed; run penpal app install.",
+        ),
+    )
+
+    result = CliRunner().invoke(main, ["hud", "start"])
+
+    assert result.exit_code == 1
+    assert "penpal app install" in result.output
+
+
+def test_hud_start_not_ready_in_time_exits_one(monkeypatch):
+    monkeypatch.setattr("penpal.cli.app.active_hud_pid", lambda: None)
+    monkeypatch.setattr("penpal.cli.app._find_legacy_hud_pid", lambda: None)
+    monkeypatch.setattr("penpal.cli.app.relaunch_hud", lambda: ControlResult(True, "relaunch_hud"))
+    monkeypatch.setattr("penpal.cli.app.wait_for_hud_ready", lambda: False)
+
+    result = CliRunner().invoke(main, ["hud", "start"])
+
+    assert result.exit_code == 1
+    assert ("未就绪" in result.output or "not ready" in result.output)
+    assert "penpal doctor" in result.output
+
+
+def test_hud_start_already_running_does_not_relaunch(monkeypatch):
+    relaunch_called = []
+    monkeypatch.setattr("penpal.cli.app.active_hud_pid", lambda: 4242)
+    monkeypatch.setattr(
+        "penpal.cli.app.relaunch_hud",
+        lambda: (relaunch_called.append(True) or ControlResult(True, "relaunch_hud")),
+    )
+
+    result = CliRunner().invoke(main, ["hud", "start"])
+
+    assert result.exit_code == 1
+    assert relaunch_called == []
+    assert "4242" in result.output
+    assert "already running" in result.output.lower()
 
 
 def test_hud_stop_terminates_running_instance(monkeypatch, tmp_path):
@@ -85,6 +130,7 @@ def test_hud_stop_terminates_running_instance(monkeypatch, tmp_path):
             state["running"] = False
 
     monkeypatch.setattr("penpal.cli.app.os.kill", fake_kill)
+    monkeypatch.setattr("penpal.cli.app.pid_is_running", lambda pid: state["running"])
 
     result = CliRunner().invoke(main, ["hud", "stop"])
 
@@ -111,6 +157,7 @@ def test_hud_stop_finds_the_app_hud_by_its_record_before_removing_it(monkeypatch
     monkeypatch.setattr("penpal.cli.app.find_legacy_hud_pids", lambda: [])
     monkeypatch.setattr("penpal.foundation.hud_record.remove_hud_record", lambda: record.update(present=False))
     monkeypatch.setattr("penpal.cli.app.os.kill", fake_kill)
+    monkeypatch.setattr("penpal.cli.app.pid_is_running", lambda pid: state["running"])
 
     result = CliRunner().invoke(main, ["hud", "stop"])
 
@@ -142,6 +189,7 @@ def test_hud_stop_falls_back_to_legacy_process_lookup(monkeypatch, tmp_path):
         calls.append((pid, sig))
 
     monkeypatch.setattr("penpal.cli.app.os.kill", fake_kill)
+    monkeypatch.setattr("penpal.cli.app.pid_is_running", lambda pid: False)
 
     result = CliRunner().invoke(main, ["hud", "stop"])
 
@@ -244,3 +292,52 @@ def test_running_hud_pids_includes_the_current_hud_from_its_record(monkeypatch):
     monkeypatch.setattr("penpal.cli.app.find_legacy_hud_pids", lambda: [5151, 4242])
 
     assert app_cli._running_hud_pids() == [4242, 5151]
+
+
+def test_hud_stop_reports_stopped_only_after_pid_is_gone(monkeypatch):
+    class FakeLock:
+        def is_running(self):
+            return False
+
+    monkeypatch.setattr("penpal.cli.app._hud_lock", FakeLock)
+    monkeypatch.setattr("penpal.cli.app._running_hud_pids", lambda: [7777])
+    monkeypatch.setattr("penpal.cli.app.os.kill", lambda pid, sig: None)
+
+    alive_states = [True, True, False]
+
+    def fake_pid_is_running(pid):
+        assert pid == 7777
+        if alive_states:
+            return alive_states.pop(0)
+        return False
+
+    sleep_calls = []
+    monkeypatch.setattr("penpal.cli.app.pid_is_running", fake_pid_is_running)
+    monkeypatch.setattr("penpal.cli.app.time.sleep", lambda s: sleep_calls.append(s))
+
+    result = CliRunner().invoke(main, ["hud", "stop"])
+
+    assert result.exit_code == 0
+    assert "hud stopped" in result.output.lower()
+    assert len(sleep_calls) == 3
+
+
+def test_hud_stop_reports_fallback_when_pid_does_not_exit(monkeypatch):
+    class FakeLock:
+        def is_running(self):
+            return False
+
+    monkeypatch.setattr("penpal.cli.app._hud_lock", FakeLock)
+    monkeypatch.setattr("penpal.cli.app._running_hud_pids", lambda: [7777])
+    monkeypatch.setattr("penpal.cli.app.os.kill", lambda pid, sig: None)
+
+    sleep_calls = []
+    monkeypatch.setattr("penpal.cli.app.pid_is_running", lambda pid: True)
+    monkeypatch.setattr("penpal.cli.app.time.sleep", lambda s: sleep_calls.append(s))
+
+    result = CliRunner().invoke(main, ["hud", "stop"])
+
+    assert result.exit_code == 0
+    assert len(sleep_calls) == 50
+    assert "stop signal sent" in result.output.lower()
+

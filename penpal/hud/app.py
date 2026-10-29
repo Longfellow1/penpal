@@ -39,6 +39,7 @@ from penpal.runtime.evaluate import current_identity, loaded_identity
 from penpal.store.repository import get_state, set_state
 
 REFRESH_SEC = 15.0
+SIGNAL_WAKE_SEC = 0.5
 MESSAGE_HANDLER_NAME = "penpal"
 BADGE_COLORS = {"red": (0.77, 0.28, 0.23), "amber": (0.78, 0.54, 0.16)}
 
@@ -113,6 +114,7 @@ class PenpalHUDApp(NSObject):
         self.controller = HudController(
             Config.load,
             copy_to_clipboard=lambda text: AppHelper.callAfter(_copy_to_pasteboard, text),
+            quit_hud=self._quit_hud,
         )
         self.pending_count = 0
         self.pending_count_error = None
@@ -343,6 +345,9 @@ class PenpalHUDApp(NSObject):
     def popoverDidClose_(self, _notification):
         self._worker.submit(self.controller.popover_closed, rebuild=True)
 
+    def wakeForSignals_(self, _timer):
+        pass
+
     def pollSignals_(self, _timer):
         self._record_main_thread_tick()
         self._sync_pending_count()
@@ -473,6 +478,10 @@ class PenpalHUDApp(NSObject):
 
         threading.Thread(target=_run_restart, daemon=True, name="hud-daemon-restart").start()
 
+    @objc.python_method
+    def _quit_hud(self) -> None:
+        AppHelper.callAfter(self.confirmQuit_, None)
+
     @objc.IBAction
     def confirmQuit_(self, _sender):
         self.popover.performClose_(None)
@@ -502,6 +511,9 @@ def run_hud(cfg: Config | None = None) -> None:
     signal.signal(signal.SIGINT, _force_shutdown)
     signal.signal(signal.SIGTERM, _force_shutdown)
 
+    NSTimer.scheduledTimerWithTimeInterval_target_selector_userInfo_repeats_(
+        SIGNAL_WAKE_SEC, delegate, objc.selector(delegate.wakeForSignals_, signature=b"v@:@"), None, True
+    )
     NSTimer.scheduledTimerWithTimeInterval_target_selector_userInfo_repeats_(
         REFRESH_SEC, delegate, objc.selector(delegate.pollSignals_, signature=b"v@:@"), None, True
     )

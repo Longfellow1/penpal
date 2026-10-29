@@ -97,7 +97,7 @@ def test_overview_normal():
     assert m["title"] == "概览" and m["back"] is None and not m["dim"]
     assert m["status"] == {"code": "running", "tone": "ok", "text": "正在记录", "sub": "一切正常 · 2 分钟前写入"}
     assert m["pause"] == {"label": "暂停", "action": "capture.pause"}
-    assert [t["label"] for t in m["tabs"]] == ["概览", "AI 访问", "隐私与删除"]
+    assert [t["label"] for t in m["tabs"]] == ["概览", "AI 访问", "设置"]
     assert all(t["badge"] is None for t in m["tabs"])
     stats = next(s for s in m["sections"] if s["kind"] == "stats")
     assert [(x["v"], x["k"]) for x in stats["stats"]] == [("1,284", "新增记录"), ("36", "AI 查询"), ("2", "AI 已连接")]
@@ -337,7 +337,7 @@ def test_reveal_page_shows_secret_once_with_copy_and_done():
 
 def test_privacy_tab_keyboard_note_chat_exclusions_storage_delete():
     m = build_model(snap(), UiState(tab="privacy"))
-    assert m["title"] == "隐私与删除"
+    assert m["title"] == "设置"
     scope = m["sections"][0]
     kb = scope["rows"][0]
     assert kb["title"] == "键盘片段"
@@ -351,6 +351,11 @@ def test_privacy_tab_keyboard_note_chat_exclusions_storage_delete():
         ("已存储", "38.2 万条 · 1.4 GB"), ("保留时间", "永久保留"), ("磁盘剩余", "86.0 GB")]
     delete = m["sections"][2]["rows"][0]
     assert delete["title"] == "删除数据" and delete["title_tone"] == "red" and delete["args"] == {"page": "delete"}
+    quit_sec = m["sections"][3]
+    assert titles(quit_sec) == ["退出 HUD"]
+    assert quit_sec["rows"][0]["title_tone"] == "red"
+    assert quit_sec["rows"][0]["action"] == "hud.quit"
+    assert "退出后菜单栏图标消失" in quit_sec["footer"]
 
 
 def test_keyboard_off_state_and_command_args():
@@ -361,11 +366,24 @@ def test_keyboard_off_state_and_command_args():
 
 def test_chat_app_page():
     m = build_model(snap(), UiState(tab="privacy", page="chat"))
-    assert m["title"] == "聊天 App" and m["back"]["label"] == "隐私与删除"
+    assert m["title"] == "聊天 App" and m["back"]["label"] == "设置"
     wechat, slack = m["sections"][0]["rows"]
     assert (wechat["title"], wechat["trail"]["on"], wechat["args"]) == ("微信", False, {"name": "WeChat", "allow": True})
     assert (slack["trail"]["on"], slack["args"]) == (True, {"name": "Slack", "allow": False})
     assert "私密" in m["sections"][0]["footer"]
+
+
+def test_settings_tab_viewmodel_label_and_quit_hud_section():
+    m = build_model(snap(), UiState(tab="privacy"))
+    assert m["title"] == "设置"
+    assert [t["label"] for t in m["tabs"]][2] == "设置"
+    last_section = m["sections"][-1]
+    assert titles(last_section) == ["退出 HUD"]
+    row = last_section["rows"][0]
+    assert row["title"] == "退出 HUD"
+    assert row["title_tone"] == "red"
+    assert row["action"] == "hud.quit"
+    assert last_section["footer"] == "退出后菜单栏图标消失，后台记录继续。重新打开：打开 Penpal.app，或运行 penpal hud start。"
 
 
 def test_exclusion_page_is_a_read_only_list():

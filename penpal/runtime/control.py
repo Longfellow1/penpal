@@ -63,7 +63,7 @@ def _default_killer(pid: int, sig: int) -> None:
     os.kill(pid, sig)
 
 
-def _default_pid_is_running(pid: int) -> bool:
+def pid_is_running(pid: int) -> bool:
     try:
         os.kill(pid, 0)
         return True
@@ -154,7 +154,7 @@ def stop_legacy_huds(
     if not pids:
         return []
 
-    pid_alive = is_running if is_running is not None else _default_pid_is_running
+    pid_alive = is_running if is_running is not None else pid_is_running
     stopped: list[int] = []
 
     for pid in pids:
@@ -495,7 +495,7 @@ def restart_hud(
     *,
     active_pid_finder: Callable[[], int | None] | None = None,
     killer: Callable[[int, int], None] = _default_killer,
-    is_running: Callable[[int], bool] = _default_pid_is_running,
+    is_running: Callable[[int], bool] = pid_is_running,
     sleep: Callable[[float], None] = time.sleep,
     monotonic: Callable[[], float] = time.monotonic,
     kill_timeout_sec: float = 5.0,

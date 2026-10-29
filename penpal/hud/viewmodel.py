@@ -25,7 +25,7 @@ from penpal.hud.snapshot import (
     source_label,
 )
 
-TABS = (("overview", "概览"), ("access", "AI 访问"), ("privacy", "隐私与删除"))
+TABS = (("overview", "概览"), ("access", "AI 访问"), ("privacy", "设置"))
 KEYBOARD_RISK_NOTE = "过滤为尽力而为，可能记录到敏感内容，返回云端 AI 时可能出站"
 EGRESS_FOOTER = "查到的内容会进入它的对话，可能发送到它的云端服务。"
 
@@ -454,6 +454,10 @@ def page_privacy(snap: Snapshot) -> list[dict]:
             row("磁盘剩余", value=disk, value_tone="red" if full else None),
         ], "存储"),
         lst([row("删除数据", title_tone="red", nav=True, action="nav.page", args={"page": "delete"})]),
+        lst(
+            [row("退出 HUD", title_tone="red", action="hud.quit")],
+            footer="退出后菜单栏图标消失，后台记录继续。重新打开：打开 Penpal.app，或运行 penpal hud start。",
+        ),
     ]
 
 
@@ -519,7 +523,7 @@ def _back_label(page: str) -> str:
         return "概览"
     if page.startswith("host:") or page == "reveal":
         return "AI 访问"
-    return "隐私与删除"
+    return "设置"
 
 
 def build_model(snap: Snapshot, ui: UiState, delete_preview: Optional[dict[str, int]] = None) -> dict[str, Any]:

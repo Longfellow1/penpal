@@ -227,3 +227,64 @@ def test_confirm_quit_removes_hud_record(shell, monkeypatch):
     assert removed == [True]
     assert terminated == [True]
 
+
+def test_wake_for_signals_is_noop(shell):
+    assert shell.wakeForSignals_(None) is None
+
+
+def test_run_hud_registers_signal_wake_timer(monkeypatch):
+    timers = []
+    fake_app = types.SimpleNamespace(
+        setActivationPolicy_=lambda policy: None,
+        setDelegate_=lambda delegate: None,
+        run=lambda: None,
+    )
+    fake_appkit = types.SimpleNamespace(
+        NSApplication=types.SimpleNamespace(sharedApplication=lambda: fake_app),
+        NSApplicationActivationPolicyAccessory=0,
+    )
+    fake_delegate = hud_app.PenpalHUDApp.alloc().init()
+    monkeypatch.setattr(hud_app, "AppKit", fake_appkit)
+    monkeypatch.setattr(
+        hud_app,
+        "PenpalHUDApp",
+        types.SimpleNamespace(alloc=lambda: types.SimpleNamespace(initWithConfig_=lambda cfg: fake_delegate)),
+    )
+    monkeypatch.setattr(hud_app.signal, "signal", lambda sig, handler: None)
+
+    def fake_timer(interval, target, selector, user_info, repeats):
+        timers.append({
+            "interval": interval,
+            "target": target,
+            "selector": selector,
+            "user_info": user_info,
+            "repeats": repeats,
+        })
+
+    monkeypatch.setattr(
+        hud_app,
+        "NSTimer",
+        types.SimpleNamespace(scheduledTimerWithTimeInterval_target_selector_userInfo_repeats_=fake_timer),
+    )
+
+    fake_cfg = types.SimpleNamespace()
+    hud_app.run_hud(fake_cfg)
+
+    fast_timers = [t for t in timers if t["interval"] <= 1.0]
+    assert len(fast_timers) == 1
+    timer = fast_timers[0]
+    assert timer["repeats"] is True
+    assert timer["target"] is fake_delegate
+    assert "wakeForSignals" in str(timer["selector"].selector)
+    assert fake_delegate.wakeForSignals_(None) is None
+
+
+def test_quit_hud_schedules_confirm_quit_via_call_after(shell, monkeypatch):
+    calls = []
+    monkeypatch.setattr(hud_app.AppHelper, "callAfter", lambda fn, *args: calls.append((fn, args)))
+
+    shell._quit_hud()
+
+    assert calls == [(shell.confirmQuit_, (None,))]
+
+
