@@ -5,6 +5,19 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)，
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [0.4.1] - 2026-10-28
+
+完整说明见 `docs/releases/v0.4.1.md`。
+
+### 修复
+
+- MCP：Penpal 自动换新两次以后，已打开的 AI 助手会话里每次查询都返回 `Invalid request parameters`，只能重开助手。现在每次换新都会把会话交接给新进程（#162）。
+- HUD：macOS 26 上菜单栏图标明明在显示，`penpal doctor`、`penpal hud status` 和 HUD 却报"图标被系统隐藏"。macOS 26 起改为只用系统给出的可见状态判断（#163）。
+
+### 升级须知
+
+- 升级前已经出现上述报错的 AI 助手会话无法自行恢复，需要重开一次。
+
 ## [0.4.0] - 2026-10-28
 
 完整说明见 `docs/releases/v0.4.0.md`。
