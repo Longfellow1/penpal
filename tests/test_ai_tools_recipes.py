@@ -760,6 +760,40 @@ def test_coverage_per_tool_last_error_isolation(tmp_path: Path):
     assert by_id["tool_b"]["last_error"] is None
 
 
+def test_coverage_hides_schema_mismatch_once_another_history_delivers(tmp_path: Path):
+    """A tool with histories for two versions shows no error when only the uninstalled version mismatches."""
+    init_db(tmp_path / "penpal.db")
+    from penpal.store.sync_repo import ensure_source, record_sync_error
+
+    sessions_dir = tmp_path / "jsonl_sessions"
+    sessions_dir.mkdir(parents=True)
+    (sessions_dir / "test.jsonl").write_text(
+        json.dumps({"msg_id": "m1", "conv_id": "c1", "role": "human", "content": "hi", "ts": "2026-05-01T10:00:00Z"}) + "\n",
+        encoding="utf-8",
+    )
+    catalog_dir = tmp_path / "test_catalog"
+    catalog_dir.mkdir(parents=True)
+    recipe_content = (FIXTURES_DIR / "example_jsonl" / "recipe.toml").read_text(encoding="utf-8")
+    (catalog_dir / "example_jsonl.toml").write_text(recipe_content, encoding="utf-8")
+    env = {"TEST_DIR": str(tmp_path)}
+
+    # The other version's history has no matching table on this machine.
+    record_sync_error(ensure_source("ai_tools", "example_jsonl#1@/fake/other.db"), "schema_mismatch")
+    rows, _ = compute_tool_coverage(catalog_dir=catalog_dir, env=env)
+    assert rows[0]["last_error"] == "schema_mismatch"
+
+    source = AiToolsSource(catalog_dir=catalog_dir, use_cursor=True, env=env)
+    inst = source.discover()[0]
+    from penpal.sources.sink import persist_semantic_event
+    for e in source.read(inst, datetime(2020, 1, 1, tzinfo=timezone.utc), datetime.now(timezone.utc)):
+        persist_semantic_event(e)
+    source.commit_cursors()
+
+    rows, _ = compute_tool_coverage(catalog_dir=catalog_dir, env=env)
+    assert rows[0]["ingested_sessions"] == 1
+    assert rows[0]["last_error"] is None
+
+
 def test_coverage_sanitizes_last_error_no_raw_paths():
     """Defect 12: Coverage last_error must never leak raw paths or exceptions."""
     from penpal.sources.coverage import _sanitize_last_error
@@ -767,6 +801,8 @@ def test_coverage_sanitizes_last_error_no_raw_paths():
     assert _sanitize_last_error("format_drift: 0.42") == "format_drift 0.42"
     assert _sanitize_last_error("blocked_sqlite: sensitive:/Users/foo/secret/Cookies") == "blocked_sqlite"
     assert _sanitize_last_error("probe_error") == "probe_error"
+    for label in ("schema_mismatch", "sqlite_locked", "zstd_unavailable"):
+        assert _sanitize_last_error(label) == label
     assert _sanitize_last_error("sqlite3.OperationalError: /Users/foo/sensitive.db is locked") == "read_error"
     assert _sanitize_last_error(None) is None
 
