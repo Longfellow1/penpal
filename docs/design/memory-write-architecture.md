@@ -225,27 +225,26 @@ style = "json_mcpServers"
 | 高 | Cursor | 可读（无官方格式） | `state.vscdb` 中的 `cursorDiskKV`；`~/.cursor/projects/**/agent-transcripts` | `~/.cursor/mcp.json` | 内置配方，只读快照打开 |
 | 高 | VS Code Copilot Chat | 部分 | `workspaceStorage/*/chatSessions/*.json(l)` | 用户级 `mcp.json`（键 `servers`） | 内置配方，两种格式都支持 |
 | 高 | Claude 桌面 | 部分 | 本地只有 Agent / Code 会话目录，聊天在云端 | `claude_desktop_config.json` | 接入 MCP；读本地 Agent 会话 |
-| 高 | ChatGPT 桌面 | **不可读**（2024-07 起加密） | — | 未证实 | 见 §5.3 |
+| 高 | ChatGPT 桌面 | **不可读**（2024-07 起加密） | — | 未证实 | 不采集（§5.3），标为不可读 |
 | 中 | Antigravity（含原 Gemini CLI） | 可读 | `~/.gemini/antigravity*/brain/*/…/transcript.jsonl`；`~/.gemini/tmp/*/chats` | `~/.gemini/…` | 内置配方 |
 | 中 | Windsurf | 部分 | `~/.codeium/windsurf/cascade/*.pb`（protobuf） | `mcp_config.json` | MCP 先接；历史用代码适配器，放第二批 |
 | 中 | Cline / Roo / Kilo | 可读 | 每个任务一个 `api_conversation_history.json`（整文件重写） | 各自 `mcp_settings.json` | 内置配方，按 mtime 做增量 |
-| 中 | 豆包桌面 | 未证实 | — | 未证实 | 见 §5.3 |
+| 中 | 豆包桌面 | 未证实 | — | 未证实 | 不采集（§5.3），标为不可读 |
 | 中低 | Kiro、Trae CLI、Qwen Code、opencode、Goose、LM Studio、Continue、Zed、Kimi Code | 大多可读 | JSONL / SQLite / JSON（Zed 需 zstd） | 多数支持 | 内置配方 |
 | 低 | WorkBuddy / CodeBuddy、Hermes、pi、OpenClaw、iFlow、Factory Droid、Aider、Amp、Cherry Studio | 大多可读 | 见 deja-vu 路径表 | 部分支持 | 内置配方；没有现成格式的走 §3.3 |
 | 低 | Qoder IDE、TRAE IDE | **不可读**（加密） | — | 支持 | 只接 MCP |
-| 低 | Perplexity、DeepSeek、Kimi 桌面、Ollama 桌面 | 未证实 | — | 未证实 | 见 §5.3 |
+| 低 | Perplexity、DeepSeek、Kimi 桌面、Ollama 桌面 | 未证实 | — | 未证实 | 不采集（§5.3），标为不可读；支持 MCP 的照常接入 |
 
-估算：内置配方做完后，加权自动采集覆盖率约 78%；再加上 Windsurf 适配器约 82%。差距集中在个人助理类：ChatGPT、豆包。
+估算：内置配方做完后，加权自动采集覆盖率约 78%；再加上 Windsurf 适配器约 82%。差距集中在个人助理类：ChatGPT、豆包。按 §5.3 的决定，这类工具移出采集分母，所以实际估算会更高，以 `penpal sources coverage` 实测为准。
 
-### 5.3 个人助理类的缺口
+### 5.3 个人助理类：第一阶段不覆盖（负责人 2026-10-29 决定）
 
-ChatGPT 桌面的本地会话是加密的。豆包、Kimi、DeepSeek 桌面版查不到公开的本地格式，大概率只存在云端。按 §4 不破解、不读凭据，所以这类工具没有"读盘"这条路。可选的补法：
+ChatGPT 桌面的本地会话是加密的。豆包、Kimi、DeepSeek 桌面版查不到公开的本地格式，大概率只存在云端。按 §4 不破解、不读凭据，所以这类工具没有"读盘"这条路。
 
-1. **屏幕可见对话采集**：用已有的辅助功能权限，在用户打开这些 App 时读取窗口里可见的对话文字，按对话去重入库。现有 AX 采集已经有零星记录，比如负责人本机最近 7 天在 ChatGPT 窗口记了 31 条，但不是完整对话。需要一个 1 天的试验，验证完整度和 CPU 开销。
-2. **官方导出导入**：ChatGPT、Claude 等提供数据导出，`penpal import <export.zip>` 一次性导入，之后靠方案 1 增量补充。
-3. **MCP 接入**：支持的就自动接上（Claude 桌面支持；ChatGPT 桌面未证实），让它们至少能读 Penpal。
-
-是否用方案 1 + 2 把个人助理计入第一阶段的 80%，需要负责人决定。
+曾考虑三种补法：读屏幕上可见的对话、导入官方导出、MCP 接入。负责人的决定是：读屏幕抓不到完整对话，放弃这一类，不做替代采集。落地口径：
+- 这些工具在 catalog 里标 `readable = false` 并写明原因，`penpal sources coverage` 会照实显示为"不可读"，不计入采集分母。
+- 支持 MCP 的照常自动接入，让它们能读 Penpal；这不算采集。
+- 不做屏幕对话采集，也不做导出包导入。以后要重开，需要负责人重新决定。
 
 ## 6. 分期与验收
 

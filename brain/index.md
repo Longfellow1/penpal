@@ -1,8 +1,8 @@
 # Brain Index
 
-_Auto-generated. Last updated 2026-10-28T12:18:49.243Z._
+_Auto-generated. Last updated 2026-10-29T02:25:03.314Z._
 
-- [ai-tool-auto-coverage](pages/ai-tool-auto-coverage.md) — category: decision | tags: [capture, mcp, coverage, memmy] | Requirement (user, 2026-10-28, must ship): Phase 1 of the Memmy-class work covers at least 80% of the mainstream personal AI assistants and
+- [ai-tool-auto-coverage](pages/ai-tool-auto-coverage.md) — category: decision | tags: [capture, mcp, coverage, memmy] | Requirement (user, 2026-10-28, must ship): Phase 1 of the Memmy-class work covers at least 80% of the mainstream AI agents and IDEs a Mac us
 - [anchors-json-is-ssot](pages/anchors-json-is-ssot.md) — category: decision | ## Decision
 - [beat-vs-emit-separation](pages/beat-vs-emit-separation.md) — category: decision | ## Decision
 - [browser-classified-by-site](pages/browser-classified-by-site.md) — category: decision | tags: [v1, capture, buckets, decision] | <current best understanding — replace this with the real content>

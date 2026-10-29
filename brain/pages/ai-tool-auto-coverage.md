@@ -5,22 +5,24 @@ category: decision
 status: active
 tags: [capture, mcp, coverage, memmy]
 created: "2026-10-28T20:18:26"
-updated: "2026-10-28T20:18:49"
+updated: "2026-10-29T10:25:03"
 ---
 
 <!-- compiled_truth -->
-Requirement (user, 2026-10-28, must ship): Phase 1 of the Memmy-class work covers at least 80% of the mainstream personal AI assistants and agents a Mac user may run, discovered automatically, synced incrementally, and connected by default (no per-tool manual setup or approval).
+Requirement (user, 2026-10-28, must ship): Phase 1 of the Memmy-class work covers at least 80% of the mainstream AI agents and IDEs a Mac user may run. Tools are discovered automatically, synced incrementally, and connected by default, with no per-tool setup or approval.
 
-- Coverage is measured against a written, weighted list of mainstream Mac AI tools: coding agents/IDEs and personal-assistant desktop apps. The list and its weights live in docs/design/memory-write-architecture.md.
-- Discovery is adaptive, not one hand-written parser per tool. A recipe engine runs built-in declarative recipes for the main tools and host-AI-written recipes for the long tail. Core executes recipes deterministically, which keeps [[core-no-embedded-llm]].
-- Incremental sync uses per-source cursors (file offset, SQLite watermark) and stable message ids, so rescans are idempotent.
-- Default-on covers both capture and MCP registration for detected hosts. Every connected tool stays visible in the HUD and can be switched off there.
+- Scope (owner, 2026-10-29): personal-assistant apps whose chats are encrypted locally or live only in the cloud (ChatGPT desktop, Doubao, Kimi, DeepSeek desktop) are not captured. There is no screen capture and no export import. They are listed as unreadable and left out of the capture denominator. If they support MCP, they are still connected automatically.
+- Coverage is measured in two ways:
+  - primary: session coverage on a real Mac, via 'penpal sources coverage';
+  - secondary: a weighted list of mainstream Mac AI tools, kept with its weights in docs/design/memory-write-architecture.md.
+- Discovery is adaptive, not one hand-written parser per tool:
+  - a recipe engine runs built-in declarative recipes for the main tools;
+  - host-AI-written recipes cover the long tail;
+  - core executes recipes deterministically, which keeps [[core-no-embedded-llm]].
+- Incremental sync uses per-source cursors (file offset, record index, SQLite watermark) and stable message ids, so rescans are idempotent.
+- Default-on covers both capture and MCP registration for detected hosts. Every connected tool stays visible and can be switched off.
 
-Baseline on 2026-10-28:
-- Only Claude Code and Codex CLI were captured, through hard-coded paths and per-file offset cursors.
-- MCP registration printed per-host commands and wrote nothing.
-- The owner Mac alone has about 20 AI tools installed (apps, CLIs or data dirs): Claude desktop, ChatGPT, Cursor, Kiro, VS Code (+Copilot/Continue), Windsurf/Codeium, Trae, Antigravity, Qoder, CodeBuddy/WorkBuddy, Doubao, Gemini CLI, Qwen Code, opencode, Goose, Factory Droid, iFlow, OpenClaw, Hermes, pi, LM Studio, Ollama.
-- Memmy 1.0.9 there covered 8 tools.
+Baseline on 2026-10-28: Penpal captured only Claude Code and Codex CLI, and 77% of Codex sessions (zstd-compressed) were missed. Session coverage on the owner Mac was about 20%. Memmy 1.0.9 there covered 8 tools.
 
 
 ## Timeline
@@ -35,4 +37,16 @@ Baseline on 2026-10-28:
   kind: decision
   summary: Requirement and baseline
   source: user 2026-10-28
+  affects: [ai-tool-auto-coverage]
+
+- time: 2026-10-29T10:24:51
+  kind: decision
+  summary: "Phase 1 drops encrypted/cloud-only personal assistants (ChatGPT, Doubao, Kimi, DeepSeek): no screen capture, no export import; listed unreadable, out of the capture denominator; MCP still auto-connected"
+  source: "owner 2026-10-29: 用读屏幕抓不到完整数据……直接放弃就好了"
+  affects: [docs/design/memory-write-architecture.md §5.3, penpal/sources/catalog]
+
+- time: 2026-10-29T10:25:03
+  kind: decision
+  summary: "scope: agents/IDEs; encrypted/cloud-only personal assistants excluded (owner 2026-10-29)"
+  source: owner 2026-10-29
   affects: [ai-tool-auto-coverage]
