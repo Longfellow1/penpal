@@ -5,7 +5,7 @@ category: decision
 status: active
 tags: [runtime, health, hud, doctor, launchd, mcp]
 created: "2026-10-24T23:46:07"
-updated: "2026-10-28T20:03:52"
+updated: "2026-10-28T20:42:42"
 ---
 
 <!-- compiled_truth -->
@@ -130,3 +130,9 @@ Decision (D36, 2026-10-24, owner accepted all recommendations after a deep-fix a
   summary: "macOS 26: HUD visibility uses isVisible() only; Control Center draws status items, so app-window occlusion is meaningless"
   source: "owner Mac 2026-10-28: eye check vs CGWindowList owners; PR fix/hud-visibility-macos26"
   affects: [penpal/hud/app.py, docs/design/runtime-contract.md, docs/Penpal_Eval_PRD.md]
+
+- time: 2026-10-28T20:42:42
+  kind: decision
+  summary: "HUD self-heal: re-check entry, per-issue Fix via one core repair function (= doctor --fix), daemon supervises HUD (crash/hang relaunch, budgeted; deliberate quit not relaunched)"
+  source: "user 2026-10-28: 你补…我的要求就是自愈能力恢复成可用、好用状态"
+  affects: [penpal/hud, penpal/runtime, penpal/health, docs/design/runtime-contract.md, docs/Penpal_Eval_PRD.md]

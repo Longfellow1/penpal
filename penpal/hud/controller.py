@@ -67,6 +67,18 @@ class HudModelWorker:
             self._fresh = self._fresh or fresh
             self._condition.notify()
 
+    def push_current_model(self) -> None:
+        model = self.controller.model()
+        built_at = datetime.now(timezone.utc).isoformat()
+        model["model_built_at"] = built_at
+        payload = json.dumps(model, ensure_ascii=False).replace("</", "<\\/")
+        script = f"window.render({payload});"
+        badge = model["tabs"][0].get("badge") if model.get("tabs") else None
+        self.main_dispatcher(lambda script=script, badge=badge: self.apply_script(script, badge))
+
+    def _push_current_model(self) -> None:
+        self.push_current_model()
+
     def dispatch(self, action: str, args: Optional[dict] = None) -> None:
         with self._condition:
             self._actions.append((action, args if isinstance(args, dict) else {}))
@@ -139,15 +151,20 @@ class HudController:
         copy_to_clipboard: Optional[Callable[[str], None]] = None,
         spawn: Callable[[Callable[[], Any]], None] = _spawn,
         clock: Callable[[], datetime] = lambda: datetime.now(timezone.utc),
+        push_model: Optional[Callable[[], None]] = None,
     ) -> None:
         self._load_config = load_config
         self._copy = copy_to_clipboard
         self._spawn = spawn
         self._clock = clock
+        self._push_model = push_model
         self.ui = UiState()
         self._snap: Optional[Snapshot] = None
         self._snap_at = 0.0
         self._toast_seq = 0
+
+    def set_push_model(self, push_model: Optional[Callable[[], None]]) -> None:
+        self._push_model = push_model
 
     # ── model ────────────────────────────────────────────────────────────────
 
@@ -418,3 +435,30 @@ class HudController:
             url = spec.settings_pane
         permissions.open_settings_url(url)
         return False
+
+    def _do_health_recheck(self, args: dict) -> bool:
+        local_now = self._clock().astimezone()
+        now_str = local_now.strftime("%H:%M:%S")
+        self.ui = replace(self.ui, rechecked_at=now_str)
+        self._snap = None
+        self._snap_at = 0.0
+        return True
+
+    def _do_issue_repair(self, args: dict) -> bool:
+        from penpal.services.repair import repair
+
+        issue_code = str(args.get("issue_code") or "")
+        self._say("正在修复…")
+        if self._push_model is not None:
+            try:
+                self._push_model()
+            except Exception as exc:
+                LOGGER.warning("hud intermediate push_model failed: %s", type(exc).__name__)
+        result = repair(issue_code)
+        self._say(result.message_zh)
+        local_now = self._clock().astimezone()
+        now_str = local_now.strftime("%H:%M:%S")
+        self.ui = replace(self.ui, rechecked_at=now_str)
+        self._snap = None
+        self._snap_at = 0.0
+        return True

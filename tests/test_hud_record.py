@@ -49,4 +49,4 @@ def test_hud_record_staleness_uses_model_tick_not_model_build_time():
     status, issues = _hud_status(record, now=NOW, process_start_reader=lambda _pid: "start-42")
     assert status is not None and status.alive
     assert status.last_model_built_at == NOW.isoformat()
-    assert [issue.message_zh for issue in issues] == ["HUD 无响应：主线程超过 45 秒没有响应。可运行 `penpal hud stop` 后从 Finder 重新打开 Penpal.app。"]
+    assert [issue.message_zh for issue in issues] == ["HUD 无响应：主线程超过 45 秒没有响应。后台服务会自动重启它；也可运行 `penpal doctor --fix` 立即重启。"]

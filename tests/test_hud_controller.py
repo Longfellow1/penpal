@@ -423,3 +423,57 @@ def test_navigation_state_machine(hud, env):
     assert hud.dispatch("nav.back")["view"]["page"] == ""
     hud.dispatch("nav.page", {"page": "group:live"})
     assert hud.dispatch("nav.tab", {"tab": "access"})["view"] == {"tab": "access", "page": ""}  # switching tabs leaves the 2nd level
+
+
+def test_recheck_panel_action_updates_status_subtext(hud, env, monkeypatch):
+    from penpal.hud.snapshot import Snapshot
+
+    m = hud.dispatch("health.recheck")
+    assert "已重新检测" in m["status"]["sub"]
+    assert "1 个问题" in m["status"]["sub"]
+
+    # When no alerts are present, it shows 正常
+    monkeypatch.setattr("penpal.hud.viewmodel.alerts", lambda _snap: [])
+    m2 = hud.dispatch("health.recheck")
+    assert "已重新检测" in m2["status"]["sub"]
+    assert "正常" in m2["status"]["sub"]
+
+
+def test_repair_issue_action_dispatches_repair_and_rechecks(hud, env, monkeypatch):
+    from penpal.services.repair import RepairResult
+
+    repaired = []
+    monkeypatch.setattr(
+        "penpal.services.repair.repair",
+        lambda code: (repaired.append(code) or RepairResult(code, True, True, "已成功重启", "restarted")),
+    )
+    m = hud.dispatch("issue.repair", {"issue_code": "daemon.hung"})
+    assert repaired == ["daemon.hung"]
+    assert m["toast"]["text"] == "已成功重启"
+    assert "已重新检测" in m["status"]["sub"]
+
+
+def test_worker_does_not_monkeypatch_controller(env):
+    from penpal.hud.controller import HudModelWorker
+
+    ctrl = HudController(lambda: env)
+    assert getattr(ctrl, "_push_model", None) is None
+
+    worker = HudModelWorker(
+        ctrl,
+        main_dispatcher=lambda fn: fn(),
+        apply_script=lambda _s, _b: None,
+    )
+    # The worker must NOT monkeypatch ctrl._push_model
+    assert getattr(ctrl, "_push_model", None) is None
+
+
+def test_recheck_and_repair_use_injected_clock(env):
+    fixed_dt = datetime(2026, 10, 29, 14, 25, 36, tzinfo=timezone.utc)
+    expected_local_str = fixed_dt.astimezone().strftime("%H:%M:%S")
+
+    ctrl = HudController(lambda: env, clock=lambda: fixed_dt)
+    ctrl.dispatch("health.recheck")
+    assert ctrl.ui.rechecked_at == expected_local_str
+
+

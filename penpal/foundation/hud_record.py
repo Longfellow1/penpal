@@ -110,6 +110,14 @@ def write_hud_record(record: HudRecord, path: Path | None = None) -> None:
     atomic_write_text(target, payload)
 
 
+def remove_hud_record(path: Path | None = None) -> None:
+    target = path or get_hud_record_path()
+    try:
+        target.unlink(missing_ok=True)
+    except OSError:
+        pass
+
+
 class HudRecordStore:
     """Serialize main-thread ticks and worker model timestamps into one atomic record."""
 
