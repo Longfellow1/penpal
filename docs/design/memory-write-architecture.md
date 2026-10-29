@@ -224,7 +224,7 @@ style = "json_mcpServers"
 | 高 | Codex CLI / 桌面 | 可读 | `~/.codex/sessions/**/rollout-*.jsonl(.zst)` | `~/.codex/config.toml` | 已有；**补 zstd（本机 77% 的会话是压缩的）**和 archived_sessions |
 | 高 | Cursor | 可读（无官方格式） | `state.vscdb` 中的 `cursorDiskKV`；`~/.cursor/projects/**/agent-transcripts` | `~/.cursor/mcp.json` | 内置配方，只读快照打开 |
 | 高 | VS Code Copilot Chat | 部分 | `workspaceStorage/*/chatSessions/*.json(l)` | 用户级 `mcp.json`（键 `servers`） | 内置配方，两种格式都支持 |
-| 高 | Claude 桌面 | 部分 | 本地只有 Agent / Code 会话目录，聊天在云端 | `claude_desktop_config.json` | 接入 MCP；读本地 Agent 会话 |
+| 高 | Claude 桌面 | **不可读** | 聊天在云端；本地 Agent 会话目录只有工作文件，没有对话记录（2026-10-29 实测） | `claude_desktop_config.json` | 只接 MCP，标为不可读 |
 | 高 | ChatGPT 桌面 | **不可读**（2024-07 起加密） | — | 未证实 | 不采集（§5.3），标为不可读 |
 | 中 | Antigravity（含原 Gemini CLI） | 可读 | `~/.gemini/antigravity*/brain/*/…/transcript.jsonl`；`~/.gemini/tmp/*/chats` | `~/.gemini/…` | 内置配方 |
 | 中 | Windsurf | 部分 | `~/.codeium/windsurf/cascade/*.pb`（protobuf） | `mcp_config.json` | MCP 先接；历史用代码适配器，放第二批 |
@@ -236,6 +236,13 @@ style = "json_mcpServers"
 | 低 | Perplexity、DeepSeek、Kimi 桌面、Ollama 桌面 | 未证实 | — | 未证实 | 不采集（§5.3），标为不可读；支持 MCP 的照常接入 |
 
 估算：内置配方做完后，加权自动采集覆盖率约 78%；再加上 Windsurf 适配器约 82%。差距集中在个人助理类：ChatGPT、豆包。按 §5.3 的决定，这类工具移出采集分母，所以实际估算会更高，以 `penpal sources coverage` 实测为准。
+
+**P1 实际落地（2026-10-29）。** 配方只有在真实安装上核对过字段结构（只看键名和数量）才放进 catalog：
+- **已上线（8 个）**：Antigravity、Cursor（agent-transcripts + `state.vscdb`）、WorkBuddy、Kiro（IDE 会话）、opencode、Hermes、pi、Cline。另有 Claude Code、Codex 两个原有插件。
+- **标为不可读（5 个）**：Claude 桌面、ChatGPT、豆包、Kimi、DeepSeek。
+- **草稿待真实样本（10 个）**：Continue、Gemini CLI、Qwen Code、Copilot CLI、CodeBuddy、Goose、Kilo Code、Roo Code、OpenClaw、Kimi Code。负责人本机没有这些工具的数据，需要种子用户的样本核对后再上线。
+- **需要代码适配器，放第二期（6 个）**：LM Studio、VS Code Copilot Chat、Zed、Crush、Aider、Trae CLI。暂不计入 `penpal sources coverage` 的分母。
+- 没有逐条时间的格式（Cursor agent-transcripts、Kiro）用文件修改时间作为消息时间。
 
 ### 5.3 个人助理类：第一阶段不覆盖（负责人 2026-10-29 决定）
 

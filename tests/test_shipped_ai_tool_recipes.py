@@ -227,6 +227,8 @@ def test_shipped_recipe_workbuddy(tmp_path: Path):
     assert "wb-sess-1" in conv_ids and "wb-sub-1" in conv_ids
     assert "Workbuddy user prompt" in [e.intent for e in events]
     assert all(e.metadata.get("workspace") == "/workspace/workbuddy" for e in events)
+    # Same project keys as Claude Code / Codex, so project bucket rules apply to AI tool events.
+    assert all(e.metadata.get("cwd") == "/workspace/workbuddy" and e.metadata.get("project") == "workbuddy" for e in events)
     _assert_metadata_hygiene(events)
 
     source.commit_cursors()
@@ -644,3 +646,10 @@ def test_shipped_coverage_unreadable_doubao_excluded_from_totals(tmp_path: Path)
     assert totals["sessions_on_disk"] == 0
     assert totals["ingested_sessions"] == 0
     assert totals["percentage"] == 0.0
+
+
+def test_ai_tools_events_default_to_the_work_bucket():
+    """Captured AI tool chats must land in a shareable bucket, or no granted host can read them."""
+    from penpal.store.buckets import default_bucket_for_source
+
+    assert default_bucket_for_source("ai_tools", overrides={}) == default_bucket_for_source("codex_cli", overrides={}) == "Work"

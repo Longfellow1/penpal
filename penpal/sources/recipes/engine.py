@@ -15,6 +15,7 @@ from typing import Any, Callable, Iterator, Mapping
 
 import zstandard
 
+from penpal.foundation.project import normalize_project
 from penpal.foundation.sqlite_rules import is_blocked_sqlite
 from penpal.sources.recipes.catalog import HistoryRecipe, ToolRecipe, expand_vars_and_tilde
 from penpal.sources.types import MAX_INTENT_CHARS, SemanticEvent
@@ -727,6 +728,11 @@ class RecipeEngine:
             ws_val = get_dot_path(record, fields["workspace"])
             if ws_val is not None and not isinstance(ws_val, (dict, list)):
                 metadata["workspace"] = str(ws_val)
+                # Same keys as the Claude Code / Codex plugins, so project rules and labels apply.
+                metadata["cwd"] = str(ws_val)
+                project = normalize_project(str(ws_val))
+                if project:
+                    metadata["project"] = project
 
         conv_path = fields.get("conversation_id")
         conv_raw = get_dot_path(record, conv_path) if conv_path else None

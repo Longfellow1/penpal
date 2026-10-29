@@ -284,8 +284,8 @@ def test_new_grant_defaults_to_work_only_read(db) -> None:
 
 def test_work_grant_notice_shows_once_only_when_enabled_coding_source_is_in_scope() -> None:
     notice = T(
-        "Work 包含 Claude Code / Codex 里的全部对话；私人项目可用 `penpal rules add --scope project …` 归到 Personal。",
-        "Work includes all conversations in Claude Code / Codex; move a private project to Personal with `penpal rules add --scope project …`.",
+        "Work 包含 Claude Code、Codex 等 AI 工具里的全部对话；私人项目可用 `penpal rules add --scope project …` 归到 Personal。",
+        "Work includes all conversations in Claude Code, Codex and other AI tools; move a private project to Personal with `penpal rules add --scope project …`.",
     )
     shown = grant_output_lines(
         "claude", "buckets=Work", "kp_fake", "claude", "penpal", buckets=["Work"],
@@ -369,8 +369,8 @@ def test_multi_bucket_grant_and_cli(db, monkeypatch) -> None:
     out = runner.invoke(mcp_group, ["grant", "claude", "--buckets", "Work,Personal", "--purpose", "demo", "--expires-in-days", "7"])
     assert out.exit_code == 0, out.output
     assert out.output.count(T(
-        "Work 包含 Claude Code / Codex 里的全部对话；私人项目可用 `penpal rules add --scope project …` 归到 Personal。",
-        "Work includes all conversations in Claude Code / Codex; move a private project to Personal with `penpal rules add --scope project …`.",
+        "Work 包含 Claude Code、Codex 等 AI 工具里的全部对话；私人项目可用 `penpal rules add --scope project …` 归到 Personal。",
+        "Work includes all conversations in Claude Code, Codex and other AI tools; move a private project to Personal with `penpal rules add --scope project …`.",
     )) == 1
     token = next(line.strip() for line in out.output.splitlines() if line.strip().startswith("kp_"))
     assert {r["bucket"] for r in search(token, ["pelican"])["results"]} == {"Work", "Personal"}
@@ -381,8 +381,8 @@ def test_multi_bucket_grant_and_cli(db, monkeypatch) -> None:
     listing = runner.invoke(mcp_group, ["list"]).output
     assert "Work" in listing and "expires" in listing and "kp_" not in listing
     assert T(
-        "Work 包含 Claude Code / Codex 里的全部对话；私人项目可用 `penpal rules add --scope project …` 归到 Personal。",
-        "Work includes all conversations in Claude Code / Codex; move a private project to Personal with `penpal rules add --scope project …`.",
+        "Work 包含 Claude Code、Codex 等 AI 工具里的全部对话；私人项目可用 `penpal rules add --scope project …` 归到 Personal。",
+        "Work includes all conversations in Claude Code, Codex and other AI tools; move a private project to Personal with `penpal rules add --scope project …`.",
     ) in listing
 
 

@@ -24,6 +24,7 @@ _SOURCE_WEIGHTS: dict[str, float] = {
     "git_log": 0.9,
     "claude_code": 0.8,
     "codex_cli": 0.8,
+    "ai_tools": 0.8,
     "markdown_vault": 0.7,
     "chrome_history": 0.6,
     "safari_history": 0.6,

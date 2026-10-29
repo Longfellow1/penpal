@@ -5,7 +5,7 @@ category: decision
 status: active
 tags: [privacy, buckets, decision]
 created: "2026-10-25T22:46:29"
-updated: "2026-10-25T22:46:29"
+updated: "2026-10-29T11:14:03"
 ---
 
 <!-- compiled_truth -->
@@ -29,3 +29,9 @@ updated: "2026-10-25T22:46:29"
   summary: D37 settled
   source: owner-delegated 2026-10-25
   affects: [coding-agent-project-buckets]
+
+- time: 2026-10-29T11:14:03
+  kind: decision
+  summary: "D37 extends to the ai_tools source (Cursor, Kiro, Cline, OpenCode, …): default Work, project key from the recipe workspace, included in the Work-grant notice"
+  source: "manager 2026-10-29, P1 recipe integration; follows D37"
+  affects: [penpal/store/buckets.py, penpal/sources/recipes/engine.py, penpal/mcp/grant_notice.py]

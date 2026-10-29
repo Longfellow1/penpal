@@ -5,7 +5,7 @@ from collections.abc import Iterable
 
 from penpal.i18n import T
 
-CODING_AGENT_SOURCES = frozenset({"claude_code", "codex_cli"})
+CODING_AGENT_SOURCES = frozenset({"claude_code", "codex_cli", "ai_tools"})
 
 
 def enabled_coding_agent_sources() -> frozenset[str]:
@@ -35,6 +35,6 @@ def work_project_notice(
     if not enabled:
         return None
     return T(
-        "Work 包含 Claude Code / Codex 里的全部对话；私人项目可用 `penpal rules add --scope project …` 归到 Personal。",
-        "Work includes all conversations in Claude Code / Codex; move a private project to Personal with `penpal rules add --scope project …`.",
+        "Work 包含 Claude Code、Codex 等 AI 工具里的全部对话；私人项目可用 `penpal rules add --scope project …` 归到 Personal。",
+        "Work includes all conversations in Claude Code, Codex and other AI tools; move a private project to Personal with `penpal rules add --scope project …`.",
     )
