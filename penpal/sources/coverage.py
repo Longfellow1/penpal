@@ -21,6 +21,10 @@ from penpal.utils.logging import get_logger
 LOGGER = get_logger("sources.coverage")
 
 
+# Fixed labels the engine writes; they carry no path or content, so they are shown as is.
+_ENGINE_ERROR_LABELS = frozenset({"probe_error", "schema_mismatch", "sqlite_locked", "zstd_unavailable"})
+
+
 def _sanitize_last_error(raw_err: str | None) -> str | None:
     """Sanitize error string so raw paths and stacktraces are never printed."""
     if not raw_err:
@@ -31,8 +35,8 @@ def _sanitize_last_error(raw_err: str | None) -> str | None:
         return f"format_drift {rate}"
     if raw.startswith("blocked_sqlite"):
         return "blocked_sqlite"
-    if raw == "probe_error":
-        return "probe_error"
+    if raw in _ENGINE_ERROR_LABELS:
+        return raw
     return "read_error"
 
 
@@ -125,6 +129,10 @@ def compute_tool_coverage(
                     ).fetchone()
                     if err_row and err_row[0]:
                         last_error = _sanitize_last_error(str(err_row[0]))
+                # A recipe can carry histories for several versions of a tool (opencode 1.x and 2.x). Once
+                # one of them delivers, a schema mismatch only means another version is not installed.
+                if last_error == "schema_mismatch" and ingested_sessions > 0:
+                    last_error = None
         except Exception as exc:
             LOGGER.warning("coverage query failed for %s: %s", tool.id, type(exc).__name__)
             if last_error is None:

@@ -54,9 +54,11 @@ def _running_hud_pids() -> list[int]:
 def _stop_hud():
     from penpal.foundation.hud_record import remove_hud_record
 
-    remove_hud_record()
     lock = _hud_lock()
+    # The record is what identifies the app-launched HUD, so find it before the record goes.
     pids = _running_hud_pids()
+    # With no record the supervisor treats the stop as deliberate and does not relaunch the HUD.
+    remove_hud_record()
 
     if not lock.is_running() and not pids:
         console.print("[yellow]HUD is not running.[/yellow]")

@@ -259,6 +259,41 @@ def test_repair_hud_hung_calls_restart_hud():
     assert ctrl.restart_hud_calls == 1
 
 
+def test_repair_hud_reports_fixed_only_once_the_new_hud_is_ready():
+    class FakeControlWithReadiness:
+        def __init__(self, ready: bool):
+            self.ready = ready
+
+        def restart_hud(self) -> ControlResult:
+            return ControlResult(True, "restart_hud")
+
+        def wait_for_hud_ready(self) -> bool:
+            return self.ready
+
+    res = repair("hud.dead", control=FakeControlWithReadiness(ready=True))
+    assert res.attempted and res.fixed
+
+    res = repair("hud.dead", control=FakeControlWithReadiness(ready=False))
+    assert res.attempted and not res.fixed
+    assert "未就绪" in res.message_zh
+
+
+def test_wait_for_hud_ready_polls_until_the_record_matches_or_times_out():
+    from penpal.runtime.control import wait_for_hud_ready
+
+    clock = {"t": 0.0}
+
+    def sleep(sec):
+        clock["t"] += sec
+
+    answers = iter([None, None, 5151])
+    assert wait_for_hud_ready(pid_finder=lambda: next(answers), sleep=sleep, monotonic=lambda: clock["t"])
+
+    clock["t"] = 0.0
+    assert not wait_for_hud_ready(pid_finder=lambda: None, sleep=sleep, monotonic=lambda: clock["t"], timeout_sec=1.0)
+    assert clock["t"] >= 1.0
+
+
 def test_evaluate_emits_hud_dead_issue_when_crashed(monkeypatch):
     import sys
     from penpal.foundation.hud_record import HudRecord
