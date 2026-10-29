@@ -189,3 +189,41 @@ def test_system_hosts_status_items_from_macos_26(monkeypatch, version, expected)
     info = types.SimpleNamespace(operatingSystemVersion=lambda: version)
     monkeypatch.setattr(hud_app.AppKit, "NSProcessInfo", types.SimpleNamespace(processInfo=lambda: info))
     assert hud_app._system_hosts_status_items() is expected
+
+
+def test_recheck_health_menu_item_dispatches_to_worker(shell):
+    shell.recheckHealth_(None)
+    assert shell._worker.actions == [("health.recheck", {})]
+
+
+def test_page_recheck_and_repair_actions_dispatch_to_worker(shell):
+    shell.handle_message({"action": "health.recheck", "args": {}})
+    shell.handle_message({"action": "issue.repair", "args": {"issue_code": "daemon.hung"}})
+    assert shell._worker.actions == [
+        ("health.recheck", {}),
+        ("issue.repair", {"issue_code": "daemon.hung"}),
+    ]
+
+
+def test_rendered_status_includes_rechecked_subtext(shell):
+    shell._apply_model_script(
+        'window.render({"status":{"text":"正在记录","sub":"已重新检测 20:45:00 · 正常","tone":"ok"},"tabs":[{"id":"overview"}],"pause":{"label":"暂停","action":"capture.pause"},"view":{"tab":"overview","page":""},"title":"概览","sections":[]});',
+        None,
+    )
+    rendered = _rendered(shell)
+    assert rendered["status"]["sub"] == "已重新检测 20:45:00 · 正常"
+
+
+def test_confirm_quit_removes_hud_record(shell, monkeypatch):
+    removed = []
+    terminated = []
+    monkeypatch.setattr("penpal.foundation.hud_record.remove_hud_record", lambda: removed.append(True))
+    monkeypatch.setattr(hud_app, "_confirm_quit_alert", lambda: True)
+    monkeypatch.setattr(hud_app, "_terminate_app", lambda: terminated.append(True))
+    fake_popover = types.SimpleNamespace(performClose_=lambda _s: None)
+    shell.popover = fake_popover
+
+    shell.confirmQuit_(None)
+    assert removed == [True]
+    assert terminated == [True]
+

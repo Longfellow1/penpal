@@ -77,8 +77,56 @@ def _doctor_apps_dirs(home: Path) -> tuple[Path, ...]:
 @main.command(help=T("检查系统配置、权限与依赖。", "Check system configuration, permissions, and dependencies."))
 @click.option("--plain", is_flag=True, default=False, help=PLAIN_HELP)
 @click.option("--json", "json_output", is_flag=True, default=False, help=T("输出 JSON", "Emit JSON"))
-def doctor(plain, json_output):
+@click.option("--fix", is_flag=True, default=False, help=T("尝试自动修复检测到的问题", "Attempt to automatically fix detected issues"))
+def doctor(plain, json_output, fix):
     """Run diagnostics."""
+    if fix:
+        from penpal.services.repair import is_fixable_issue, repair
+
+        before_status = evaluate()
+        repair_results = []
+        # A pause is the user's own choice (severity info); --fix repairs faults and leaves it alone.
+        fixable = [issue for issue in before_status.issues if is_fixable_issue(issue) and issue.severity != "info"]
+        for issue in fixable:
+            repair_results.append(repair(issue))
+        after_status = evaluate()
+
+        if json_output:
+            payload = {
+                "before": {"state": before_status.code, "issues": [i.message_zh for i in before_status.issues]},
+                "repairs": [
+                    {"code": r.issue_code, "attempted": r.attempted, "fixed": r.fixed, "message": r.message_zh}
+                    for r in repair_results
+                ],
+                "after": {"state": after_status.code, "issues": [i.message_zh for i in after_status.issues]},
+            }
+            click.echo(json.dumps(payload, indent=2, ensure_ascii=False))
+            return
+        if plain:
+            print(f"before: state={before_status.code} issues={len(before_status.issues)}")
+            for r in repair_results:
+                status_str = "FIXED" if r.fixed else "FAILED" if r.attempted else "SKIPPED"
+                print(f"repair {r.issue_code}: {status_str} {r.message_zh}")
+            print(f"after: state={after_status.code} issues={len(after_status.issues)}")
+            return
+
+        console.print(T("[bold cyan]── 自动修复前 ──[/bold cyan]", "[bold cyan]── Before Auto-Repair ──[/bold cyan]"))
+        console.print(T(f"后台状态：{before_status.code} · 问题数：{len(before_status.issues)}", f"Background state: {before_status.code} · issues: {len(before_status.issues)}"))
+        for issue in before_status.issues:
+            console.print(f"  • {issue.message_zh}")
+        console.print(T("\n[bold cyan]── 执行修复 ──[/bold cyan]", "\n[bold cyan]── Executing Repairs ──[/bold cyan]"))
+        if not repair_results:
+            console.print(T("没有可自动修复的问题。", "No fixable issues found."))
+        else:
+            for r in repair_results:
+                tag = "[green]已修复[/green]" if r.fixed else "[red]失败[/red]" if r.attempted else "[yellow]跳过[/yellow]"
+                console.print(f"  {tag} {r.message_zh}")
+        console.print(T("\n[bold cyan]── 自动修复后 ──[/bold cyan]", "\n[bold cyan]── After Auto-Repair ──[/bold cyan]"))
+        console.print(T(f"后台状态：{after_status.code} · 问题数：{len(after_status.issues)}", f"Background state: {after_status.code} · issues: {len(after_status.issues)}"))
+        for issue in after_status.issues:
+            console.print(f"  • {issue.message_zh}")
+        return
+
     runtime_status = evaluate()
     runtime_fix = _runtime_fix_command(runtime_status)
     runtime_detail = f"state={_runtime_status_line(runtime_status)}"
@@ -95,11 +143,14 @@ def doctor(plain, json_output):
         visible = runtime_status.hud.status_item_visible
         # The evaluator alone decides pass/fail; unknown visibility is informational (macOS hides the toggle).
         checks["菜单栏 HUD"] = not hud_issues
-        check_details["菜单栏 HUD"] = (
+        hud_detail = (
             hud_issues[0].message_zh if hud_issues else
             "主线程有响应；状态栏图标可见" if visible is True else
             "主线程有响应；若菜单栏看不到图标，请在系统设置 → 菜单栏打开 Penpal"
         )
+        if runtime_status.hud.supervisor_summary_zh:
+            hud_detail += f"；{runtime_status.hud.supervisor_summary_zh}"
+        check_details["菜单栏 HUD"] = hud_detail
     cfg = get_config()
     require_db(cfg)
 

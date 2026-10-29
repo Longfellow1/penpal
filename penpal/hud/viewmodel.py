@@ -79,6 +79,7 @@ class UiState:
     new_buckets: tuple[str, ...] = ("Work",)
     toast: Optional[tuple[int, str]] = None       # (id, text)
     reveal: Optional[Reveal] = None
+    rechecked_at: Optional[str] = None
 
 
 @dataclass(frozen=True)
@@ -195,6 +196,8 @@ def has_issue(src: SourceInfo) -> bool:
 
 def alerts(snap: Snapshot) -> list[tuple[str, dict]]:
     """(tone, row) for runtime and source issues, red first."""
+    from penpal.services.repair import is_fixable_in_hud
+
     out: list[tuple[str, dict]] = []
     status = snap.runtime_status
     if snap.read_error:
@@ -202,10 +205,12 @@ def alerts(snap: Snapshot) -> list[tuple[str, dict]]:
     if status is not None and status.state in {
         RuntimeState.NOT_INSTALLED, RuntimeState.NOT_RUNNING, RuntimeState.HUNG, RuntimeState.OUTDATED,
     }:
+        code = f"daemon.{status.state.value}"
+        fixable = is_fixable_in_hud(code)
         out.append(("red", row(
             state_text(status.state, language="zh"), dot="red", sub=state_message(status, language="zh"), sub_tone="red",
-            value="修复" if status.fix_command else "", value_tone="blue",
-            action="daemon.restart" if status.fix_command else None,
+            value="修复" if fixable else "", value_tone="blue" if fixable else None,
+            action="daemon.restart" if fixable else None,
         )))
     elif status is not None and status.state == RuntimeState.STARTING:
         out.append(("amber", row(state_text(status.state, language="zh"), dot="amber", sub=state_message(status, language="zh"), sub_tone="amber")))
@@ -216,11 +221,20 @@ def alerts(snap: Snapshot) -> list[tuple[str, dict]]:
             tone = "red" if issue.severity == "error" else "amber"
             message = issue.message_zh
             label = issue.label_zh or issue.component
-            out.append((tone, row(label, dot=tone, sub=message, sub_tone=tone)))
+            fixable = is_fixable_in_hud(issue)
+            code = getattr(issue, "code", "") or issue.component
+            out.append((tone, row(
+                label, dot=tone, sub=message, sub_tone=tone,
+                value="修复" if fixable else "", value_tone="blue" if fixable else None,
+                action="issue.repair" if fixable else None,
+                args={"issue_code": code} if fixable else {},
+            )))
     for issue in snap.perm_issues:
         names = "、".join(source_label(s) for s in issue.sources)
-        out.append(("amber", row(f"缺少「{short_perm(issue.label)}」权限", dot="amber", sub=f"影响：{names} · 点按处理",
-                                 sub_tone="amber", nav=True, action="nav.page", args={"page": f"perm:{issue.key}"})))
+        out.append(("amber", row(
+            f"缺少「{short_perm(issue.label)}」权限", dot="amber", sub=f"影响：{names} · 点按处理",
+            sub_tone="amber", nav=True, action="nav.page", args={"page": f"perm:{issue.key}"},
+        )))
     for src in snap.sources:
         if has_issue(src) and src.unavailable_reason:
             out.append(("amber", row(f"{src.label} 不可用", dot="amber", sub=REASON_TEXT.get(src.unavailable_reason, "不可用") + " · 点按处理",
@@ -229,7 +243,7 @@ def alerts(snap: Snapshot) -> list[tuple[str, dict]]:
     return out
 
 
-def status_bar(snap: Snapshot) -> dict:
+def status_bar(snap: Snapshot, ui: Optional[UiState] = None) -> dict:
     status = snap.runtime_status
     if status is not None and status.state == RuntimeState.PAUSED:
         return {"code": status.code, "tone": "grey", "text": state_text(status.state, language="zh"), "sub": "重启后仍保持暂停 · 不会补记"}
@@ -237,6 +251,12 @@ def status_bar(snap: Snapshot) -> dict:
     reds = [t for t in found if t[0] == "red"]
     last = rel_time(snap.now, snap.last_write_ts)
     label = state_text(status.state, language="zh") if status is not None else "未知"
+    if ui and ui.rechecked_at:
+        if found:
+            sub = f"已重新检测 {ui.rechecked_at} · {len(found)} 个问题"
+        else:
+            sub = f"已重新检测 {ui.rechecked_at} · 正常"
+        return {"code": status.code if status else "unknown", "tone": "red" if reds else "amber" if found else "ok", "text": label, "sub": sub}
     if reds:
         sub = f"{len(found)} 个问题" + (f" · {last}最后写入" if last else "")
         return {"code": status.code if status else "unknown", "tone": "red", "text": label, "sub": sub}
@@ -537,7 +557,7 @@ def build_model(snap: Snapshot, ui: UiState, delete_preview: Optional[dict[str, 
     badge = None
     if found_alerts:
         badge = "red" if any(t == "red" for t, _ in found_alerts) else "amber"
-    bar = status_bar(snap)
+    bar = status_bar(snap, ui)
     return {
         "status": bar,
         "pause": {"label": "继续记录" if snap.paused else "暂停", "action": "capture.resume" if snap.paused else "capture.pause"},

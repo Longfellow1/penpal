@@ -214,7 +214,7 @@ def test_r1_hud_state_matrix_is_shared_by_status_and_doctor(monkeypatch, tempora
         "unknown": None,  # macOS exposes no API for the Menu Bar toggle; a standing warning would be noise
         "stale": "HUD 无响应",
         "woke": None,
-        "dead": None,
+        "dead": "HUD 进程已退出",
     }[hud_state]
     hud_issues = [issue for issue in runtime.issues if issue.component == "hud"]
     if expected is None:

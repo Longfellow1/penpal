@@ -190,6 +190,7 @@ def run(config: Optional[Config] = None, *, config_path: str | Path | None = Non
             lambda: current_identity(config, config_path=config_path),
         )
         next_log_cap = time.monotonic() + LAUNCHD_LOG_CHECK_INTERVAL_SEC
+        next_hud_supervision = time.monotonic() + 60.0
 
         while True:
             now_monotonic = time.monotonic()
@@ -197,6 +198,14 @@ def run(config: Optional[Config] = None, *, config_path: str | Path | None = Non
                 for path, exc in cap_launchd_output_logs():
                     logger.warning("could not cap launchd output log %s: %s", path.name, type(exc).__name__)
                 next_log_cap = now_monotonic + LAUNCHD_LOG_CHECK_INTERVAL_SEC
+            if now_monotonic >= next_hud_supervision:
+                try:
+                    from penpal.health.hud_supervisor import supervise_hud
+
+                    supervise_hud()
+                except Exception as exc:
+                    logger.warning("HUD supervision failed: %s", type(exc).__name__)
+                next_hud_supervision = now_monotonic + 60.0
             try:
                 identity_changed = identity_watcher.check()
             except (OSError, RuntimeError, ValueError) as exc:

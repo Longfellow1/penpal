@@ -115,6 +115,7 @@ class Issue:
     fix_command: str = ""
     label_zh: str = ""
     label_en: str = ""
+    code: str = ""
 
 
 @dataclass(frozen=True)
@@ -151,6 +152,8 @@ class HudStatus:
     last_model_built_at: str | None
     last_main_thread_tick_at: str | None
     main_thread_tick_age_sec: float | None
+    supervisor_summary_zh: str = ""
+    supervisor_summary_en: str = ""
 
 
 def state_text(state: RuntimeState | str, *, language: str | None = None) -> str:
@@ -290,7 +293,7 @@ def _state_issue(state: RuntimeState) -> Issue | None:
         return None
     severity = "error" if state in _FAILED_STATES else "info"
     text = STATE_COPY[state]
-    return Issue("daemon", severity, text[2], text[3], text[4], "后台服务", "Background service")
+    return Issue("daemon", severity, text[2], text[3], text[4], "后台服务", "Background service", code=f"daemon.{state.value}")
 
 
 def active_hud_pid(
@@ -308,12 +311,18 @@ def active_hud_pid(
     return None
 
 
+def _read_hud_supervisor_summary(now: datetime | None = None) -> tuple[str, str]:
+    from penpal.foundation.hud_supervisor_state import read_supervisor_summary
+    return read_supervisor_summary(now=now)
+
+
 def _hud_status(
     record: HudRecord | None,
     *,
     now: datetime,
     last_wake: datetime | None = None,
     process_start_reader: Callable[[int], str | None],
+    supervisor_summary_reader: Callable[[datetime], tuple[str, str]] = _read_hud_supervisor_summary,
 ) -> tuple[HudStatus | None, tuple[Issue, ...]]:
     if record is None:
         return None, ()
@@ -321,6 +330,7 @@ def _hud_status(
     alive = current_start is not None and current_start == record.process_start_time
     # Sleep suspends the HUD too; count staleness from the later of the last tick and the last wake.
     age = _last_progress_age(record.last_main_thread_tick_at, last_wake, now)
+    summary_zh, summary_en = supervisor_summary_reader(now)
     status = HudStatus(
         pid=record.pid,
         generation=record.generation,
@@ -330,8 +340,20 @@ def _hud_status(
         last_model_built_at=record.last_model_built_at,
         last_main_thread_tick_at=record.last_main_thread_tick_at,
         main_thread_tick_age_sec=age,
+        supervisor_summary_zh=summary_zh,
+        supervisor_summary_en=summary_en,
     )
     issues: list[Issue] = []
+    if not alive:
+        issues.append(Issue(
+            "hud", "warning",
+            "HUD 进程已退出。后台服务约 1 分钟内会自动重新打开；也可运行 `penpal doctor --fix` 立即打开。",
+            "HUD process has exited. The background service will reopen it within about a minute; run `penpal doctor --fix` to reopen now.",
+            "penpal doctor --fix",
+            "菜单栏 HUD", "Menu bar HUD",
+            code="hud.dead",
+        ))
+        return status, tuple(issues)
     started = _process_started_at(record.process_start_time)
     starting = started is not None and (now - started).total_seconds() < HUD_VISIBILITY_GRACE_SEC
     if alive and not starting and record.status_item_created and record.status_item_visible is False:
@@ -340,15 +362,17 @@ def _hud_status(
             "菜单栏图标被系统隐藏：系统设置 → 菜单栏 → 把 Penpal 的开关关掉再打开。",
             "The menu bar item is hidden. In System Settings → Menu Bar, turn Penpal off and on again.",
             label_zh="菜单栏 HUD", label_en="Menu bar HUD",
+            code="hud.icon_hidden",
         ))
     # Unknown visibility is not reported: macOS 26 exposes no API for the System Settings toggle, so a
     # standing "could not confirm" warning would fire for nearly every user. R7 covers it by hand.
     if alive and age is not None and age > HUD_MAIN_THREAD_STALE_SEC:
         issues.append(Issue(
             "hud", "error",
-            "HUD 无响应：主线程超过 45 秒没有响应。可运行 `penpal hud stop` 后从 Finder 重新打开 Penpal.app。",
-            "HUD is not responding: its main thread has not responded for over 45 seconds. Run `penpal hud stop`, then reopen Penpal.app from Finder.",
-            "penpal hud stop", "菜单栏 HUD", "Menu bar HUD",
+            "HUD 无响应：主线程超过 45 秒没有响应。后台服务会自动重启它；也可运行 `penpal doctor --fix` 立即重启。",
+            "HUD is not responding: its main thread has not responded for over 45 seconds. The background service will restart it; run `penpal doctor --fix` to restart now.",
+            "penpal doctor --fix", "菜单栏 HUD", "Menu bar HUD",
+            code="hud.hung",
         ))
     return status, tuple(issues)
 
@@ -392,15 +416,15 @@ def _component_issues(components: dict[str, Component]) -> tuple[Issue, ...]:
     for name, component in sorted(components.items()):
         label_zh, label_en = _COMPONENT_LABELS.get(name, _WATCHER_LABELS.get(name, (name, name)))
         if component.state == "missing_permission":
-            issues.append(Issue(name, "warning", f"{label_zh}缺少系统权限。", f"{label_en} is missing a system permission.", "penpal doctor", label_zh, label_en))
+            issues.append(Issue(name, "warning", f"{label_zh}缺少系统权限。", f"{label_en} is missing a system permission.", "penpal doctor", label_zh, label_en, code=f"{name}.missing_permission"))
         elif component.state == "storage_error":
             if component.detail == "disk_full":
                 zh, en = "磁盘已满，采集暂停写入；释放空间后会自动恢复。", "Disk is full; capture will resume after space is freed."
             else:
                 zh, en = "采集存储发生错误。", "Capture storage has an error."
-            issues.append(Issue(name, "error", zh, en, "penpal doctor", label_zh, label_en))
+            issues.append(Issue(name, "error", zh, en, "penpal doctor", label_zh, label_en, code=f"{name}.storage_error"))
         elif component.state == "gave_up":
-            issues.append(Issue(name, "error", f"{label_zh}已停止重试。", f"{label_en} has exhausted its restart attempts.", "penpal doctor", label_zh, label_en))
+            issues.append(Issue(name, "error", f"{label_zh}已停止重试。", f"{label_en} has exhausted its restart attempts.", "penpal doctor", label_zh, label_en, code=f"{name}.gave_up"))
     return tuple(issues)
 
 

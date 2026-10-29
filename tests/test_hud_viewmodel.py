@@ -188,6 +188,37 @@ def test_at09_storage_errors_disk_full_and_read_only():
     assert disk["value"]["text"] == "0 MB" and disk["value"]["tone"] == "red"
 
 
+def test_hud_panel_alerts_no_fix_button_for_hud_hung_or_dead():
+    from penpal.runtime.evaluate import Issue, RuntimeStatus, RuntimeState
+
+    issue_hung = Issue("hud", "error", "HUD 无响应", "HUD hung", code="hud.hung")
+    issue_dead = Issue("hud", "warning", "HUD 进程已退出", "HUD dead", code="hud.dead")
+    issue_icon = Issue("hud", "error", "菜单栏图标被系统隐藏", "Icon hidden", code="hud.icon_hidden")
+
+    # 1. hud.hung must not offer repair in HUD panel
+    s_hung = snap(runtime_status=RuntimeStatus(RuntimeState.RUNNING, issues=(issue_hung,)))
+    m_hung = build_model(s_hung, UiState())
+    r_hung = _alert_rows(m_hung)[0]
+    assert r_hung["value"] is None
+    assert r_hung["action"] is None
+
+    # 2. hud.dead must not offer repair in HUD panel
+    s_dead = snap(runtime_status=RuntimeStatus(RuntimeState.RUNNING, issues=(issue_dead,)))
+    m_dead = build_model(s_dead, UiState())
+    r_dead = _alert_rows(m_dead)[0]
+    assert r_dead["value"] is None
+    assert r_dead["action"] is None
+
+    # 3. hud.icon_hidden DOES offer repair
+    s_icon = snap(runtime_status=RuntimeStatus(RuntimeState.RUNNING, issues=(issue_icon,)))
+    m_icon = build_model(s_icon, UiState())
+    r_icon = _alert_rows(m_icon)[0]
+    assert r_icon["value"]["text"] == "修复"
+    assert r_icon["action"] == "issue.repair"
+    assert r_icon["args"] == {"issue_code": "hud.icon_hidden"}
+
+
+
 def test_at09_one_source_unavailable_shows_reason_from_availability_codes():
     expected = {
         "file_missing": "找不到来源文件", "permission_denied": "完全磁盘访问", "db_locked": "占用",
