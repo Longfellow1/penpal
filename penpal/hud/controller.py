@@ -10,6 +10,7 @@ time so one monkeypatch covers both shells):
     purge preview / run             -> services.purge.run_purge             (penpal purge [--dry-run])
     daemon.restart                  -> penpal.runtime.control.restart
     settings.open                   -> permissions.open_settings_url        (pane shown by penpal doctor)
+    hud.quit                        -> injected callback (quit_hud)         (penpal.hud.app.confirmQuit_)
 
 A freshly created token is held in ``UiState.reveal`` (memory only) until the user leaves the page; it is
 never written to disk, the model of any later page, or the log.
@@ -149,12 +150,14 @@ class HudController:
         load_config: Callable[[], Any],
         *,
         copy_to_clipboard: Optional[Callable[[str], None]] = None,
+        quit_hud: Optional[Callable[[], None]] = None,
         spawn: Callable[[Callable[[], Any]], None] = _spawn,
         clock: Callable[[], datetime] = lambda: datetime.now(timezone.utc),
         push_model: Optional[Callable[[], None]] = None,
     ) -> None:
         self._load_config = load_config
         self._copy = copy_to_clipboard
+        self._quit = quit_hud
         self._spawn = spawn
         self._clock = clock
         self._push_model = push_model
@@ -462,3 +465,8 @@ class HudController:
         self._snap = None
         self._snap_at = 0.0
         return True
+
+    def _do_hud_quit(self, args: dict) -> bool:
+        if self._quit is not None:
+            self._quit()
+        return False

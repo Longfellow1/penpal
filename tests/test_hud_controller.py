@@ -477,3 +477,21 @@ def test_recheck_and_repair_use_injected_clock(env):
     assert ctrl.ui.rechecked_at == expected_local_str
 
 
+def test_hud_quit_action_calls_injected_callback_once_and_touches_nothing_else(env):
+    quit_calls = []
+    controller = HudController(
+        lambda: env,
+        quit_hud=lambda: quit_calls.append(1),
+    )
+    initial_ui = controller.ui
+    initial_model = controller.model()
+
+    model = controller.dispatch("hud.quit")
+
+    assert quit_calls == [1]
+    assert controller.ui == initial_ui
+    assert model["view"] == initial_model["view"]
+    assert model["confirm"] is None
+    assert model["toast"] is None
+
+

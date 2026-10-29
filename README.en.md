@@ -34,7 +34,7 @@ An AI can already read local files, so indexing files that already exist is not 
 | | CLI (required minimum) | Desktop app (optional) |
 |---|---|---|
 | For | Developers who live in the terminal | People who want to see capture status and manage it visually |
-| Includes | Background capture + MCP server + all control commands | Menu-bar HUD: status, source toggles, AI grants, privacy and deletion |
+| Includes | Background capture + MCP server + all control commands | Menu-bar HUD: status, source toggles, AI grants, settings |
 | Install | See Quick start below | Install the CLI first, then `penpal app install` (add `--login` to start at login) |
 | Core capability | Everything works in your AI once installed | Same core, different interface |
 
