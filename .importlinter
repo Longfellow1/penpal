@@ -90,6 +90,8 @@ ignore_imports =
     # The HUD writer records only its own kernel start timestamp and writes hud.json.
     penpal.hud.app -> penpal.foundation.runtime_launchd
     penpal.hud.app -> penpal.foundation.hud_record
+    # Deliberate HUD stop clears the runtime record so the supervisor does not treat it as a crash.
+    penpal.cli.app -> penpal.foundation.hud_record
 
 [importlinter:contract:layers]
 name = Penpal module layers

@@ -12,6 +12,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable
 
+from penpal.foundation.app_bundle import find_installed_app
 from penpal.foundation.runtime_launchd import LAUNCHCTL_TIMEOUT_SEC, probe_label, run_launchctl
 from penpal.foundation.runtime_plist import launchd_jobs
 from penpal.runtime.evaluate import RuntimeState, RuntimeStatus, active_hud_pid, evaluate
@@ -442,3 +443,75 @@ def unload_legacy_jobs(*, runner: Runner = _default_runner, probe: Probe = probe
         if not ok and _loaded(label, runner, probe):
             failures.append(f"{label}: {detail or 'still loaded'}")
     return failures
+
+
+def relaunch_hud(
+    *,
+    app_finder: Callable[[], Path | None] | None = None,
+    runner: Runner | None = None,
+) -> ControlResult:
+    """Relaunch the HUD through LaunchServices via /usr/bin/open -a <Penpal.app>."""
+    if os.environ.get("PENPAL_ISOLATED") == "1":
+        return _result_error("relaunch_hud", "隔离环境中已禁用 HUD 重启。", "HUD relaunch is disabled in isolated environments.")
+    if sys.platform != "darwin":
+        return _result_error("relaunch_hud", "HUD 重启仅支持 macOS。", "HUD relaunch is only available on macOS.")
+
+    finder = app_finder if app_finder is not None else find_installed_app
+    app_path = finder()
+    if app_path is None:
+        return _result_error("relaunch_hud", "未找到安装的 Penpal.app，请运行 penpal app install。", "Penpal.app is not installed; run penpal app install.")
+
+    command = ["/usr/bin/open", "-a", str(app_path)]
+    run_cmd = runner if runner is not None else _default_process_runner
+    try:
+        res = run_cmd(command)
+        ok = (getattr(res, "returncode", 0) == 0)
+        detail = (getattr(res, "stderr", "") or getattr(res, "stdout", "") or "").strip()
+    except (OSError, subprocess.SubprocessError) as exc:
+        return _result_error("relaunch_hud", f"启动 Penpal.app 失败：{exc}", f"Could not launch Penpal.app: {exc}")
+    if not ok:
+        return _result_error("relaunch_hud", f"启动 Penpal.app 失败：{detail or 'open 返回错误'}", f"Could not launch Penpal.app: {detail or 'open returned an error'}")
+    return ControlResult(True, "relaunch_hud")
+
+
+def restart_hud(
+    *,
+    active_pid_finder: Callable[[], int | None] | None = None,
+    killer: Callable[[int, int], None] = _default_killer,
+    is_running: Callable[[int], bool] = _default_pid_is_running,
+    sleep: Callable[[float], None] = time.sleep,
+    monotonic: Callable[[], float] = time.monotonic,
+    kill_timeout_sec: float = 5.0,
+    app_finder: Callable[[], Path | None] | None = None,
+    runner: Runner | None = None,
+    relaunch_fn: Callable[[], ControlResult] | None = None,
+) -> ControlResult:
+    """Restart the HUD: terminate the existing process if alive, then relaunch."""
+    if (killer is _default_killer or relaunch_fn is None) and os.environ.get("PENPAL_ISOLATED") == "1":
+        return _result_error("restart_hud", "隔离环境中已禁用 HUD 重启。", "HUD restart is disabled in isolated environments.")
+    if (killer is _default_killer or relaunch_fn is None) and sys.platform != "darwin":
+        return _result_error("restart_hud", "HUD 重启仅支持 macOS。", "HUD restart is only available on macOS.")
+
+    pid_finder = active_pid_finder if active_pid_finder is not None else active_hud_pid
+    live_pid = pid_finder()
+    if live_pid is not None:
+        try:
+            killer(live_pid, signal.SIGTERM)
+        except ProcessLookupError:
+            pass
+        deadline = monotonic() + kill_timeout_sec
+        while monotonic() < deadline:
+            if not is_running(live_pid):
+                break
+            sleep(0.1)
+        if is_running(live_pid):
+            try:
+                killer(live_pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+
+    if relaunch_fn is not None:
+        return relaunch_fn()
+    return relaunch_hud(app_finder=app_finder, runner=runner)
+
+

@@ -58,6 +58,15 @@ def _terminate_app() -> None:
     AppKit.NSApp.terminate_(None)
 
 
+def _confirm_quit_alert() -> bool:
+    alert = AppKit.NSAlert.alloc().init()
+    alert.setMessageText_("退出 Penpal HUD？")
+    alert.setInformativeText_("HUD 退出后状态栏图标会消失，后台采集 daemon 继续运行。")
+    alert.addButtonWithTitle_("退出")
+    alert.addButtonWithTitle_("取消")
+    return alert.runModal() == AppKit.NSAlertFirstButtonReturn
+
+
 def _system_hosts_status_items() -> bool:
     """macOS 26 draws every status item in Control Center's windows; the app's own button window never reaches the
     screen, so its occlusion state says nothing about what the user sees (owner Mac, 2026-10-28)."""
@@ -139,6 +148,7 @@ class PenpalHUDApp(NSObject):
             before_model=self._prepare_runtime_and_check_reload,
             model_built=self._record_store.model_built,
         )
+        self.controller.set_push_model(self._worker.push_current_model)
         self._record_main_thread_tick()
         self._worker.refresh(fresh=True)
         self._worker.submit(self._read_browser_automation_guide, self._show_browser_automation_guide)
@@ -358,6 +368,7 @@ class PenpalHUDApp(NSObject):
         self.approval_menu_item = self._menu_item("候选审批", self.openApprovalWindow_)
         self.status_menu.addItem_(self.approval_menu_item)
         self.status_menu.addItem_(AppKit.NSMenuItem.separatorItem())
+        self.status_menu.addItem_(self._menu_item("重新检测", self.recheckHealth_))
         self.status_menu.addItem_(self._menu_item("重启后台服务", self.restartDaemon_))
         self.status_menu.addItem_(self._menu_item("退出 HUD", self.confirmQuit_))
 
@@ -441,6 +452,10 @@ class PenpalHUDApp(NSObject):
         self._pending_count_last_sync = 0.0
 
     @objc.IBAction
+    def recheckHealth_(self, _sender):
+        self._worker.dispatch("health.recheck", {})
+
+    @objc.IBAction
     def restartDaemon_(self, _sender):
         self.popover.performClose_(None)
         alert = AppKit.NSAlert.alloc().init()
@@ -461,13 +476,11 @@ class PenpalHUDApp(NSObject):
     @objc.IBAction
     def confirmQuit_(self, _sender):
         self.popover.performClose_(None)
-        alert = AppKit.NSAlert.alloc().init()
-        alert.setMessageText_("退出 Penpal HUD？")
-        alert.setInformativeText_("HUD 退出后状态栏图标会消失，后台采集 daemon 继续运行。")
-        alert.addButtonWithTitle_("退出")
-        alert.addButtonWithTitle_("取消")
-        if alert.runModal() == AppKit.NSAlertFirstButtonReturn:
-            AppKit.NSApp.terminate_(None)
+        if _confirm_quit_alert():
+            from penpal.foundation.hud_record import remove_hud_record
+
+            remove_hud_record()
+            _terminate_app()
 
 
 def run_hud(cfg: Config | None = None) -> None:
@@ -480,6 +493,9 @@ def run_hud(cfg: Config | None = None) -> None:
 
     def _force_shutdown(sig, frame):
         print("\n[Penpal] 接收到退出信号，清理并关闭...")
+        from penpal.foundation.hud_record import remove_hud_record
+
+        remove_hud_record()
         AppKit.NSApp.terminate_(None)
         os._exit(0)  # make sure the terminal gets control back after Ctrl+C
 

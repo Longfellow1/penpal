@@ -25,6 +25,8 @@ button{font-family:inherit;cursor:pointer}
 .grow{flex:1;min-width:0;display:flex;flex-direction:column;gap:1px}
 #st-text{font-size:14px;font-weight:600}
 #st-sub{font-size:11px;color:var(--sub)}
+#recheck{height:30px;padding:0 8px;border-radius:8px;border:1px solid #D6D6D1;background:var(--card);font-size:12px;font-weight:500;color:var(--text);flex-shrink:0}
+#recheck:hover{background:#F4F4F1}
 #pause{height:30px;padding:0 12px;border-radius:8px;border:1px solid #D6D6D1;background:var(--card);font-size:12px;font-weight:600;color:var(--text)}
 #titlebar{height:54px;flex-shrink:0;padding:0 8px;display:flex;flex-direction:column;align-items:stretch}
 .title-row{height:33px;flex-shrink:0;display:flex;align-items:center;position:relative}
@@ -144,6 +146,7 @@ _JS = r"""
     var sb=$('statusbar');sb.textContent='';
     sb.appendChild(dot(bar.tone,false));
     var g=el('div','grow');var t1=el('span',null,bar.text);t1.id='st-text';var t2=el('span',null,bar.sub);t2.id='st-sub';g.appendChild(t1);g.appendChild(t2);sb.appendChild(g);
+    var rb=el('button',null,'重新检测');rb.id='recheck';rb.type='button';rb.addEventListener('click',function(){post('health.recheck')});sb.appendChild(rb);
     var pb=el('button',null,m.pause.label);pb.id='pause';pb.type='button';pb.addEventListener('click',function(){post(m.pause.action)});sb.appendChild(pb);
 
     modelBuiltAt=m.model_built_at||null;

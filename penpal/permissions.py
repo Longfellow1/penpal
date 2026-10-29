@@ -168,6 +168,8 @@ def trigger_required_prompts(required_keys: set[str] | None = None) -> dict[str,
 
 
 FULL_DISK_ACCESS_PANE = "x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles"
+# Control Center settings pane URL (the owner must verify it on macOS 26).
+CONTROL_CENTER_PANE = "x-apple.systempreferences:com.apple.ControlCenter-Settings.extension"
 
 
 def open_settings_url(url: str) -> None:

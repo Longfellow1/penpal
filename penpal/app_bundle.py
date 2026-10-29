@@ -23,13 +23,17 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable, Literal, Optional
 
+from penpal.foundation.app_bundle import (
+    APP_NAME,
+    BUNDLE_ID,
+    find_installed_app,
+    is_our_bundle as _is_ours,
+)
 from penpal.foundation.runtime_launchd import LAUNCHCTL_TIMEOUT_SEC
 from penpal.runtime.control import load_job, unload_job
 
 from penpal.utils.paths import get_apps_dir, get_launchd_agents_dir, get_launcher_stamp_path
 
-APP_NAME = "Penpal.app"
-BUNDLE_ID = "com.penpal.app"
 EXECUTABLE_NAME = "Penpal"
 HUD_LABEL = "com.penpal.hud"
 BUNDLE_VERSION = "1"
@@ -67,18 +71,9 @@ def _run(cmd: list[str], **kwargs) -> "subprocess.CompletedProcess[str]":
     return subprocess.run(cmd, **kwargs)
 
 
-def _is_ours(bundle: Path) -> bool:
-    try:
-        info = plistlib.loads((bundle / "Contents" / "Info.plist").read_bytes())
-    except (OSError, plistlib.InvalidFileException, ValueError):
-        return False
-    return info.get("CFBundleIdentifier") == BUNDLE_ID
-
-
 def installed_app(apps_dir: Optional[Path] = None) -> Path | None:
     """Our Penpal.app if it is installed, else None."""
-    bundle = (apps_dir or default_apps_dir()) / APP_NAME
-    return bundle if _is_ours(bundle) else None
+    return find_installed_app(apps_dir)
 
 
 def open_app(bundle: Path) -> None:

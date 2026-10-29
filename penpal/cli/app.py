@@ -52,6 +52,9 @@ def _running_hud_pids() -> list[int]:
 
 
 def _stop_hud():
+    from penpal.foundation.hud_record import remove_hud_record
+
+    remove_hud_record()
     lock = _hud_lock()
     pids = _running_hud_pids()
 
@@ -104,6 +107,8 @@ def _show_hud_status(plain: bool = False):
             print(f"status_item_created={hud.status_item_created}")
             print(f"status_item_visible={'unknown' if hud.status_item_visible is None else hud.status_item_visible}")
             print(f"main_thread_tick_age_sec={hud.main_thread_tick_age_sec if hud.main_thread_tick_age_sec is not None else 'unknown'}")
+            if hud.supervisor_summary_zh:
+                print(f"supervisor={hud.supervisor_summary_zh}")
         if issue:
             print(f"message={issue.message_zh}")
         return
@@ -123,6 +128,8 @@ def _show_hud_status(plain: bool = False):
         table.add_row("状态栏图标可见性", visible)
         if hud.main_thread_tick_age_sec is not None:
             table.add_row("主线程最近响应", f"{hud.main_thread_tick_age_sec:.0f} 秒前")
+        if hud.supervisor_summary_zh:
+            table.add_row("自愈记录", hud.supervisor_summary_zh)
     if issue:
         table.add_row("详情", issue.message_zh)
     console.print(table)
