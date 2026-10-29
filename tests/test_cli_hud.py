@@ -93,6 +93,32 @@ def test_hud_stop_terminates_running_instance(monkeypatch, tmp_path):
     assert "stopped" in result.output.lower()
 
 
+def test_hud_stop_finds_the_app_hud_by_its_record_before_removing_it(monkeypatch, tmp_path):
+    record = {"present": True}
+    calls = []
+    state = {"running": True}
+
+    class FakeLock:
+        def is_running(self):
+            return state["running"]
+
+    def fake_kill(pid, sig):
+        calls.append((pid, sig))
+        state["running"] = False
+
+    monkeypatch.setattr("penpal.cli.app._hud_lock", FakeLock)
+    monkeypatch.setattr("penpal.cli.app.active_hud_pid", lambda: 4242 if record["present"] else None)
+    monkeypatch.setattr("penpal.cli.app.find_legacy_hud_pids", lambda: [])
+    monkeypatch.setattr("penpal.foundation.hud_record.remove_hud_record", lambda: record.update(present=False))
+    monkeypatch.setattr("penpal.cli.app.os.kill", fake_kill)
+
+    result = CliRunner().invoke(main, ["hud", "stop"])
+
+    assert result.exit_code == 0, result.output
+    assert calls == [(4242, signal.SIGTERM)]
+    assert record["present"] is False
+
+
 def test_hud_status_reports_running_instance(monkeypatch, tmp_path):
     status = HudStatus(4242, "g", True, True, True, "2026-10-25T12:00:00+00:00", "2026-10-25T12:00:01+00:00", 1.0)
     monkeypatch.setattr("penpal.cli.app.evaluate", lambda: RuntimeStatus(RuntimeState.RUNNING, hud=status))
