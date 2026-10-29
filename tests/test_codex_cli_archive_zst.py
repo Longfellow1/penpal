@@ -252,3 +252,43 @@ def test_codex_coverage_counts_threads_not_only_sessions(tmp_path: Path):
     rows, totals = compute_tool_coverage(catalog_dir=catalog_dir, env={"CODEX_HOME": str(codex_home)})
     by_id = {r["id"]: r for r in rows}
     assert by_id["codex_cli"]["ingested_sessions"] == 2
+
+
+def test_penpal_imports_and_skips_zst_without_zstandard(tmp_path: Path):
+    """A missing zstandard wheel must not stop Penpal: only compressed files are skipped (fresh-install drill)."""
+    import subprocess
+    import sys
+
+    jsonl_root = tmp_path / "recipe"
+    jsonl_root.mkdir()
+    (jsonl_root / "a.jsonl").write_text('{"role": "user", "content": "plain text", "ts": "2026-10-01T10:00:00Z"}\n', encoding="utf-8")
+    (jsonl_root / "b.jsonl.zst").write_bytes(b"not read")
+    script = f"""
+import sys
+sys.modules["zstandard"] = None
+import penpal.sources.registry  # noqa: F401  (the import chain the drill failed on)
+from pathlib import Path as _P
+from penpal.sources.recipes.catalog import load_recipe_from_string
+from penpal.sources.recipes.engine import RecipeEngine, zstd_available
+assert not zstd_available()
+tool = load_recipe_from_string('''
+id = "t"
+name = "T"
+kind = "agent"
+[[history]]
+format = "jsonl"
+glob = "{jsonl_root}/*.jsonl*"
+fields = {{ role = "role", content = "content", created_at = "ts" }}
+timestamp = "iso"
+cursor = "file_offset"
+''', origin="inline")
+engine = RecipeEngine()
+events = list(engine.stream_recipe(tool, tool.history[0], _P({str(jsonl_root)!r}), 0, {{}}))
+assert [e.intent for e in events] == ["plain text"], events
+assert engine.last_error == "zstd_unavailable", engine.last_error
+assert "b.jsonl.zst" not in (engine.last_cursor or {{}}).get("files", {{}})
+print("ok")
+"""
+    proc = subprocess.run([sys.executable, "-c", script], capture_output=True, text=True, timeout=60)
+    assert proc.returncode == 0, proc.stderr[-2000:]
+    assert proc.stdout.strip().endswith("ok")

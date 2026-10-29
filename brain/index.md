@@ -1,6 +1,6 @@
 # Brain Index
 
-_Auto-generated. Last updated 2026-10-29T03:14:03.690Z._
+_Auto-generated. Last updated 2026-10-29T03:22:03.587Z._
 
 - [ai-tool-auto-coverage](pages/ai-tool-auto-coverage.md) — category: decision | tags: [capture, mcp, coverage, memmy] | Requirement (user, 2026-10-28, must ship): Phase 1 of the Memmy-class work covers at least 80% of the mainstream AI agents and IDEs a Mac us
 - [anchors-json-is-ssot](pages/anchors-json-is-ssot.md) — category: decision | ## Decision
@@ -19,6 +19,7 @@ _Auto-generated. Last updated 2026-10-29T03:14:03.690Z._
 - [eval-prd-separate](pages/eval-prd-separate.md) — category: decision | tags: [eval, prd] | ## Decision
 - [geo-discoverability](pages/geo-discoverability.md) — category: decision | tags: [geo, positioning, growth] | - Public name is **"Penpal MCP"** (zh "Penpal MCP（笔友）"): bare "Penpal" collides with the common word "pen pal" and other projects. Category
 - [gold-set-gated-prompt-changes](pages/gold-set-gated-prompt-changes.md) — category: decision | status: archived | ## Decision
+- [homebrew-runtime-deps](pages/homebrew-runtime-deps.md) — category: decision | tags: [release, homebrew, dependencies] | <current best understanding — replace this with the real content>
 - [host-does-query-preprocessing](pages/host-does-query-preprocessing.md) — category: decision | tags: [v1, mcp, search, decision] | <current best understanding — replace this with the real content>
 - [irreplaceability-vs-bash](pages/irreplaceability-vs-bash.md) — category: decision | tags: [v1, product, positioning, eval, decision] | <current best understanding — replace this with the real content>
 - [keyboard-capture-p0-experimental](pages/keyboard-capture-p0-experimental.md) — category: decision | tags: [scope, capture, privacy] | ## Decision

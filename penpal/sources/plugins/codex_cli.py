@@ -33,6 +33,7 @@ from typing import Any, Iterator
 from penpal.foundation.project import normalize_project
 from penpal.utils.paths import get_codex_home
 from penpal.sources.plugins.claude_code import _parse_iso8601, _parse_json_line
+from penpal.sources.recipes.engine import zstd_available
 from penpal.foundation.transcript_noise import clean_message_part
 from penpal.sources.cleaning.noise import (
     advance_echo,
@@ -144,6 +145,7 @@ class CodexCliSource(DataSource):
             if self._archived_sessions_root.is_dir() and self._archived_sessions_root.resolve() != self._sessions_root.resolve():
                 roots_to_scan.append((self._archived_sessions_root.resolve(), "archived_sessions/"))
 
+            zstd_warned = False
             for scan_root, prefix in roots_to_scan:
                 files = sorted([f for f in scan_root.rglob("*") if f.is_file() and _is_rollout_file(f)])
                 LOGGER.info("codex_cli: scanning %d rollout files under %s (prefix=%s)", len(files), scan_root, prefix)
@@ -154,6 +156,11 @@ class CodexCliSource(DataSource):
                     except OSError:
                         continue
                     is_zst = jsonl_file.name.endswith(".zst")
+                    if is_zst and not zstd_available():
+                        if not zstd_warned:
+                            LOGGER.warning("codex_cli: zstandard is not installed; compressed sessions are skipped")
+                            zstd_warned = True
+                        continue
                     prior = files_state.get(rel) or {} if self._use_cursor else {}
                     state = dict(prior)
                     if is_zst:

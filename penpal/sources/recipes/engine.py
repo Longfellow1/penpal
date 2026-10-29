@@ -9,11 +9,11 @@ import os
 import shutil
 import sqlite3
 import tempfile
+from functools import lru_cache
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable, Iterator, Mapping
 
-import zstandard
 
 from penpal.foundation.project import normalize_project
 from penpal.foundation.sqlite_rules import is_blocked_sqlite
@@ -237,6 +237,16 @@ def resolve_history_files(
     return sorted(matched_paths)
 
 
+@lru_cache(maxsize=1)
+def zstd_available() -> bool:
+    """zstandard is imported on first use: without the wheel only compressed files are skipped."""
+    try:
+        import zstandard  # noqa: F401
+    except ImportError:
+        return False
+    return True
+
+
 class RecipeEngine:
     """Executes history recipes with cursor tracking, drift probes, and streaming output."""
 
@@ -306,6 +316,10 @@ class RecipeEngine:
 
             prior = dict(files_state.get(rel) or {})
             is_zst = file_path.name.endswith(".zst")
+            if is_zst and not zstd_available():
+                # Cursor left as is, so the file is read once the dependency is installed.
+                self.last_error = "zstd_unavailable"
+                continue
             use_record_index = history.cursor == "record_index" or is_zst
 
             if use_record_index:
@@ -403,6 +417,8 @@ class RecipeEngine:
         rec_idx = 0
 
         if is_zst:
+            import zstandard
+
             dctx = zstandard.ZstdDecompressor()
             with file_path.open("rb") as raw_f:
                 with dctx.stream_reader(raw_f) as z_reader:
@@ -452,6 +468,8 @@ class RecipeEngine:
     ) -> Iterator[tuple[int, int, dict[str, Any]]]:
         is_zst = file_path.name.endswith(".zst")
         if is_zst:
+            import zstandard
+
             dctx = zstandard.ZstdDecompressor()
             with file_path.open("rb") as raw_f:
                 with dctx.stream_reader(raw_f) as z_reader:
