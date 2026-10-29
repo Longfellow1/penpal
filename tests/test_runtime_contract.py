@@ -91,6 +91,7 @@ def test_r1_state_matrix(monkeypatch, record_kind, launchd_state, progress, fing
         installed_fingerprint=lambda: FINGERPRINT,
         identity_reader=lambda: identity,
         paused_reader=lambda: paused,
+        wake_time_reader=lambda: None,  # the host's real wake time must not mask stale progress
     )
 
     if schema_state == "newer":
@@ -355,6 +356,7 @@ def test_pid_reuse_and_starting_grace(monkeypatch):
         launchd_probe=lambda: {"loaded": False, "pid": None, "last_exit": None},
         installed_fingerprint=lambda: FINGERPRINT,
         paused_reader=lambda: False,
+        wake_time_reader=lambda: None,  # the host's real wake time must not mask stale progress
     )
     assert evaluate(**args).state is RuntimeState.NOT_RUNNING
 
