@@ -15,6 +15,7 @@ from penpal.runtime.control import (
     ControlResult,
     restart as default_restart,
     restart_hud as default_restart_hud,
+    wait_for_hud_ready as default_wait_for_hud_ready,
 )
 from penpal.runtime.evaluate import Issue
 
@@ -93,6 +94,16 @@ def _repair_hud_restart(code: str, issue: Any, control: Any, opener: Any) -> Rep
     if not callable(restart_hud_fn):
         restart_hud_fn = default_restart_hud
     res: ControlResult = restart_hud_fn()
+    # Report success only once the new HUD is up, so the re-check after a repair does not still see it gone.
+    wait_fn = getattr(control, "wait_for_hud_ready", None) if control is not None else default_wait_for_hud_ready
+    if res.ok and callable(wait_fn) and not wait_fn():
+        return RepairResult(
+            issue_code=code,
+            attempted=True,
+            fixed=False,
+            message_zh="已重新打开 HUD，但 10 秒内未就绪；后台服务会继续自动检查。",
+            message_en="Relaunched the HUD, but it was not ready within 10 seconds; the background service keeps checking.",
+        )
     if res.ok:
         return RepairResult(
             issue_code=code,

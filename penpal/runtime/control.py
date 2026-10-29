@@ -474,6 +474,23 @@ def relaunch_hud(
     return ControlResult(True, "relaunch_hud")
 
 
+def wait_for_hud_ready(
+    *,
+    pid_finder: Callable[[], int | None] | None = None,
+    sleep: Callable[[float], None] = time.sleep,
+    monotonic: Callable[[], float] = time.monotonic,
+    timeout_sec: float = 10.0,
+) -> bool:
+    """Wait until a relaunched HUD has written a runtime record that matches a live process."""
+    finder = pid_finder if pid_finder is not None else active_hud_pid
+    deadline = monotonic() + timeout_sec
+    while finder() is None:
+        if monotonic() >= deadline:
+            return False
+        sleep(0.1)
+    return True
+
+
 def restart_hud(
     *,
     active_pid_finder: Callable[[], int | None] | None = None,
