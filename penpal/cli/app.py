@@ -12,6 +12,7 @@ from penpal.utils.lock import SingleInstanceLock
 from penpal.hud import run_hud
 from penpal.i18n import T
 from penpal.runtime import active_hud_pid, evaluate, find_legacy_hud_pids
+from penpal.runtime.control import pid_is_running, relaunch_hud, wait_for_hud_ready
 from . import main
 from ._shared import PLAIN_HELP, console, err_console, get_config, require_db
 from .install import _penpal_executable_path
@@ -67,20 +68,20 @@ def _stop_hud():
         err_console.print("[yellow]HUD is running, but its process could not be identified safely.[/yellow]")
         raise SystemExit(1)
 
-    signalled = False
+    signalled_pids: list[int] = []
     for pid in pids:
         try:
             os.kill(pid, signal.SIGTERM)
-            signalled = True
+            signalled_pids.append(pid)
         except ProcessLookupError:
             continue
-    if not signalled:
+    if not signalled_pids:
         console.print("[yellow]HUD is not running.[/yellow]")
         return
 
     for _ in range(50):
         time.sleep(0.1)
-        if not lock.is_running():
+        if not lock.is_running() and not any(pid_is_running(pid) for pid in signalled_pids):
             console.print("[green]HUD stopped.[/green]")
             return
 
@@ -141,12 +142,31 @@ def _show_hud_status(plain: bool = False):
 def hud(ctx):
     """HUD."""
     if ctx.invoked_subcommand is None:
+        # Bare 'hud' is the bundle's internal entry and developer foreground mode.
         _start_hud()
 
-@hud.command("start", help=T("启动 HUD。", "Launch HUD."))
+@hud.command("start", help=T("打开 Penpal.app 启动 HUD。", "Open Penpal.app to launch HUD."))
 def hud_start():
-    """Start HUD."""
-    _start_hud()
+    """Start HUD by opening Penpal.app."""
+    running_pid = active_hud_pid() or _find_legacy_hud_pid()
+    if running_pid is not None:
+        err_console.print(f"[yellow]HUD already running (PID {running_pid}).[/yellow]")
+        sys.exit(1)
+
+    result = relaunch_hud()
+    if not result.ok:
+        err_console.print(T(result.error_zh, result.error_en))
+        sys.exit(1)
+
+    if not wait_for_hud_ready():
+        err_console.print(T(
+            "已请求打开 Penpal.app，但 10 秒内 HUD 未就绪；运行 penpal doctor 查看。",
+            "Asked Penpal.app to open, but the HUD was not ready within 10 seconds; run penpal doctor.",
+        ))
+        sys.exit(1)
+
+    pid = active_hud_pid()
+    console.print(T(f"HUD 已启动（PID {pid}）。", f"HUD started (PID {pid})."))
 
 @hud.command("stop", help=T("停止 HUD。", "Stop HUD."))
 def hud_stop():
