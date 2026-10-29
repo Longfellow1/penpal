@@ -24,6 +24,8 @@ dependencies = [
     "rich>=13.7",
     "pydantic>=2.5",
     "mcp>=1.30,<1.31",  # custom session handoff uses the MCP 1.30 low-level stdio API
+    # Python 3.13 has no stdlib zstd; Codex and others compress sessions.
+    "zstandard>=0.22",
 ]
 
 [project.optional-dependencies]
@@ -58,7 +60,7 @@ where = ["."]
 include = ["penpal*"]
 
 [tool.setuptools.package-data]
-penpal = ["hud/launcher/*.c"]
+penpal = ["hud/launcher/*.c", "sources/catalog/*.toml"]
 
 [tool.pytest.ini_options]
 pythonpath = ["."]  # lets tests import the top-level evals/ harness

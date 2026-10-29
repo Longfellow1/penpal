@@ -1,0 +1,21 @@
+# Pi agent. Session JSONL checked on a real install (2026-10-29, counts only); one file per session.
+id = "pi"
+name = "Pi"
+kind = "agent"
+readable = true
+
+[detect]
+any = [{ dir = "~/.pi/agent" }, { cli = "pi" }]
+
+[[history]]
+format = "jsonl"
+glob = "~/.pi/agent/sessions/*/*.jsonl"
+fields = { role = "message.role", content = "message.content", created_at = "timestamp" }
+timestamp = "auto"
+cursor = "file_offset"
+keep_roles = ["user", "assistant"]
+min_parse_rate = 0.9
+
+[mcp]
+config = "~/.pi/agent/mcp.json"
+style = "json_mcpServers"

@@ -1,0 +1,43 @@
+# Cursor. Two stores, both checked on a real install (2026-10-29, key shape only):
+# 1. agent transcripts: one JSONL per chat, no per-message time (file mtime is used);
+# 2. globalStorage state.vscdb, cursorDiskKV rows keyed bubbleId:<composerId>:<bubbleId>;
+#    value.type 1 = user, 2 = assistant; assistant rows with empty text are tool steps.
+id = "cursor"
+name = "Cursor"
+kind = "ide"
+readable = true
+
+[detect]
+any = [{ dir = "~/.cursor" }, { dir = "~/Library/Application Support/Cursor/User" }]
+
+[[history]]
+format = "jsonl"
+glob = "~/.cursor/projects/*/agent-transcripts/*/*.jsonl"
+fields = { role = "role", content = "message.content" }
+timestamp = "file_mtime"
+cursor = "file_offset"
+keep_roles = ["user", "assistant"]
+min_parse_rate = 0.9
+
+[[history]]
+format = "sqlite"
+glob = "~/Library/Application Support/Cursor/User/globalStorage/state.vscdb"
+query = '''
+SELECT
+  key AS message_id,
+  substr(key, 10, 36) AS conversation_id,
+  CASE json_extract(value, '$.type') WHEN 1 THEN 'user' WHEN 2 THEN 'assistant' END AS role,
+  json_extract(value, '$.text') AS content,
+  json_extract(value, '$.createdAt') AS created_at
+FROM cursorDiskKV
+WHERE key >= 'bubbleId:' AND key < 'bubbleId;' AND value IS NOT NULL
+'''
+fields = { message_id = "message_id", conversation_id = "conversation_id", role = "role", content = "content", created_at = "created_at" }
+timestamp = "iso"
+cursor = "sqlite_watermark:created_at"
+keep_roles = ["user", "assistant"]
+min_parse_rate = 0.9
+
+[mcp]
+config = "~/.cursor/mcp.json"
+style = "json_mcpServers"

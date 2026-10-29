@@ -1,0 +1,12 @@
+id = "claude_code"
+name = "Claude Code"
+kind = "agent"
+readable = true
+adapter = "claude_code"
+
+[detect]
+any = [{ cli = "claude" }, { dir = "~/.claude" }]
+
+[mcp]
+config = "~/.claude.json"
+style = "json_mcpServers"

@@ -1,0 +1,61 @@
+# Hermes Agent. state.db checked on a real install (2026-10-29, counts only); messages.id is the
+# INTEGER primary key, so it is the watermark.
+id = "hermes"
+name = "Hermes Agent"
+kind = "agent"
+readable = true
+
+[detect]
+any = [{ dir = "~/.hermes" }, { cli = "hermes" }]
+
+[[history]]
+format = "sqlite"
+glob = "~/.hermes/state.db"
+query = '''
+SELECT
+  CAST(m.id AS TEXT) AS message_id,
+  m.id AS seq,
+  CAST(m.session_id AS TEXT) AS conversation_id,
+  m.role AS role,
+  CAST(m.content AS TEXT) AS content,
+  m.timestamp AS created_at,
+  s.cwd AS workspace
+FROM messages m
+LEFT JOIN sessions s ON s.id = m.session_id
+WHERE m.role IN ('user', 'assistant')
+  AND m.content IS NOT NULL AND m.content <> ''
+  AND (m.active = 1 OR m.compacted = 1)
+'''
+fields = { message_id = "message_id", conversation_id = "conversation_id", role = "role", content = "content", created_at = "created_at", workspace = "workspace" }
+timestamp = "unix_s"
+cursor = "sqlite_watermark:seq"
+keep_roles = ["user", "assistant"]
+min_parse_rate = 0.9
+
+[[history]]
+format = "sqlite"
+glob = "~/.hermes/profiles/*/state.db"
+query = '''
+SELECT
+  CAST(m.id AS TEXT) AS message_id,
+  m.id AS seq,
+  CAST(m.session_id AS TEXT) AS conversation_id,
+  m.role AS role,
+  CAST(m.content AS TEXT) AS content,
+  m.timestamp AS created_at,
+  s.cwd AS workspace
+FROM messages m
+LEFT JOIN sessions s ON s.id = m.session_id
+WHERE m.role IN ('user', 'assistant')
+  AND m.content IS NOT NULL AND m.content <> ''
+  AND (m.active = 1 OR m.compacted = 1)
+'''
+fields = { message_id = "message_id", conversation_id = "conversation_id", role = "role", content = "content", created_at = "created_at", workspace = "workspace" }
+timestamp = "unix_s"
+cursor = "sqlite_watermark:seq"
+keep_roles = ["user", "assistant"]
+min_parse_rate = 0.9
+
+[mcp]
+config = "~/.hermes/config.yaml"
+style = "yaml_mcp_servers"

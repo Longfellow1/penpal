@@ -70,6 +70,7 @@ class CodexCliSource(DataSource):
         self,
         *,
         sessions_root: Path | None = None,
+        archived_sessions_root: Path | None = None,
         history_path: Path | None = None,
         use_cursor: bool = False,
         penpal_server_names: tuple[str, ...] | list[str] | None = None,
@@ -80,13 +81,23 @@ class CodexCliSource(DataSource):
         self._pending_cursors: dict[int, dict[str, Any]] = {}
         codex_home = default_codex_home()
         self._sessions_root = (sessions_root or (codex_home / "sessions")).expanduser()
+        if archived_sessions_root is not None:
+            self._archived_sessions_root = archived_sessions_root.expanduser()
+        elif sessions_root is not None and (sessions_root.parent / "archived_sessions").is_dir():
+            self._archived_sessions_root = (sessions_root.parent / "archived_sessions").expanduser()
+        else:
+            self._archived_sessions_root = (codex_home / "archived_sessions").expanduser()
         self._history_path = (history_path or (codex_home / "history.jsonl")).expanduser()
 
     # ── discovery ────────────────────────────────────────────────────────────
 
     def discover(self) -> list[DataSourceInstance]:
-        if self._sessions_root.is_dir():
-            count = sum(1 for _ in self._sessions_root.rglob("*.jsonl"))
+        if self._sessions_root.is_dir() or self._archived_sessions_root.is_dir():
+            count = 0
+            if self._sessions_root.is_dir():
+                count += _count_rollout_files(self._sessions_root)
+            if self._archived_sessions_root.is_dir():
+                count += _count_rollout_files(self._archived_sessions_root)
             return [
                 DataSourceInstance(
                     plugin=self.name,
@@ -127,48 +138,109 @@ class CodexCliSource(DataSource):
             files_state = dict(get_cursor(source_id).get("files") or {})
 
         def _iter() -> Iterator[SemanticEvent]:
-            files = sorted(root.rglob("*.jsonl"))
-            LOGGER.info("codex_cli: scanning %d rollout files under %s", len(files), root)
-            for n, jsonl_file in enumerate(files, start=1):
-                rel = jsonl_file.relative_to(root).as_posix()
-                try:
-                    stat = jsonl_file.stat()
-                except OSError:
-                    continue
-                prior = files_state.get(rel) or {} if self._use_cursor else {}
-                state = dict(prior)
-                if state.get("inode") != stat.st_ino or stat.st_size < int(state.get("offset", 0)):
-                    state = {}  # new / rotated / truncated: start over (external_id dedups)
-                if self._use_cursor and state and stat.st_size == int(state.get("offset", 0)):
-                    continue
-                emitted = 0
-                try:
-                    for event in self._scan_file(root, jsonl_file, rel, state):
-                        if not self._use_cursor and (event.time < since or event.time > until):
+            roots_to_scan: list[tuple[Path, str]] = []
+            if self._sessions_root.is_dir():
+                roots_to_scan.append((self._sessions_root.resolve(), ""))
+            if self._archived_sessions_root.is_dir() and self._archived_sessions_root.resolve() != self._sessions_root.resolve():
+                roots_to_scan.append((self._archived_sessions_root.resolve(), "archived_sessions/"))
+
+            for scan_root, prefix in roots_to_scan:
+                files = sorted([f for f in scan_root.rglob("*") if f.is_file() and _is_rollout_file(f)])
+                LOGGER.info("codex_cli: scanning %d rollout files under %s (prefix=%s)", len(files), scan_root, prefix)
+                for n, jsonl_file in enumerate(files, start=1):
+                    rel = prefix + jsonl_file.relative_to(scan_root).as_posix()
+                    try:
+                        stat = jsonl_file.stat()
+                    except OSError:
+                        continue
+                    is_zst = jsonl_file.name.endswith(".zst")
+                    prior = files_state.get(rel) or {} if self._use_cursor else {}
+                    state = dict(prior)
+                    if is_zst:
+                        if state.get("inode") != stat.st_ino or stat.st_size < int(state.get("size", 0)):
+                            state = {}
+                        if self._use_cursor and state.get("size") == stat.st_size and state.get("mtime") == stat.st_mtime:
                             continue
-                        emitted += 1
-                        yield event
-                except Exception as exc:  # one bad file must not stop the others
-                    LOGGER.warning("codex_cli: skipping %s: %s", rel, exc)
-                    continue
-                state.update(size=stat.st_size, mtime=stat.st_mtime, inode=stat.st_ino)
-                files_state[rel] = state
-                if n % 25 == 0:
-                    LOGGER.info("codex_cli: %d/%d files scanned", n, len(files))
+                    else:
+                        if state.get("inode") != stat.st_ino or stat.st_size < int(state.get("offset", 0)):
+                            state = {}  # new / rotated / truncated: start over (external_id dedups)
+                        if self._use_cursor and state and stat.st_size == int(state.get("offset", 0)):
+                            continue
+                    emitted = 0
+                    try:
+                        scanner = (
+                            self._scan_file_zst(root, jsonl_file, rel, state)
+                            if is_zst
+                            else self._scan_file(root, jsonl_file, rel, state)
+                        )
+                        for event in scanner:
+                            if not self._use_cursor and (event.time < since or event.time > until):
+                                continue
+                            emitted += 1
+                            yield event
+                    except Exception as exc:  # one bad file must not stop the others
+                        LOGGER.warning("codex_cli: skipping %s: %s", rel, exc)
+                        continue
+                    state.update(size=stat.st_size, mtime=stat.st_mtime, inode=stat.st_ino)
+                    files_state[rel] = state
+                    if n % 25 == 0:
+                        LOGGER.info("codex_cli: %d/%d files scanned", n, len(files))
             if source_id is not None:
                 self._pending_cursors[source_id] = {"files": files_state}
 
         return _iter()
 
+    def _scan_file_zst(self, root: Path, zst_file: Path, rel: str, state: dict[str, Any]) -> Iterator[SemanticEvent]:
+        import io
+        import zstandard
+
+        prior_rec_index = int(state.get("record_index", 0)) if self._use_cursor else 0
+        state.update(
+            sid=_session_id_from_name(zst_file),
+            thread_id=_session_id_from_name(zst_file),
+            conversation_id=None,
+            meta_parsed=False,
+            cwd=None,
+            ts=None,
+            echo=False,
+        )
+        line_no = 0
+        names = resolve_server_names(self._penpal_server_names)
+        name_bytes = tuple(n.encode() for n in names)
+
+        dctx = zstandard.ZstdDecompressor()
+        with zst_file.open("rb") as raw_handle:
+            with dctx.stream_reader(raw_handle) as z_reader:
+                buf = io.BufferedReader(z_reader)
+                for raw in buf:
+                    line_no += 1
+                    rec_idx = line_no - 1
+                    event = _process_rollout_line(
+                        raw, line_no, state, root, zst_file, rel,
+                        names, name_bytes, self.privacy_tier, self.name
+                    )
+                    state["line"] = line_no
+                    if self._use_cursor and rec_idx < prior_rec_index:
+                        continue
+                    if event is not None:
+                        state["record_index"] = rec_idx + 1
+                        yield event
+        state["record_index"] = max(prior_rec_index, line_no)
+
     def _scan_file(self, root: Path, jsonl_file: Path, rel: str, state: dict[str, Any]) -> Iterator[SemanticEvent]:
         """Stream one rollout file from ``state['offset']``; mutates ``state`` as lines are consumed."""
         offset = int(state.get("offset", 0))
+        if offset == 0:
+            state.update(
+                sid=_session_id_from_name(jsonl_file),
+                thread_id=_session_id_from_name(jsonl_file),
+                conversation_id=None,
+                meta_parsed=False,
+                cwd=None,
+                ts=None,
+                echo=False,
+            )
         line_no = int(state.get("line", 0))
-        sid = state.get("sid") or _session_id_from_name(jsonl_file)
-        sid_from_meta = bool(state.get("sid_meta"))
-        cwd = state.get("cwd")
-        start_ts = state.get("ts")
-        echo = bool(state.get("echo"))
         names = resolve_server_names(self._penpal_server_names)
         name_bytes = tuple(n.encode() for n in names)
         with jsonl_file.open("rb") as handle:
@@ -180,79 +252,14 @@ class CodexCliSource(DataSource):
                         break  # partial trailing write: re-read next sync
                 offset += len(raw)
                 line_no += 1
-                is_call = any(m in raw for m in _CALL_MARKERS) and any(n in raw.lower() for n in name_bytes)
-                if line_no != 1 and not is_call and not any(m in raw for m in _MARKERS):
-                    continue
-                row = _parse_json_line(raw.decode("utf-8", errors="replace"))
-                if row is None:
-                    continue
-                payload = row.get("payload") if isinstance(row.get("payload"), dict) else None
-                rtype = row.get("type")
-                if is_call:
-                    call = payload if payload is not None else row
-                    if call.get("type") in _CALL_TYPES:
-                        if is_penpal_call(call, names):
-                            echo = True
-                            state["echo"] = True
-                        continue
-
-                if rtype == "session_meta" or (rtype is None and line_no == 1 and "id" in row):
-                    meta = payload if rtype == "session_meta" and payload is not None else row
-                    if not sid_from_meta:  # the file's own session is the first meta; later ones are forks/parents
-                        found = meta.get("session_id") or meta.get("id")
-                        if isinstance(found, str) and found:
-                            sid, sid_from_meta = found, True
-                    if not cwd and isinstance(meta.get("cwd"), str):
-                        cwd = meta["cwd"]
-                    if not start_ts and isinstance(meta.get("timestamp"), str):
-                        start_ts = meta["timestamp"]
-                    continue
-                if rtype == "turn_context":
-                    if payload and isinstance(payload.get("cwd"), str) and payload["cwd"]:
-                        cwd = payload["cwd"]
-                    continue
-                if rtype == "response_item" and payload is not None:
-                    message = payload
-                elif rtype == "message" and payload is None:
-                    message = row  # old unwrapped shape
-                else:
-                    continue
-                if message.get("type") not in (None, "message") or message.get("role") not in _KEEP_ROLES:
-                    continue
-                role = message["role"]
-                text = _message_text(message.get("content"), role)
-                if not text:
-                    continue
-                marked, echo = advance_echo(echo, role, True, False)
-                when = _parse_iso8601(row.get("timestamp")) or _parse_iso8601(message.get("timestamp")) or _parse_iso8601(start_ts)
-                if when is None:
-                    when = datetime.fromtimestamp(jsonl_file.stat().st_mtime, tz=timezone.utc)
-                ordinal = row.get("ordinal")
-                external_id = f"{sid}:{ordinal}" if isinstance(ordinal, int) else f"{sid}:L{line_no}"
-                metadata: dict[str, Any] = {"session_id": sid}
-                if marked:
-                    metadata["via_penpal"] = True
-                if cwd:
-                    metadata["cwd"] = cwd
-                    metadata["project_dir"] = cwd
-                    metadata["project"] = normalize_project(cwd)
-                state.update(offset=offset, line=line_no, sid=sid, sid_meta=sid_from_meta, cwd=cwd, ts=start_ts, echo=echo)
-                yield SemanticEvent(
-                    time=when,
-                    source=self.name,
-                    actor=role,
-                    intent=text[:MAX_INTENT_CHARS],
-                    artifact=f"codex:session:{sid}:msg:{ordinal if isinstance(ordinal, int) else 'L' + str(line_no)}",
-                    raw_ref=f"codex:sessions:{rel}:{line_no}",
-                    privacy_tier=self.privacy_tier,
-                    metadata=metadata,
-                    external_id=external_id,
-                    source_locator=str(root),
-                    evidence_locator=str(jsonl_file.resolve()),
-                    evidence_line=line_no,
-                    kind="message",
+                state["offset"] = offset
+                state["line"] = line_no
+                event = _process_rollout_line(
+                    raw, line_no, state, root, jsonl_file, rel,
+                    names, name_bytes, self.privacy_tier, self.name
                 )
-        state.update(offset=offset, line=line_no, sid=sid, sid_meta=sid_from_meta, cwd=cwd, ts=start_ts, echo=echo)
+                if event is not None:
+                    yield event
 
     def commit_cursors(self, *, failed: bool = False) -> None:
         """Persist resume positions once the registry has stored the events."""
@@ -308,9 +315,146 @@ class CodexCliSource(DataSource):
         return _iter_events()
 
 
+def _process_rollout_line(
+    raw: bytes,
+    line_no: int,
+    state: dict[str, Any],
+    root: Path,
+    jsonl_file: Path,
+    rel: str,
+    names: tuple[str, ...],
+    name_bytes: tuple[bytes, ...],
+    privacy_tier: str,
+    source_name: str,
+) -> SemanticEvent | None:
+    is_call = any(m in raw for m in _CALL_MARKERS) and any(n in raw.lower() for n in name_bytes)
+    if line_no != 1 and not is_call and not any(m in raw for m in _MARKERS):
+        return None
+    row = _parse_json_line(raw.decode("utf-8", errors="replace"))
+    if row is None:
+        return None
+    payload = row.get("payload") if isinstance(row.get("payload"), dict) else None
+    rtype = row.get("type")
+    echo = bool(state.get("echo"))
+    if is_call:
+        call = payload if payload is not None else row
+        if call.get("type") in _CALL_TYPES:
+            if is_penpal_call(call, names):
+                echo = True
+                state["echo"] = True
+            return None
+
+    thread_id = state.get("thread_id") or _session_id_from_name(jsonl_file)
+    conversation_id = state.get("conversation_id")
+    meta_parsed = bool(state.get("meta_parsed"))
+    cwd = state.get("cwd")
+    start_ts = state.get("ts")
+
+    if rtype == "session_meta" or (rtype is None and line_no == 1 and "id" in row):
+        meta = payload if rtype == "session_meta" and payload is not None else row
+        if not meta_parsed:
+            meta_id = meta.get("id") if isinstance(meta.get("id"), str) and meta.get("id") else None
+            meta_sid = meta.get("session_id") if isinstance(meta.get("session_id"), str) and meta.get("session_id") else None
+            if not thread_id and meta_id:
+                thread_id = meta_id
+            conversation_id = meta_sid or meta_id or thread_id
+            meta_parsed = True
+        if not cwd and isinstance(meta.get("cwd"), str):
+            cwd = meta["cwd"]
+        if not start_ts and isinstance(meta.get("timestamp"), str):
+            start_ts = meta["timestamp"]
+        state.update(
+            sid=conversation_id,
+            thread_id=thread_id,
+            conversation_id=conversation_id,
+            meta_parsed=meta_parsed,
+            cwd=cwd,
+            ts=start_ts,
+        )
+        return None
+
+    if rtype == "turn_context":
+        if payload and isinstance(payload.get("cwd"), str) and payload["cwd"]:
+            cwd = payload["cwd"]
+            state["cwd"] = cwd
+        return None
+
+    if rtype == "response_item" and payload is not None:
+        message = payload
+    elif rtype == "message" and payload is None:
+        message = row  # old unwrapped shape
+    else:
+        return None
+
+    if message.get("type") not in (None, "message") or message.get("role") not in _KEEP_ROLES:
+        return None
+
+    role = message["role"]
+    text = _message_text(message.get("content"), role)
+    if not text:
+        return None
+
+    if not conversation_id:
+        conversation_id = thread_id
+
+    marked, echo = advance_echo(echo, role, True, False)
+    when = _parse_iso8601(row.get("timestamp")) or _parse_iso8601(message.get("timestamp")) or _parse_iso8601(start_ts)
+    if when is None:
+        when = datetime.fromtimestamp(jsonl_file.stat().st_mtime, tz=timezone.utc)
+    ordinal = row.get("ordinal")
+    msg_tag = str(ordinal) if isinstance(ordinal, int) else f"L{line_no}"
+    external_id = f"{thread_id}:{ordinal}" if isinstance(ordinal, int) else f"{thread_id}:L{line_no}"
+    metadata: dict[str, Any] = {"session_id": conversation_id, "thread_id": thread_id}
+    if marked:
+        metadata["via_penpal"] = True
+    if cwd:
+        metadata["cwd"] = cwd
+        metadata["project_dir"] = cwd
+        metadata["project"] = normalize_project(cwd)
+
+    state.update(
+        sid=conversation_id,
+        thread_id=thread_id,
+        conversation_id=conversation_id,
+        meta_parsed=meta_parsed,
+        cwd=cwd,
+        ts=start_ts,
+        echo=echo,
+    )
+
+    return SemanticEvent(
+        time=when,
+        source=source_name,
+        actor=role,
+        intent=text[:MAX_INTENT_CHARS],
+        artifact=f"codex:session:{thread_id}:msg:{msg_tag}",
+        raw_ref=f"codex:sessions:{rel}:{line_no}",
+        privacy_tier=privacy_tier,
+        metadata=metadata,
+        external_id=external_id,
+        source_locator=str(root),
+        evidence_locator=str(jsonl_file.resolve()),
+        evidence_line=line_no,
+        kind="message",
+    )
+
+
+def _is_rollout_file(path: Path) -> bool:
+    name = path.name
+    return name.endswith(".jsonl") or name.endswith(".jsonl.zst")
+
+
+def _count_rollout_files(root: Path) -> int:
+    return sum(1 for f in root.rglob("*") if f.is_file() and _is_rollout_file(f))
+
+
 def _session_id_from_name(path: Path) -> str:
-    match = _SESSION_ID_RE.search(path.stem)
-    return match.group(1) if match else path.stem
+    name = path.name
+    if name.endswith(".zst"):
+        name = name[:-4]
+    stem = Path(name).stem
+    match = _SESSION_ID_RE.search(stem)
+    return match.group(1) if match else stem
 
 
 def _message_text(content: object, role: str) -> str:

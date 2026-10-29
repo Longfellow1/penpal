@@ -1,0 +1,24 @@
+# Kiro. IDE chats checked on a real install (2026-10-29, key shape only): one JSON per session
+# under kiro.kiroagent/workspace-sessions/<workspace>/, turns in history[].message; no per-turn time.
+# kiro-cli sessions (~/.kiro/sessions) hold tool events only on the checked install, so they are not read.
+id = "kiro"
+name = "Kiro"
+kind = "ide"
+readable = true
+
+[detect]
+any = [{ dir = "~/.kiro" }, { dir = "~/Library/Application Support/Kiro/User" }, { cli = "kiro-cli" }]
+
+[[history]]
+format = "json"
+glob = "~/Library/Application Support/Kiro/User/globalStorage/kiro.kiroagent/workspace-sessions/*/*.json"
+records_path = "history"
+fields = { message_id = "message.id", role = "message.role", content = "message.content" }
+timestamp = "file_mtime"
+cursor = "record_index"
+keep_roles = ["user", "assistant"]
+min_parse_rate = 0.9
+
+[mcp]
+config = "~/.kiro/settings/mcp.json"
+style = "json_mcpServers"

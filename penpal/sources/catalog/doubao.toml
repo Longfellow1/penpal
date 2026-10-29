@@ -1,0 +1,10 @@
+# Doubao (豆包) and Doubao Work. Not captured in phase 1 (owner decision 2026-10-28): the local data is
+# a browser cache, not readable conversations (checked on a real install, 2026-10-29).
+id = "doubao"
+name = "Doubao"
+kind = "assistant"
+readable = false
+unreadable_reason = "Chat history is stored in the cloud; the local data is a browser cache."
+
+[detect]
+any = [{ app_bundle = "com.work.pc.doubao" }, { dir = "~/Library/Application Support/Doubao" }, { dir = "~/Library/Application Support/DoubaoWork" }]

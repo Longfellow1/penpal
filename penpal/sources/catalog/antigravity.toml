@@ -1,0 +1,24 @@
+# Google Antigravity agent transcripts. Format checked on a real install (2026-10-29, key shape only).
+# Each brain/<id>/.../transcript.jsonl line is one step; only USER_INPUT and PLANNER_RESPONSE are
+# conversation turns (GENERIC steps are tool output, SYSTEM_* are runtime notes).
+id = "antigravity"
+name = "Google Antigravity"
+kind = "agent"
+readable = true
+
+[detect]
+any = [{ app_bundle = "com.google.antigravity" }, { cli = "agy" }, { dir = "~/.gemini/antigravity" }, { dir = "~/.gemini/antigravity-cli" }]
+
+[[history]]
+format = "jsonl"
+glob = "~/.gemini/antigravity*/brain/*/.system_generated/logs/transcript.jsonl"
+fields = { role = "type", content = "content", created_at = "created_at" }
+role_map = { USER_INPUT = "user", PLANNER_RESPONSE = "assistant" }
+timestamp = "iso"
+cursor = "file_offset"
+keep_roles = ["user", "assistant"]
+min_parse_rate = 0.9
+
+[mcp]
+config = "~/.gemini/antigravity/mcp_config.json"
+style = "json_mcpServers"

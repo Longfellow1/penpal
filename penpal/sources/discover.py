@@ -29,11 +29,15 @@ from penpal.sources.wechat_probe import (
 )
 from penpal.store.db import init_db
 from penpal.utils.dates import local_timezone
+from penpal.sources.coverage import coverage_command
 
 
 @click.group(name="sources")
 def sources_group() -> None:
     pass
+
+
+sources_group.add_command(coverage_command)
 
 
 @sources_group.command("list")
