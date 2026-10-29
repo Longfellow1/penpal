@@ -8,6 +8,7 @@ from penpal.sources.cleaning.config import PRIVACY_TIERS, load_cleaning_config
 from penpal.sources.cleaning.content_quality import is_low_signal_event
 from penpal.sources.cleaning.dedup import dedup_events
 from penpal.sources.availability import NOT_FOUND, PROBE_ERROR, Availability, unavailable
+from penpal.sources.plugins.ai_tools import AiToolsSource
 from penpal.sources.plugins.approved_sqlite import ApprovedSqliteSource
 from penpal.sources.plugins.chrome_history import ChromeHistorySource
 from penpal.sources.plugins.claude_code import ClaudeCodeSource
@@ -224,6 +225,7 @@ def _as_utc(value: datetime) -> datetime:
 register(GitLogSource(use_cursor=True))
 register(ClaudeCodeSource(use_cursor=True))
 register(CodexCliSource(use_cursor=True))
+register(AiToolsSource(use_cursor=True))
 register(ApprovedSqliteSource())
 register(ChromeHistorySource())
 register(KnowledgeCSource())

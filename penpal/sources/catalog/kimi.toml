@@ -1,0 +1,10 @@
+# Kimi desktop app. Not captured in phase 1 (owner decision 2026-10-28). Detection path follows the
+# Electron userData convention and is not verified on a real install.
+id = "kimi"
+name = "Kimi"
+kind = "assistant"
+readable = false
+unreadable_reason = "Chat history is stored in the cloud; no local transcript to read."
+
+[detect]
+any = [{ dir = "~/Library/Application Support/Kimi" }]

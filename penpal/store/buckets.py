@@ -38,6 +38,7 @@ BUCKET_MODE = "bucket"  # policies.mode value marking a bucket rule (ignored by 
 DEFAULT_SOURCE_BUCKETS: dict[str, str] = {
     "claude_code": "Work",
     "codex_cli": "Work",
+    "ai_tools": "Work",  # other local AI agents / IDEs, same default as Claude Code and Codex
     "git_log": "Work",
     "zsh_history": "Work",
     "markdown_vault": "Personal",

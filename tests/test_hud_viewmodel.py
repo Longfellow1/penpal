@@ -288,8 +288,8 @@ def test_host_page_scope_usage_rotate_revoke():
         ("工作", True), ("个人", True), ("私密", False), ("财务", False)]
     assert "云端" in buckets["footer"]
     notice = T(
-        "Work 包含 Claude Code / Codex 里的全部对话；私人项目可用 `penpal rules add --scope project …` 归到 Personal。",
-        "Work includes all conversations in Claude Code / Codex; move a private project to Personal with `penpal rules add --scope project …`.",
+        "Work 包含 Claude Code、Codex 等 AI 工具里的全部对话；私人项目可用 `penpal rules add --scope project …` 归到 Personal。",
+        "Work includes all conversations in Claude Code, Codex and other AI tools; move a private project to Personal with `penpal rules add --scope project …`.",
     )
     assert m["sections"][1]["header"] == "授权范围提示"
     assert notice in m["sections"][1]["footer"]

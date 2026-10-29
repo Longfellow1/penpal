@@ -1,0 +1,33 @@
+# Cline. ~/.cline session files checked on a real install (2026-10-29, counts only); the VS Code
+# extension task layout comes from the public source.
+id = "cline"
+name = "Cline"
+kind = "agent"
+readable = true
+
+[detect]
+any = [{ dir = "~/.cline" }, { dir = "~/Library/Application Support/Code/User/globalStorage/saoudrizwan.claude-dev" }]
+
+[[history]]
+format = "json"
+glob = "~/.cline/data/sessions/*/*.messages.json"
+records_path = "messages"
+fields = { message_id = "id", role = "role", content = "content", created_at = "ts" }
+timestamp = "unix_ms"
+cursor = "record_index"
+keep_roles = ["user", "assistant"]
+min_parse_rate = 0.9
+
+[[history]]
+format = "json"
+glob = "~/Library/Application Support/*/User/globalStorage/saoudrizwan.claude-dev/tasks/*/api_conversation_history.json"
+records_path = ""
+fields = { role = "role", content = "content", created_at = "ts" }
+timestamp = "unix_ms"
+cursor = "record_index"
+keep_roles = ["user", "assistant"]
+min_parse_rate = 0.9
+
+[mcp]
+config = "~/.cline/data/settings/cline_mcp_settings.json"
+style = "json_mcpServers"

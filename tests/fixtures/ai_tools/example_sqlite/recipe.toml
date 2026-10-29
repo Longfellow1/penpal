@@ -1,0 +1,18 @@
+id = "example_sqlite"
+name = "Example SQLite"
+kind = "assistant"
+readable = true
+
+[detect]
+any = [{ dir = "${TEST_DIR:-~}/sqlite_sessions" }]
+
+[[history]]
+format = "sqlite"
+glob = "${TEST_DIR:-~}/sqlite_sessions/**/*.db"
+query = "SELECT id, thread_id, role_type, text_content, created_time, folder FROM turns"
+fields = { message_id = "id", conversation_id = "thread_id", role = "role_type", content = "text_content", created_at = "created_time", workspace = "folder" }
+role_map = { human = "user", assistant = "assistant" }
+timestamp = "iso"
+cursor = "sqlite_watermark:id"
+keep_roles = ["user", "assistant"]
+min_parse_rate = 0.9

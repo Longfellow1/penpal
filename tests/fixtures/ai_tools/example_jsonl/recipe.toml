@@ -1,0 +1,22 @@
+id = "example_jsonl"
+name = "Example JSONL"
+kind = "agent"
+readable = true
+
+[detect]
+any = [{ dir = "${TEST_DIR:-~}/jsonl_sessions" }]
+
+[[history]]
+format = "jsonl"
+glob = "${TEST_DIR:-~}/jsonl_sessions/**/*.jsonl"
+compression = "auto"
+fields = { message_id = "msg_id", conversation_id = "conv_id", role = "role", content = "content", created_at = "ts", workspace = "cwd" }
+role_map = { human = "user", ai = "assistant" }
+timestamp = "iso"
+cursor = "file_offset"
+keep_roles = ["user", "assistant"]
+min_parse_rate = 0.9
+
+[mcp]
+config = "~/.example/mcp.json"
+style = "json_mcpServers"

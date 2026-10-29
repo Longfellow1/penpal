@@ -1,0 +1,12 @@
+id = "codex_cli"
+name = "Codex CLI"
+kind = "agent"
+readable = true
+adapter = "codex_cli"
+
+[detect]
+any = [{ cli = "codex" }, { dir = "~/.codex" }]
+
+[mcp]
+config = "~/.codex/config.toml"
+style = "toml_mcp_servers"

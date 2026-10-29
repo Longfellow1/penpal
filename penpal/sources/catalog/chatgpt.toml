@@ -1,0 +1,11 @@
+# ChatGPT desktop app. Not captured in phase 1 (owner decision 2026-10-28): history is cloud-side and
+# screen reading cannot get complete conversations. The current app ships as com.openai.codex
+# (seen on a real install); com.openai.chat is the earlier app.
+id = "chatgpt"
+name = "ChatGPT"
+kind = "assistant"
+readable = false
+unreadable_reason = "Chat history is stored in the cloud; screen reading cannot capture complete conversations."
+
+[detect]
+any = [{ app_bundle = "com.openai.chat" }, { app_bundle = "com.openai.codex" }]

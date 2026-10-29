@@ -1,0 +1,14 @@
+# Claude desktop app. Chat history lives on Anthropic's servers; the local agent-mode folders hold
+# work files, not transcripts (checked on a real install, 2026-10-29). Connected through MCP only.
+id = "claude_desktop"
+name = "Claude Desktop"
+kind = "assistant"
+readable = false
+unreadable_reason = "Chat history is stored in the cloud; no local transcript to read."
+
+[detect]
+any = [{ app_bundle = "com.anthropic.claudefordesktop" }, { dir = "~/Library/Application Support/Claude" }]
+
+[mcp]
+config = "~/Library/Application Support/Claude/claude_desktop_config.json"
+style = "json_mcpServers"

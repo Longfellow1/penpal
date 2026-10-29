@@ -1,0 +1,72 @@
+# OpenCode. 1.x tables (part/message/session) checked on a real install (2026-10-29, counts only); 2.x tables
+# (session_message/session_v2) come from the public source and are skipped when absent.
+id = "opencode"
+name = "OpenCode"
+kind = "agent"
+readable = true
+
+[detect]
+any = [{ dir = "~/.local/share/opencode" }, { cli = "opencode" }]
+
+[[history]]
+format = "sqlite"
+glob = "~/.local/share/opencode/opencode.db"
+query = '''
+SELECT
+  p.id AS message_id,
+  m.session_id AS conversation_id,
+  json_extract(m.data, '$.role') AS role,
+  json_extract(p.data, '$.text') AS content,
+  COALESCE(json_extract(m.data, '$.time.created'), m.time_created) AS created_at,
+  s.directory AS workspace
+FROM part p
+JOIN message m ON m.id = p.message_id
+JOIN session s ON s.id = m.session_id
+WHERE json_extract(p.data, '$.type') = 'text'
+  AND json_extract(p.data, '$.synthetic') IS NULL
+  AND json_extract(p.data, '$.ignored') IS NULL
+'''
+fields = { message_id = "message_id", conversation_id = "conversation_id", role = "role", content = "content", created_at = "created_at", workspace = "workspace" }
+timestamp = "unix_ms"
+cursor = "sqlite_watermark:created_at"
+keep_roles = ["user", "assistant"]
+min_parse_rate = 0.9
+
+[[history]]
+format = "sqlite"
+glob = "~/.local/share/opencode/opencode.db"
+query = '''
+SELECT
+  sm.id || ':' || j.key AS message_id,
+  sm.session_id AS conversation_id,
+  'assistant' AS role,
+  json_extract(j.value, '$.text') AS content,
+  sm.time_created AS created_at,
+  s.directory AS workspace
+FROM session_message sm
+JOIN session_v2 s ON s.id = sm.session_id,
+  json_each(sm.data, '$.content') AS j
+WHERE sm.type = 'assistant'
+  AND json_type(sm.data, '$.content') = 'array'
+  AND json_extract(j.value, '$.type') = 'text'
+UNION ALL
+SELECT
+  sm.id,
+  sm.session_id,
+  'user',
+  json_extract(sm.data, '$.text'),
+  sm.time_created,
+  s.directory
+FROM session_message sm
+JOIN session_v2 s ON s.id = sm.session_id
+WHERE sm.type = 'user' AND json_extract(sm.data, '$.text') IS NOT NULL
+'''
+fields = { message_id = "message_id", conversation_id = "conversation_id", role = "role", content = "content", created_at = "created_at", workspace = "workspace" }
+timestamp = "unix_ms"
+cursor = "sqlite_watermark:created_at"
+keep_roles = ["user", "assistant"]
+min_parse_rate = 0.9
+
+[mcp]
+config = "~/.config/opencode/opencode.json"
+style = "manual"

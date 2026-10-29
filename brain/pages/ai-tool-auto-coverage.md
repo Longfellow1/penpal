@@ -5,7 +5,7 @@ category: decision
 status: active
 tags: [capture, mcp, coverage, memmy]
 created: "2026-10-28T20:18:26"
-updated: "2026-10-29T10:25:03"
+updated: "2026-10-29T11:11:17"
 ---
 
 <!-- compiled_truth -->
@@ -50,3 +50,15 @@ Baseline on 2026-10-28: Penpal captured only Claude Code and Codex CLI, and 77% 
   summary: "scope: agents/IDEs; encrypted/cloud-only personal assistants excluded (owner 2026-10-29)"
   source: owner 2026-10-29
   affects: [ai-tool-auto-coverage]
+
+- time: 2026-10-29T11:11:17
+  kind: decision
+  summary: "A recipe ships only after its field mapping is checked against a real install (key shapes and counts only); drafts for tools absent on the owner Mac wait for a real sample"
+  source: "manager 2026-10-29, P1 recipe calibration"
+  affects: [penpal/sources/catalog]
+
+- time: 2026-10-29T11:11:17
+  kind: decision
+  summary: "Codex ids come from the per-file thread id; the root session_id stays in metadata.session_id; main-thread ids stay byte-identical"
+  source: "manager 2026-10-29, real-Mac probe of Codex rollouts"
+  affects: [penpal/sources/plugins/codex_cli.py]

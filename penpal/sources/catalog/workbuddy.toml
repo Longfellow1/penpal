@@ -1,0 +1,32 @@
+# WorkBuddy (Tencent CodeBuddy family). Checked on a real install (2026-10-29, key shape only):
+# projects/<project>/<session>.jsonl, records with type=message carry role, content parts
+# (input_text / output_text), sessionId, id, cwd and a millisecond timestamp.
+id = "workbuddy"
+name = "WorkBuddy"
+kind = "agent"
+readable = true
+
+[detect]
+any = [{ dir = "~/.workbuddy" }, { dir = "~/.workbuddy-ai" }]
+
+[[history]]
+format = "jsonl"
+glob = "~/.workbuddy/projects/*/*.jsonl"
+fields = { message_id = "id", conversation_id = "sessionId", role = "role", content = "content", created_at = "timestamp", workspace = "cwd" }
+timestamp = "unix_ms"
+cursor = "file_offset"
+keep_roles = ["user", "assistant"]
+min_parse_rate = 0.9
+
+[[history]]
+format = "jsonl"
+glob = "~/.workbuddy/projects/*/*/subagents/*.jsonl"
+fields = { message_id = "id", conversation_id = "sessionId", role = "role", content = "content", created_at = "timestamp", workspace = "cwd" }
+timestamp = "unix_ms"
+cursor = "file_offset"
+keep_roles = ["user", "assistant"]
+min_parse_rate = 0.9
+
+[mcp]
+config = "~/.workbuddy/mcp.json"
+style = "json_mcpServers"
