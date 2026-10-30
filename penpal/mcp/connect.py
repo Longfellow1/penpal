@@ -571,10 +571,10 @@ def auto_connect(
                 ConnectResult(
                     tool_id=tool.id,
                     tool_name=tool.name,
-                    status="parse_error",
+                    status="manual",
                     config_path=tool.mcp.config,
                     error="missing_yaml",
-                    message="缺少 YAML 解析库，跳过",
+                    message="缺少 YAML 解析库，未自动接入，配置未改动；升级 Penpal 后重试",
                 )
             )
             continue
@@ -786,9 +786,9 @@ def list_tools(
                 ToolStatus(
                     tool_id=tool.id,
                     tool_name=tool.name,
-                    state="解析失败",
+                    state="未接入",
                     config_path=tool.mcp.config,
-                    detail="缺少 YAML 解析库",
+                    detail="缺少 YAML 解析库；升级 Penpal 后重试",
                 )
             )
             continue
