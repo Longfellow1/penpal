@@ -334,7 +334,7 @@ def _locator_of(event_id):
 
 def test_v28_backfills_from_stored_metadata_and_counts_the_rest(db, caplog):
     home = Path.home()
-    zsh_src = _src("zsh_history", "/h/.zsh_history")
+    _src("zsh_history", "/h/.zsh_history")
     claude_src = _src("claude_code", "/h/.claude/projects/-proj-a")
     codex_root = _src("codex_cli", "/h/.codex/sessions")
     codex_hist = _src("codex_cli", "/h/.codex/history.jsonl")

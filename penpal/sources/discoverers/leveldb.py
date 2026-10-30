@@ -20,7 +20,7 @@ def discover_leveldb_candidates(*, exclude_paths: set[str]) -> list[CandidateSou
         current = Path(dirpath)
         try:
             depth = len(current.relative_to(root).parts)
-        except Exception:
+        except ValueError:
             continue
         if depth >= 6:
             dirnames[:] = []
@@ -46,7 +46,7 @@ def discover_leveldb_candidates(*, exclude_paths: set[str]) -> list[CandidateSou
             file_path = resolved_dir / name
             try:
                 total_size += file_path.stat().st_size
-            except Exception:
+            except OSError:
                 continue
 
         total_size_mb = round(total_size / (1024 * 1024), 1)

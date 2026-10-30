@@ -192,7 +192,7 @@ def test_healthcheck_flags_speaker_mislabel_spike_and_ignores_low_ratio(monkeypa
 def test_healthcheck_reports_config_load_failure(monkeypatch, tmp_path):
     db_path = tmp_path / "penpal.db"
     vault_path = tmp_path / "vault"
-    config = _make_config(db_path, vault_path, window=True)
+    _make_config(db_path, vault_path, window=True)
     out_path = tmp_path / "health.json"
 
     monkeypatch.setattr("penpal.health.check.Config.load", lambda: (_ for _ in ()).throw(RuntimeError("bad config")))

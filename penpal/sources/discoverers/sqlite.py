@@ -11,6 +11,9 @@ from penpal.foundation.sqlite_rules import is_blocked_sqlite
 from penpal.sources.cleaning.path_filter import is_excluded_path
 from penpal.sources.types import ContentShape, classify_fields, confidence_from_categories
 
+import logging
+logger = logging.getLogger(__name__)
+
 
 _SQLITE_MAGIC = b"SQLite format 3\x00"
 _SQLITE_SUFFIXES = (".db", ".sqlite", ".sqlite3", ".vscdb")
@@ -64,7 +67,7 @@ def _iter_sqlite_paths(root: Path, *, max_depth: int, deadline: float) -> Iterat
         current_dir = Path(dirpath)
         try:
             depth = len(current_dir.relative_to(root).parts)
-        except Exception:
+        except ValueError:
             continue
         if depth >= max_depth:
             dirnames[:] = []
@@ -77,7 +80,7 @@ def _iter_sqlite_paths(root: Path, *, max_depth: int, deadline: float) -> Iterat
             file_path = current_dir / filename
             try:
                 file_depth = len(file_path.relative_to(root).parts) - 1
-            except Exception:
+            except ValueError:
                 continue
             if file_depth > max_depth:
                 continue
@@ -183,7 +186,8 @@ def _read_table_columns(path: Path, tables: list[str]) -> set[str]:
         for table in tables:
             try:
                 rows = conn.execute(f'PRAGMA table_info("{table}")').fetchall()
-            except Exception:
+            except Exception as exc:
+                logger.debug("read table columns failed: %s", type(exc).__name__)
                 continue
             for row in rows:
                 if len(row) < 2:

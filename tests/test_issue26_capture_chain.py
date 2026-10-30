@@ -32,7 +32,7 @@ from penpal.config import Config
 from penpal.mcp import auth
 from penpal.store import buckets
 from penpal.store.db import close, get_conn, init_db
-from mcp_helpers import search, server_for
+from mcp_helpers import server_for
 
 # Synthetic exclusion targets (not real apps or sites).
 EXCLUDED_BUNDLE = "com.example.vault"

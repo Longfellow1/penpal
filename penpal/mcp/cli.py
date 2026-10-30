@@ -219,7 +219,7 @@ def list_command() -> None:
 @mcp_group.command("rotate", help="Issue a new token for a client's grant (same scope). The old token stops working at once.")
 @click.argument("client_id")
 def rotate_command(client_id: str) -> None:
-    from penpal.mcp.auth import CLIENT_ENV, TOKEN_ENV, active_grants, rotate_grant
+    from penpal.mcp.auth import active_grants, rotate_grant
     from penpal.mcp.grant_notice import enabled_coding_agent_sources
 
     init_db(Config.load().db_path_expanded)

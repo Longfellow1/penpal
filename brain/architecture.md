@@ -2,6 +2,15 @@
 slug: architecture
 title: System architecture
 role: system architecture
+updated: "2026-10-30T11:59:09"
+---
+
+# System architecture
+
+---
+slug: architecture
+title: System architecture
+role: system architecture
 updated: "2026-10-10T10:51:22"
 ---
 
@@ -57,4 +66,3 @@ graph LR
 ## Docs layout (gotcha)
 - ~100 files under `docs/` and `keypulse/prompts/` were **renamed with Chinese prefixes but the rename is uncommitted** (old paths show as `D`, new paths as `??`). Current working-tree names: `docs/说明-*`, `docs/设计-*`, `docs/记录-*`, `docs/评测-*`, `keypulse/prompts/备忘-*`.
 - `CLAUDE.md` and `AGENTS.md` still cite old paths (e.g. `docs/golden-daily/2026-05-06-v4.md`). Current name: `docs/golden-daily/评测-2026-05-06-v4.md`.
-- Also: `/Users/Harland/CLAUDE.md` (parent dir) describes a different project (qi-agent / T16A, `core/` tests) and will be loaded for this repo too.

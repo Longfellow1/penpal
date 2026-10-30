@@ -123,7 +123,8 @@ def _discover_application_urls_from_filesystem() -> tuple[NSURL, ...]:
             continue
         try:
             bundle_paths = sorted(root.glob("*.app"))
-        except Exception:
+        except Exception as exc:
+            logger.debug("discover application urls from filesystem failed: %s", type(exc).__name__)
             continue
         for bundle_path in bundle_paths:
             if not bundle_path.is_dir() or not _bundle_has_https_handler(bundle_path):

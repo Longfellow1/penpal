@@ -31,6 +31,9 @@ from penpal.store.db import init_db
 from penpal.utils.dates import local_timezone
 from penpal.sources.coverage import coverage_command
 
+import logging
+logger = logging.getLogger(__name__)
+
 
 @click.group(name="sources")
 def sources_group() -> None:
@@ -518,7 +521,8 @@ def _detect_wechat_pid() -> str | None:
     for command in (["pgrep", "-i", "wechat"], ["pgrep", "-f", "WeChat"]):
         try:
             result = subprocess.run(command, check=False, capture_output=True, text=True)
-        except Exception:
+        except Exception as exc:
+            logger.debug("detect wechat pid failed: %s", type(exc).__name__)
             continue
         if result.returncode != 0:
             continue

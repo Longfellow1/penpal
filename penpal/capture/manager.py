@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import queue
 import threading
-from datetime import datetime, timezone
 from typing import Callable, Optional
 
 from penpal.capture import (
@@ -15,7 +14,7 @@ from penpal.capture.aggregator import Aggregator
 from penpal.capture.base import BaseWatcher
 from penpal.capture.camera_monitor import CameraMonitor
 from penpal.capture.fusion import CaptureFusionEngine
-from penpal.capture.manager_events import _derive_speaker
+from penpal.capture.manager_events import _derive_speaker as _derive_speaker
 from penpal.capture.normalizer import normalize_manual_event
 from penpal.capture.policy import PolicyEngine
 from penpal.config import Config

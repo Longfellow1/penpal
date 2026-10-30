@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import queue
-import threading
 import time
 
 from penpal.capture.base import BaseWatcher

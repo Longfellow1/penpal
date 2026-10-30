@@ -1,5 +1,4 @@
 from __future__ import annotations
-import queue
 from penpal.capture.base import BaseWatcher
 
 

@@ -1,7 +1,5 @@
 from __future__ import annotations
-from collections import defaultdict
 from datetime import datetime, timedelta, timezone
-from penpal.store.repository import query_raw_events, get_sessions
 from penpal.store.db import get_conn
 
 

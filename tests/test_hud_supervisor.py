@@ -1,12 +1,9 @@
 """Tests for penpal.health.hud_supervisor and penpal.runtime.control.relaunch_hud."""
 from __future__ import annotations
 
-import os
 from datetime import datetime, timedelta, timezone
-from pathlib import Path
 from types import SimpleNamespace
 
-import pytest
 
 from penpal.health.hud_supervisor import (
     HUD_MAIN_THREAD_STALE_SEC,

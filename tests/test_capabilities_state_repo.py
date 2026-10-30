@@ -14,7 +14,6 @@ import json
 import time
 from pathlib import Path
 
-import pytest
 
 from penpal.capabilities.base import HealthState
 from penpal.capabilities.registry import CapabilityRegistry

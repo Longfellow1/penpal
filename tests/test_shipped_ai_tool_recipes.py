@@ -7,7 +7,6 @@ import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
 
-import pytest
 
 from penpal.sources.coverage import compute_tool_coverage
 from penpal.sources.plugins.ai_tools import AiToolsSource

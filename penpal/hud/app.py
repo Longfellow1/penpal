@@ -40,6 +40,8 @@ from penpal.store.repository import get_state, set_state
 from penpal.utils.logging import setup_logging
 from penpal.utils.paths import get_logs_dir
 
+logger = logging.getLogger(__name__)
+
 REFRESH_SEC = 15.0
 SIGNAL_WAKE_SEC = 0.5
 # Counting pending candidates walks the home directory (~18 s); the count rarely changes.
@@ -210,7 +212,8 @@ class PenpalHUDApp(NSObject):
             return
         try:
             webview.evaluateJavaScript_completionHandler_(script, None)
-        except Exception:
+        except Exception as exc:
+            logger.debug("apply model script failed: %s", type(exc).__name__)
             pass  # the first full page load renders the initial model via ui.ready
 
     @objc.python_method
@@ -310,7 +313,8 @@ class PenpalHUDApp(NSObject):
                 button.setAttributedTitle_(AppKit.NSAttributedString.alloc().initWithString_attributes_(" ●", attrs))
             else:
                 button.setTitle_("")
-        except Exception:
+        except Exception as exc:
+            logger.debug("set badge failed: %s", type(exc).__name__)
             pass
 
     @objc.python_method

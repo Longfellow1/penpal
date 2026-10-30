@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
 
 from penpal.store.db import close, get_conn, init_db
 from penpal.store.models import RawEvent

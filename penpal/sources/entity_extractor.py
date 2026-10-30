@@ -6,6 +6,9 @@ from pathlib import Path
 
 from penpal.sources.types import SemanticEvent
 
+import logging
+logger = logging.getLogger(__name__)
+
 
 _COMMIT_RE = re.compile(r"\b(?=[0-9a-f]*[a-f])[0-9a-f]{7,40}\b")
 # The lookbehind only lets a match start at a token boundary; without it a long run of word
@@ -96,7 +99,8 @@ def extract(event: SemanticEvent) -> list[Entity]:
     for candidate in re.findall(r"(/[\w\-./]+)", raw_ref):
         try:
             add("project", Path(candidate).name, candidate, 0.6)
-        except Exception:
+        except Exception as exc:
+            logger.debug("extract failed: %s", type(exc).__name__)
             continue
 
     session_id = metadata.get("session_id")

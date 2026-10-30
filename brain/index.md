@@ -1,6 +1,6 @@
 # Brain Index
 
-_Auto-generated. Last updated 2026-10-30T02:40:41.097Z._
+_Auto-generated. Last updated 2026-10-30T04:01:51.945Z._
 
 - [ai-tool-auto-coverage](pages/ai-tool-auto-coverage.md) — category: decision | tags: [capture, mcp, coverage, memmy] | Requirement (user, 2026-10-28, must ship): Phase 1 of the Memmy-class work covers at least 80% of the mainstream AI agents and IDEs a Mac us
 - [anchors-json-is-ssot](pages/anchors-json-is-ssot.md) — category: decision | ## Decision
@@ -15,6 +15,7 @@ _Auto-generated. Last updated 2026-10-30T02:40:41.097Z._
 - [daily-single-render-entry](pages/daily-single-render-entry.md) — category: decision | status: archived | ## Decision
 - [data-footprint-limits](pages/data-footprint-limits.md) — category: decision | tags: [retention, data-lifecycle, storage, doctor] | Decision (user, 2026-10-16): the data directory must not grow without bound. Memory rows stay under [[retention-keep-forever]] (D32): never
 - [db-direct-read-over-screen-capture](pages/db-direct-read-over-screen-capture.md) — category: decision | ## Decision
+- [delegation-and-token-cost](pages/delegation-and-token-cost.md) — category: decision | tags: [process, agents, cost, hygiene] | - The rules are in `docs/DELEGATION.md` (dispatch, briefs, acceptance, token cost) and `docs/ENGINEERING.md` §7 (release hygiene gates).
 - [email-domain-kept-mask](pages/email-domain-kept-mask.md) — category: decision | tags: [privacy, redaction, mcp] | D31 (2026-10-12, product owner): emails are masked in the local part only, keeping the domain (`***@gmail.com`).
 - [eval-prd-separate](pages/eval-prd-separate.md) — category: decision | tags: [eval, prd] | ## Decision
 - [geo-discoverability](pages/geo-discoverability.md) — category: decision | tags: [geo, positioning, growth] | - Public name is **"Penpal MCP"** (zh "Penpal MCP（笔友）"): bare "Penpal" collides with the common word "pen pal" and other projects. Category
@@ -39,7 +40,7 @@ _Auto-generated. Last updated 2026-10-30T02:40:41.097Z._
 - [refactor-in-place-with-legacy-tag](pages/refactor-in-place-with-legacy-tag.md) — category: decision | tags: [refactor, repo, legacy] | ## Decision
 - [retention-keep-forever](pages/retention-keep-forever.md) — category: decision | tags: [retention, data-lifecycle, privacy] | Decision (user, 2026-10-13): KeyPulse does not delete anything automatically. All sources, including raw streams such as keyboard chunks, ar
 - [runtime-contract](pages/runtime-contract.md) — category: decision | tags: [runtime, health, hud, doctor, launchd, mcp] | Decision (D36, 2026-10-24, owner accepted all recommendations after a deep-fix audit of 80+ liveness/HUD/doctor commits since 2026-04):
-- [session-handoff-2026-10-10](pages/session-handoff-2026-10-10.md) — category: project | tags: [handoff, state, refactor] | ## Repo state
+- [session-handoff-2026-10-10](pages/session-handoff-2026-10-10.md) — category: project | status: archived | tags: [handoff, state, refactor] | <!-- compiled_truth -->
 - [skill-layer](pages/skill-layer.md) — category: project | ## Goal
 - [tcc-permission-refresh-on-install](pages/tcc-permission-refresh-on-install.md) — category: decision | ## Decision
 - [user-curates-llm-proposes](pages/user-curates-llm-proposes.md) — category: decision | ## Decision

@@ -48,16 +48,16 @@ def legacy_main():
     main()
 
 # Importing command modules registers their commands on the root group.
-from . import install as _install
-from . import daemon as _daemon
-from . import doctor as _doctor
-from . import app as _app
-from . import search as _search
-from . import data as _data
-from . import config as _config
-from . import privacy as _privacy
-from . import maintenance as _maintenance
-from . import sources as _sources
-from . import mcp as _mcp
-from . import feedback as _feedback
-from . import spike as _spike
+from . import install as _install  # noqa: F401  # registers CLI commands
+from . import daemon as _daemon  # noqa: F401  # registers CLI commands
+from . import doctor as _doctor  # noqa: F401  # registers CLI commands
+from . import app as _app  # noqa: F401  # registers CLI commands
+from . import search as _search  # noqa: F401  # registers CLI commands
+from . import data as _data  # noqa: F401  # registers CLI commands
+from . import config as _config  # noqa: F401  # registers CLI commands
+from . import privacy as _privacy  # noqa: F401  # registers CLI commands
+from . import maintenance as _maintenance  # noqa: F401  # registers CLI commands
+from . import sources as _sources  # noqa: F401  # registers CLI commands
+from . import mcp as _mcp  # noqa: F401  # registers CLI commands
+from . import feedback as _feedback  # noqa: F401  # registers CLI commands
+from . import spike as _spike  # noqa: F401  # registers CLI commands

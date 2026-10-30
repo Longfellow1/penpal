@@ -136,12 +136,12 @@ def test_self_exclude_skips_keypulse_own_project_dir(monkeypatch, tmp_path: Path
     home = tmp_path / "home"
     monkeypatch.setattr(Path, "home", lambda: home)
 
-    skip_dir = home / ".claude" / "projects" / "-Users-Harland-Go-penpal"
+    skip_dir = home / ".claude" / "projects" / "-Users-alice-Go-penpal"
     keep_dir = home / ".claude" / "projects" / "-Users-someone-Work-other-app"
     _write_jsonl(skip_dir / "s1.jsonl", [{"type": "user", "timestamp": "2026-04-28T01:00:00Z"}])
     _write_jsonl(keep_dir / "s1.jsonl", [{"type": "user", "timestamp": "2026-04-28T01:00:00Z"}])
 
-    source = ClaudeCodeSource(self_exclude_dirs={"-Users-Harland-Go-penpal"})
+    source = ClaudeCodeSource(self_exclude_dirs={"-Users-alice-Go-penpal"})
 
     instances = source.discover()
     assert len(instances) == 1
@@ -166,7 +166,7 @@ def test_default_does_not_exclude_keypulse_named_project_dir(monkeypatch, tmp_pa
     home = tmp_path / "home"
     monkeypatch.setattr(Path, "home", lambda: home)
 
-    main_dir = home / ".claude" / "projects" / "-Users-Harland-Go-penpal"
+    main_dir = home / ".claude" / "projects" / "-Users-alice-Go-penpal"
     _write_jsonl(main_dir / "s1.jsonl", [{"type": "user", "timestamp": "2026-04-28T01:00:00Z"}])
 
     source = ClaudeCodeSource()

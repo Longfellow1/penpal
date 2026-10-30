@@ -18,6 +18,9 @@ from penpal.search.backends import resolve_search_backend
 from . import main
 from ._shared import DATE_HELP_TEXT, PLAIN_HELP, console, err_console, get_config, require_db
 
+import logging
+logger = logging.getLogger(__name__)
+
 
 def _parse_date(arg: str) -> str:
     raw = (arg or "").strip()
@@ -344,13 +347,15 @@ def session_list(date, limit, plain):
             try:
                 start_dt = datetime.fromisoformat(start)
                 start = start_dt.astimezone(local_timezone()).strftime("%H:%M:%S")
-            except Exception:
+            except Exception as exc:
+                logger.debug("session list failed: %s", type(exc).__name__)
                 pass
 
             try:
                 end_dt = datetime.fromisoformat(end)
                 end = end_dt.astimezone(local_timezone()).strftime("%H:%M:%S")
-            except Exception:
+            except Exception as exc:
+                logger.debug("session list failed: %s", type(exc).__name__)
                 pass
 
             table.add_row(session_id, start, end, app, title, duration)

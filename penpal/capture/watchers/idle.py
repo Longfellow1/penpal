@@ -2,7 +2,6 @@ from __future__ import annotations
 import queue
 import time
 from datetime import datetime, timezone
-from typing import Optional
 
 from penpal.capture.base import BaseWatcher
 from penpal.capture.normalizer import normalize_idle_event

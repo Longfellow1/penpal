@@ -8,7 +8,6 @@ import sys
 import textwrap
 from pathlib import Path
 
-import pytest
 
 HUD_DIR = Path(__file__).resolve().parents[1] / "penpal" / "hud"
 LEGACY = ("penpal.pipeline", "penpal.obsidian", "penpal.quality", "penpal.integrations", "penpal.prompts")

@@ -34,6 +34,9 @@ from penpal.runtime.control import load_job, unload_job
 
 from penpal.utils.paths import get_apps_dir, get_launchd_agents_dir, get_launcher_stamp_path
 
+import logging
+logger = logging.getLogger(__name__)
+
 EXECUTABLE_NAME = "Penpal"
 HUD_LABEL = "com.penpal.hud"
 BUNDLE_VERSION = "1"
@@ -409,7 +412,8 @@ def daemon_uses_bundle(bundle: Path, plist_path: Path | None = None) -> bool:
                 return target == launcher.resolve(strict=False)
             except OSError:
                 return str(launcher) in args[0]
-    except Exception:
+    except Exception as exc:
+        logger.debug("daemon uses bundle failed: %s", type(exc).__name__)
         pass
     return False
 

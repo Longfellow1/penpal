@@ -10,7 +10,9 @@ from penpal.capture.normalizer import (
 )
 from penpal.store.models import RawEvent, Session
 from penpal.store.repository import upsert_session
-from penpal.store.db import get_conn
+
+import logging
+logger = logging.getLogger(__name__)
 
 
 class Aggregator:
@@ -90,7 +92,8 @@ class Aggregator:
                 start = datetime.fromisoformat(self._current_session.started_at)
                 end = datetime.fromisoformat(now)
                 self._current_session.duration_sec = int((end - start).total_seconds())
-            except Exception:
+            except Exception as exc:
+                logger.debug("process failed: %s", type(exc).__name__)
                 pass
             # Update title if window_title changed
             if event.window_title and event.event_type in WINDOW_SESSION_EVENT_TYPES:
@@ -106,7 +109,8 @@ class Aggregator:
                 start = datetime.fromisoformat(self._current_session.started_at)
                 end = datetime.fromisoformat(ended_at)
                 self._current_session.duration_sec = int((end - start).total_seconds())
-            except Exception:
+            except Exception as exc:
+                logger.debug("close current failed: %s", type(exc).__name__)
                 pass
             upsert_session(self._current_session)
         self._current_session = None

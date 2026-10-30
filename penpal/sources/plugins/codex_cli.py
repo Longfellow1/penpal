@@ -24,7 +24,6 @@ Incremental mode (``use_cursor=True``) keeps a byte offset per rollout file in
 from __future__ import annotations
 
 import hashlib
-import json
 import re
 from datetime import datetime, timezone
 from pathlib import Path

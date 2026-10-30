@@ -27,7 +27,7 @@ from penpal.runtime import RuntimeState, evaluate, state_message
 from penpal.services.capability_monitor import (
     DAEMON_PERMISSIONS_KEY,
     DAEMON_PERMISSION_MAX_AGE_SEC,
-    record_daemon_permissions,
+    record_daemon_permissions as record_daemon_permissions,
 )
 
 # Watcher (= source) -> macOS permissions it needs. keyboard_chunk also depends on AX

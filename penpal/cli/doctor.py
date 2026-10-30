@@ -175,14 +175,14 @@ def doctor(plain, json_output, fix):
 
     # Cocoa / AppKit
     try:
-        import AppKit  # noqa: F401
+        import AppKit  # noqa: F401  # checks framework availability
         checks["macOS 原生界面能力"] = True
     except ImportError:
         checks["macOS 原生界面能力"] = False
 
     # Quartz
     try:
-        import Quartz
+        import Quartz  # noqa: F401  # checks framework availability
         checks["图像与事件框架"] = True
     except ImportError:
         checks["图像与事件框架"] = False

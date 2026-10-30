@@ -29,10 +29,8 @@ from dataclasses import dataclass
 from urllib.parse import urlsplit
 
 from penpal.foundation.capture_rules import (
-    APP_CHROME_PLACEHOLDERS,
     DEFAULT_TITLE_DENY_PATTERNS,
     LOGIN_KEYWORDS as _LOGIN_KEYWORDS,
-    SYSTEM_OVERLAY_APPS,
     is_placeholder_text,
     is_system_overlay,
 )

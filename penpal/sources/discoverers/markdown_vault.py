@@ -93,7 +93,7 @@ def _scan_for_dense_dirs(base: Path, *, root: Path) -> list[Path]:
         current = Path(dirpath)
         try:
             depth = len(current.relative_to(root).parts)
-        except Exception:
+        except ValueError:
             continue
         dirnames[:] = [name for name in dirnames if name not in _IGNORE_DIRS and not name.startswith(".")]
         if depth >= _MAX_SCAN_DEPTH:

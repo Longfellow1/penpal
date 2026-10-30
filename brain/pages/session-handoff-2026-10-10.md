@@ -2,12 +2,13 @@
 id: session-handoff-2026-10-10
 title: "Session handoff 2026-10-10: current state for a fresh session"
 category: project
-status: active
+status: archived
 tags: [handoff, state, refactor]
 created: "2026-10-10T11:19:23"
-updated: "2026-10-25T00:40:44"
+updated: "2026-10-30T11:59:10"
 ---
 
+<!-- compiled_truth -->
 <!-- compiled_truth -->
 ## Repo state
 - **HISTORY WAS REWRITTEN on 2026-10-10** (git filter-repo + force-push; all branches and tags rewritten). All commit hashes from earlier in this session are obsolete.
@@ -44,8 +45,6 @@ updated: "2026-10-25T00:40:44"
   - Low priority: `scripts/eval_daily_flagship_v4_candidates.py` output naming vs renamed candidate docs is unresolved.
 
 ## Housekeeping
-- Parent `/Users/Harland/CLAUDE.md` describes another project (qi-agent) and loads here. Consider isolating.
-- Stray scratch file `/Users/Harland/.keypulse_scratch_none` can be deleted (ask first).
 - GitNexus MCP tools were not available this session, so `detect_changes` was not run for the freeze commit (rename and docs only).
 
 ## PRD v1.2 status
@@ -147,4 +146,16 @@ updated: "2026-10-25T00:40:44"
   kind: decision
   summary: Rewrote compiled_truth to the new best understanding
   source: 2026-10-25 repository hygiene cleanup
+  affects: [session-handoff-2026-10-10]
+
+- time: 2026-10-30T11:59:10
+  kind: decision
+  summary: Drop owner-local housekeeping notes before archiving
+  source: "manager 2026-10-30, public-repo hygiene pass"
+  affects: [session-handoff-2026-10-10]
+
+- time: 2026-10-30T11:59:10
+  kind: reversal
+  summary: "One-off session handoff from 2026-10-10; its branch and test notes are stale and later pages and PRs supersede it."
+  source: brain archive-page
   affects: [session-handoff-2026-10-10]

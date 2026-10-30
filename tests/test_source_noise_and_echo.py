@@ -17,7 +17,6 @@ from penpal.foundation.transcript_noise import clean_message_part, is_noise_part
 from penpal.sources.cleaning.noise import is_penpal_call
 from penpal.sources.plugins.claude_code import ClaudeCodeSource
 from penpal.sources.plugins.codex_cli import CodexCliSource
-from penpal.sources.types import DataSourceInstance
 from penpal.store.db import close, get_conn, init_db
 from penpal.store.models import RawEvent
 from penpal.store.repository import insert_raw_event

@@ -10,6 +10,9 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Mapping
 
+import logging
+logger = logging.getLogger(__name__)
+
 _VALID_KINDS = {"agent", "ide", "assistant"}
 _VALID_FORMATS = {"jsonl", "json", "sqlite"}
 _VALID_COMPRESSIONS = {"auto", "none"}
@@ -359,7 +362,8 @@ def _check_app_bundle(bundle_id: str, app_roots: list[Path] | None = None) -> bo
                         info = plistlib.load(f)
                     if info.get("CFBundleIdentifier") == bundle_id:
                         return True
-                except Exception:
+                except Exception as exc:
+                    logger.debug("check app bundle failed: %s", type(exc).__name__)
                     continue
     return False
 

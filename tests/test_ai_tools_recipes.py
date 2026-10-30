@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import json
 import sqlite3
-import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 from unittest.mock import patch
@@ -12,12 +11,10 @@ import pytest
 import zstandard
 from click.testing import CliRunner
 
-from penpal.foundation.sqlite_rules import is_blocked_sqlite
 from penpal.sources.coverage import compute_tool_coverage, coverage_command
 from penpal.sources.plugins.ai_tools import AiToolsSource
 from penpal.sources.recipes.catalog import (
     expand_vars_and_tilde,
-    get_default_catalog_dir,
     load_catalog,
     load_recipe,
     load_recipe_from_string,

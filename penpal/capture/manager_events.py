@@ -413,7 +413,8 @@ def _process_event(manager, event: RawEvent):
         if result.metadata_json:
             try:
                 tags = json.loads(result.metadata_json).get("tags")
-            except Exception:
+            except Exception as exc:
+                logger.debug("process event failed: %s", type(exc).__name__)
                 pass
         doc = SearchDoc(
             ref_type=result.source,

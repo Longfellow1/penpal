@@ -8,6 +8,9 @@ from penpal.capture.base import BaseWatcher
 from penpal.capture.normalizer import normalize_keyboard_chunk_event
 from penpal.capture.watchers.keyboard_native import build_keyboard_input_source
 
+import logging
+logger = logging.getLogger(__name__)
+
 
 def _normalize_buffered_text(parts: list[str]) -> str:
     chars: list[str] = []
@@ -120,7 +123,8 @@ class KeyboardChunkWatcher(BaseWatcher):
         if self._source is not None and self._source_started:
             try:
                 self._source.stop()
-            except Exception:
+            except Exception as exc:
+                logger.debug("stop failed: %s", type(exc).__name__)
                 pass
             self._source_started = False
         super().stop()

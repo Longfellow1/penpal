@@ -5,7 +5,6 @@ never to ~/.penpal.
 """
 from __future__ import annotations
 
-import json
 import stat
 
 from click.testing import CliRunner

@@ -7,6 +7,9 @@ import subprocess
 
 from penpal.utils.paths import get_wechat_authorization_path
 
+import logging
+logger = logging.getLogger(__name__)
+
 
 _WECHAT_APP_CANDIDATES = (
     Path("/Applications/WeChat.app"),
@@ -111,7 +114,8 @@ def _probe_wechat_app_path() -> str | None:
         try:
             if app_path.exists():
                 return str(app_path)
-        except Exception:
+        except Exception as exc:
+            logger.debug("probe wechat app path failed: %s", type(exc).__name__)
             continue
     return None
 

@@ -29,7 +29,8 @@ def _enter_disk_full(manager) -> None:
     # Roll back the failed statement so the shared connection is not left mid-transaction.
     try:
         get_conn().rollback()
-    except Exception:
+    except Exception as exc:
+        logger.debug("enter disk full failed: %s", type(exc).__name__)
         pass
     if manager._storage_error is None:
         manager._storage_error_since = datetime.now(timezone.utc).isoformat()

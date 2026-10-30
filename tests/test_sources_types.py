@@ -45,7 +45,7 @@ def test_semantic_event_normalizes_to_utc() -> None:
     event = SemanticEvent(
         time=datetime.fromisoformat("2026-04-28T10:20:00+08:00"),
         source="git_log",
-        actor="Harland",
+        actor="alice",
         intent="Add source registry",
         artifact="commit:abcdef1",
         raw_ref="git:penpal:abcdef123456",
@@ -63,7 +63,7 @@ def test_semantic_event_rejects_naive_time() -> None:
         SemanticEvent(
             time=datetime(2026, 4, 28, 10, 20, 0),
             source="git_log",
-            actor="Harland",
+            actor="alice",
             intent="Add source registry",
             artifact="commit:abcdef1",
             raw_ref="git:penpal:abcdef123456",

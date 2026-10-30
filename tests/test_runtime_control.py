@@ -3,9 +3,7 @@ from __future__ import annotations
 import plistlib
 import inspect
 import subprocess
-from pathlib import Path
 
-import pytest
 
 from penpal.foundation.runtime_record import Progress
 from penpal.runtime import RuntimeState, RuntimeStatus

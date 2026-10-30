@@ -1,5 +1,4 @@
 from __future__ import annotations
-import json
 import click
 from penpal.utils.paths import get_config_path
 from penpal.i18n import T

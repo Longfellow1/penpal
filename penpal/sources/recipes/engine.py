@@ -5,14 +5,13 @@ import glob
 import hashlib
 import io
 import json
-import os
 import shutil
 import sqlite3
 import tempfile
 from functools import lru_cache
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Callable, Iterator, Mapping
+from typing import Any, Iterator, Mapping
 
 
 from penpal.foundation.project import normalize_project

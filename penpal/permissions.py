@@ -47,7 +47,7 @@ def _accessibility_check() -> PermissionStatus:
 def _accessibility_request() -> PermissionStatus:
     try:
         from ApplicationServices import AXIsProcessTrustedWithOptions
-        from CoreFoundation import CFDictionaryCreate, kCFTypeDictionaryKeyCallBacks, kCFTypeDictionaryValueCallBacks
+        from CoreFoundation import CFDictionaryCreate, kCFTypeDictionaryKeyCallBacks, kCFTypeDictionaryValueCallBacks  # noqa: F401  # checks framework availability
         import objc
     except Exception:
         return PermissionStatus.UNAVAILABLE
