@@ -395,7 +395,7 @@ def test_stdio_subprocess_end_to_end(env, token) -> None:
                 return [t.name for t in tools.tools], json.loads(res.content[0].text)
 
     names, ok = asyncio.run(run({}))
-    assert names == ["search_context", "get_evidence", "get_timeline", "rate_result", "commit_memory", "update_memory"] and ok["status"] == "ok"
+    assert names == ["search_context", "get_evidence", "get_timeline", "rate_result", "commit_memory", "update_memory", "propose_source_recipe"] and ok["status"] == "ok"
     _, denied = asyncio.run(run({"PENPAL_TOKEN": "kp_nope"}))
     assert denied["status"] == "permission_denied" and "results" not in denied
 

@@ -2,12 +2,13 @@
 from __future__ import annotations
 
 from datetime import datetime
+import os
 from pathlib import Path
 from typing import Any, Iterator, Mapping
 
 from penpal.sources.recipes.catalog import (
     is_tool_detected,
-    load_catalog,
+    load_combined_catalog,
 )
 from penpal.sources.recipes.engine import (
     RecipeEngine,
@@ -41,13 +42,21 @@ class AiToolsSource(DataSource):
         self._pending_cursors: dict[int, dict[str, Any]] = {}
 
     def discover(self) -> list[DataSourceInstance]:
-        recipes = load_catalog(self._catalog_dir)
+        recipes = load_combined_catalog(self._catalog_dir)
         instances: list[DataSourceInstance] = []
 
         for tool in recipes:
-            if not tool.readable or tool.adapter:
+            if not tool.readable or tool.adapter or not tool.enabled:
                 continue
-            if not is_tool_detected(tool, env=self._env):
+            if tool.user_recipe:
+                from penpal.sources.recipes.identity_gate import validate_binding
+
+                try:
+                    validate_binding(tool, self._env)
+                except (ValueError, OSError) as exc:
+                    LOGGER.warning("user recipe %s skipped: %s", tool.id, exc)
+                    continue
+            elif not is_tool_detected(tool, env=self._env):
                 continue
 
             for h_idx, history in enumerate(tool.history):
@@ -97,11 +106,23 @@ class AiToolsSource(DataSource):
         tool_id = instance.metadata.get("tool_id")
         history_idx = instance.metadata.get("history_idx", 0)
 
-        recipes = {t.id: t for t in load_catalog(self._catalog_dir)}
+        recipes = {t.id: t for t in load_combined_catalog(self._catalog_dir)}
         tool = recipes.get(str(tool_id))
-        if tool is None or history_idx >= len(tool.history):
+        if tool is None or not tool.enabled or history_idx >= len(tool.history):
             LOGGER.warning("ai_tools: unknown tool %s or invalid history index %s", tool_id, history_idx)
             return iter(())
+
+        if tool.user_recipe:
+            from penpal.sources.recipes.identity_gate import check_path, find_identity, validate_binding
+
+            try:
+                validate_binding(tool, self._env)
+                root = Path(str(instance.metadata.get("root", "")))
+                lookup = self._env if self._env is not None else os.environ
+                check_path(root, find_identity(tool, lookup), Path(lookup.get("HOME", str(Path.home()))))
+            except (ValueError, OSError) as exc:
+                LOGGER.warning("user recipe %s skipped: %s", tool.id, exc)
+                return iter(())
 
         history = tool.history[history_idx]
         raw_root = instance.metadata.get("root") or (

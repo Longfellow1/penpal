@@ -12,7 +12,7 @@ from penpal.sources.plugins.claude_code import ClaudeCodeSource
 from penpal.sources.plugins.codex_cli import CodexCliSource
 from penpal.sources.recipes.catalog import (
     is_tool_detected,
-    load_catalog,
+    load_combined_catalog,
 )
 from penpal.sources.recipes.engine import RecipeEngine, resolve_history_files
 from penpal.store.db import get_conn, init_db
@@ -44,7 +44,7 @@ def compute_tool_coverage(
     catalog_dir: Path | None = None,
     env: Mapping[str, str] | None = None,
 ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
-    tools = load_catalog(catalog_dir)
+    tools = load_combined_catalog(catalog_dir)
     conn = get_conn()
     engine = RecipeEngine(env=env)
 
@@ -58,6 +58,16 @@ def compute_tool_coverage(
         sessions_on_disk = 0
         ingested_sessions = 0
         last_error: str | None = None
+
+        if tool.user_recipe:
+            from penpal.sources.recipes.identity_gate import validate_binding
+
+            try:
+                validate_binding(tool, env)
+                detected = True
+            except (ValueError, OSError) as exc:
+                detected = False
+                last_error = str(exc)
 
         if readable and detected:
             try:
@@ -144,6 +154,8 @@ def compute_tool_coverage(
         rows.append(
             {
                 "id": tool.id,
+                "user_recipe": tool.user_recipe,
+                "enabled": tool.enabled,
                 "detected": detected,
                 "readable": readable,
                 "sessions_on_disk": sessions_on_disk,
@@ -182,8 +194,9 @@ def coverage_command(as_json: bool) -> None:
         det_str = "yes" if r["detected"] else "no"
         read_str = "yes" if r["readable"] else "no"
         err_str = r["last_error"] or "-"
+        label = r["id"] + (" (AI 生成" + (", 已停用" if not r.get("enabled", True) else "") + ")" if r.get("user_recipe", False) else "")
         click.echo(
-            f"{r['id']:<16} {det_str:<10} {read_str:<10} {r['sessions_on_disk']:<10} {r['ingested_sessions']:<10} {err_str}"
+            f"{label:<16} {det_str:<10} {read_str:<10} {r['sessions_on_disk']:<10} {r['ingested_sessions']:<10} {err_str}"
         )
     click.echo("-" * len(header))
     click.echo(
