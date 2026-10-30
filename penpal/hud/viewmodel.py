@@ -15,7 +15,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any, Optional
 
-from penpal.runtime import RuntimeState, state_message, state_text
+from penpal.runtime import ICON_OCCLUDED_HINT_ZH, RuntimeState, state_message, state_text
 from penpal.hud.snapshot import (
     BUCKET_LABELS,
     GROUPS,
@@ -456,7 +456,7 @@ def page_privacy(snap: Snapshot) -> list[dict]:
         lst([row("删除数据", title_tone="red", nav=True, action="nav.page", args={"page": "delete"})]),
         lst(
             [row("退出 HUD", title_tone="red", action="hud.quit")],
-            footer="退出后菜单栏图标消失，后台记录继续。重新打开：打开 Penpal.app，或运行 penpal hud start。",
+            footer=f"退出后菜单栏图标消失，后台记录继续。重新打开：打开 Penpal.app，或运行 penpal hud start。{ICON_OCCLUDED_HINT_ZH}。",
         ),
     ]
 

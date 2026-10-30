@@ -1,6 +1,7 @@
 """Runtime state recording and the shared daemon health evaluator."""
 
 from penpal.runtime.evaluate import (
+    ICON_OCCLUDED_HINT_ZH,
     Issue,
     HudStatus,
     RuntimeState,
@@ -24,7 +25,7 @@ from penpal.runtime.control import (
 )
 
 __all__ = [
-    "Issue", "HudStatus", "RuntimeState", "RuntimeStatus", "active_hud_pid", "evaluate", "launchd_label_loaded",
+    "ICON_OCCLUDED_HINT_ZH", "Issue", "HudStatus", "RuntimeState", "RuntimeStatus", "active_hud_pid", "evaluate", "launchd_label_loaded",
     "state_message", "state_text", "watcher_recently_emitted",
     "ControlResult", "find_legacy_hud_pids", "relaunch_hud", "restart_hud", "stop_legacy_huds", "start", "stop", "restart",
 ]

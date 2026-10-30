@@ -9,7 +9,7 @@ import click
 from rich.table import Table
 from penpal.config import read_toml
 from penpal.utils.paths import get_apps_dir, get_config_path, get_data_dir, get_launchd_agents_dir
-from penpal.runtime import evaluate
+from penpal.runtime import ICON_OCCLUDED_HINT_ZH, evaluate
 from penpal.capture.capture_control import disabled_sources
 from penpal.capture.keyboard_notice import DISABLE_COMMAND, ENABLE_COMMAND, KEYBOARD_SOURCE, keyboard_capture_enabled, switch_hint
 from penpal.i18n import T
@@ -145,8 +145,8 @@ def doctor(plain, json_output, fix):
         checks["菜单栏 HUD"] = not hud_issues
         hud_detail = (
             hud_issues[0].message_zh if hud_issues else
-            "主线程有响应；状态栏图标可见" if visible is True else
-            "主线程有响应；若菜单栏看不到图标，请在系统设置 → 菜单栏打开 Penpal"
+            f"主线程有响应；状态栏图标可见。{ICON_OCCLUDED_HINT_ZH}" if visible is True else
+            f"主线程有响应；若菜单栏看不到图标，请在系统设置 → 菜单栏打开 Penpal。{ICON_OCCLUDED_HINT_ZH}"
         )
         if runtime_status.hud.supervisor_summary_zh:
             hud_detail += f"；{runtime_status.hud.supervisor_summary_zh}"

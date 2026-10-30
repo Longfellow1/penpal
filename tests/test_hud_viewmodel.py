@@ -383,7 +383,8 @@ def test_settings_tab_viewmodel_label_and_quit_hud_section():
     assert row["title"] == "退出 HUD"
     assert row["title_tone"] == "red"
     assert row["action"] == "hud.quit"
-    assert last_section["footer"] == "退出后菜单栏图标消失，后台记录继续。重新打开：打开 Penpal.app，或运行 penpal hud start。"
+    assert last_section["footer"].startswith("退出后菜单栏图标消失，后台记录继续。重新打开：打开 Penpal.app，或运行 penpal hud start。")
+    assert "刘海" in last_section["footer"] and "按住 ⌘" in last_section["footer"]
 
 
 def test_exclusion_page_is_a_read_only_list():

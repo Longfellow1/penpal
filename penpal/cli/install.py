@@ -12,7 +12,7 @@ from rich.table import Table
 from penpal.config import Config, write_default_config
 from penpal.store.db import init_db
 from penpal.utils.paths import get_data_dir, get_pid_path, get_hud_pid_path, get_log_path, get_config_path, get_launchd_plist_path, get_legacy_venv_dir
-from penpal.runtime import evaluate, launchd_label_loaded
+from penpal.runtime import ICON_OCCLUDED_HINT_ZH, evaluate, launchd_label_loaded
 from penpal.runtime.control import (
     LEGACY_LAUNCHD_LABELS,
     load_job,
@@ -339,13 +339,12 @@ def install_doctor(plain):
     hud_issue = next((issue for issue in runtime_status.issues if issue.component == "hud"), None)
     if runtime_status.hud is not None and runtime_status.hud.alive:
         visible = runtime_status.hud.status_item_visible
+        # As in `penpal doctor`, only the evaluator decides pass/fail; visibility is informational.
         checks["hud"] = (
-            hud_issue is None and visible is True,
-            hud_issue.message_zh if hud_issue else "主线程有响应；" + ("状态栏图标可见" if visible is True else "状态栏图标可见性未知"),
+            hud_issue is None,
+            hud_issue.message_zh if hud_issue else
+            "主线程有响应；" + ("状态栏图标可见" if visible is True else "状态栏图标可见性未知") + f"。{ICON_OCCLUDED_HINT_ZH}",
         )
-    hud_issue = next((issue for issue in runtime_status.issues if issue.component == "hud"), None)
-    if runtime_status.hud is not None and runtime_status.hud.alive:
-        checks["hud"] = (hud_issue is None, hud_issue.message_zh if hud_issue else "主线程有响应")
     try:
         executable = _penpal_executable_path()
         checks["executable"] = (executable.exists(), str(executable))
