@@ -130,10 +130,14 @@ def _install_launchd_jobs(
 def _write_default_user_config(*, force: bool = False) -> str:
     return write_default_config(get_config_path(), force=force)
 
-@main.group("install", help="Install, initialize, launchd, and uninstall management.")
+@main.group("install", help="Install, initialize, launchd, and uninstall management.", invoke_without_command=True)
+@click.option("--no-connect", is_flag=True, default=False, help="Skip auto-connecting AI tools")
 @click.pass_context
-def install_group(ctx):
+def install_group(ctx, no_connect: bool = False):
     """Install lifecycle group."""
+    if ctx.invoked_subcommand is None:
+        ctx.invoke(install_init, no_connect=no_connect)
+        return
     if ctx.invoked_subcommand == "init":
         failures = unload_legacy_jobs()
         if failures:
@@ -266,8 +270,9 @@ def install_launchd(no_load, force, plain):
 @click.option("--no-load", is_flag=True, default=False, help="Write launchd plists without loading them")
 @click.option("--force-config", is_flag=True, default=False, help="Overwrite existing config.toml")
 @click.option("--force-launchd", is_flag=True, default=False, help="Also replace a file at a plist path that Penpal did not write")
+@click.option("--no-connect", is_flag=True, default=False, help="Skip auto-connecting AI tools")
 @click.option("--plain", is_flag=True, default=False, help="Plain text output")
-def install_init(no_launchd, no_load, force_config, force_launchd, plain):
+def install_init(no_launchd, no_load, force_config, force_launchd, no_connect, plain):
     """Initialize runtime."""
     if sys.platform != "darwin":
         raise click.ClickException("Penpal install init is currently macOS-only.")
@@ -298,6 +303,30 @@ def install_init(no_launchd, no_load, force_config, force_launchd, plain):
             ))
 
     _show_keyboard_notice_once()
+
+    if not no_connect:
+        try:
+            from penpal.mcp.connect import auto_connect
+
+            connect_results = auto_connect()
+            connected_names = [r.tool_name for r in connect_results if r.status in ("connected", "already_connected")]
+            failed_msgs = [f"{r.tool_name}: {r.error}" for r in connect_results if r.status == "parse_error"]
+            if plain:
+                if connected_names:
+                    print(f"connect=connected:{','.join(connected_names)}")
+                if failed_msgs:
+                    print(f"connect_failed={';'.join(failed_msgs)}")
+            else:
+                if connected_names:
+                    console.print(f"[green]已自动接入 AI 工具：{', '.join(connected_names)}[/green]")
+                if failed_msgs:
+                    console.print(f"[yellow]部分 AI 工具接入失败：{'; '.join(failed_msgs)}[/yellow]")
+        except Exception as exc:
+            if plain:
+                print(f"connect_error={exc}")
+            else:
+                console.print(f"[yellow]警告：自动接入 AI 工具失败（{exc}），跳过。后续可运行 `penpal connect --auto`。[/yellow]")
+
     from penpal.sources.history_gate import historical_imports_allowed
 
     history_waiting = not historical_imports_allowed()

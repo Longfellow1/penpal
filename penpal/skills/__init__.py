@@ -1,0 +1,1 @@
+"""Penpal skills package."""

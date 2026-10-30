@@ -59,5 +59,6 @@ from . import privacy as _privacy  # noqa: F401  # registers CLI commands
 from . import maintenance as _maintenance  # noqa: F401  # registers CLI commands
 from . import sources as _sources  # noqa: F401  # registers CLI commands
 from . import mcp as _mcp  # noqa: F401  # registers CLI commands
+from . import connect as _connect  # noqa: F401  # registers CLI commands
 from . import feedback as _feedback  # noqa: F401  # registers CLI commands
 from . import spike as _spike  # noqa: F401  # registers CLI commands

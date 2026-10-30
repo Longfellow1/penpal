@@ -61,7 +61,7 @@ where = ["."]
 include = ["penpal*"]
 
 [tool.setuptools.package-data]
-penpal = ["hud/launcher/*.c", "sources/catalog/*.toml"]
+penpal = ["hud/launcher/*.c", "sources/catalog/*.toml", "skills/*.md"]
 
 [tool.pytest.ini_options]
 pythonpath = ["."]  # lets tests import the top-level evals/ harness
