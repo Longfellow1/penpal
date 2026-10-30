@@ -524,16 +524,20 @@ def test_item1_missing_yaml_does_not_break_other_tools(tmp_path, monkeypatch):
     monkeypatch.setattr("penpal.mcp.connect._get_yaml_module", lambda: None)
     monkeypatch.setitem(sys.modules, "yaml", None)
 
-    # Detect both claude_code and hermes
+    # Detect both claude_code and hermes; an existing hermes config stays byte-identical.
     (home / ".claude").mkdir(parents=True, exist_ok=True)
     (home / ".hermes").mkdir(parents=True, exist_ok=True)
+    hermes_yaml = home / ".hermes" / "config.yaml"
+    hermes_yaml.write_text("mcp_servers:\n  other:\n    command: other_service\n", encoding="utf-8")
+    before = hermes_yaml.read_bytes()
 
     results = auto_connect(env={"HOME": str(home)})
     res_map = {r.tool_id: r for r in results}
 
-    assert res_map["hermes"].status == "parse_error"
+    # Not a parse failure of the user's file: report it as not connected, file untouched.
+    assert (res_map["hermes"].status, res_map["hermes"].error) == ("manual", "missing_yaml")
     assert "缺少 YAML 解析库" in res_map["hermes"].message
-    assert not (home / ".hermes" / "config.yaml").exists()
+    assert hermes_yaml.read_bytes() == before
 
     # Claude Code connected normally despite missing yaml!
     assert res_map["claude_code"].status == "connected"
@@ -541,7 +545,7 @@ def test_item1_missing_yaml_does_not_break_other_tools(tmp_path, monkeypatch):
 
     # List shows missing yaml
     statuses = {s.tool_id: s for s in list_tools(env={"HOME": str(home)})}
-    assert statuses["hermes"].state == "解析失败"
+    assert statuses["hermes"].state == "未接入"
     assert "缺少 YAML 解析库" in statuses["hermes"].detail
 
 

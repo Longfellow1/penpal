@@ -5,7 +5,7 @@ category: decision
 status: active
 tags: [release, homebrew, dependencies]
 created: "2026-10-29T11:22:03"
-updated: "2026-10-29T11:22:50"
+updated: "2026-10-30T17:18:58"
 ---
 
 <!-- compiled_truth -->
@@ -28,4 +28,10 @@ updated: "2026-10-29T11:22:50"
   kind: decision
   summary: "Tap formula resources gate new runtime deps; core imports them lazily"
   source: "manager 2026-10-29, PR #167 fresh-install drill failure"
+  affects: [homebrew-runtime-deps]
+
+- time: 2026-10-30T17:18:58
+  kind: decision
+  summary: "2026-10-30：PyYAML 成为第二个运行时依赖（Hermes 的 MCP 配置是 YAML，connect --auto 需要它）。下次发版的 tap 提交必须同时补 zstandard 和 pyyaml 两个 resource（pyyaml 6.0.3 有 sdist）。在那之前，Homebrew 安装缺 PyYAML 时 Hermes 显示「未接入」，配置文件原样不动，其他工具照常接入。"
+  source: "main CI 失败 run 41028691091（test_yaml_mcp_servers_lifecycle）；PR fix/connect-yaml"
   affects: [homebrew-runtime-deps]
