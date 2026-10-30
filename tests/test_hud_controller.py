@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import json
 import logging
+import types
 from datetime import datetime, timedelta, timezone
 
 import pytest
@@ -495,3 +496,85 @@ def test_hud_quit_action_calls_injected_callback_once_and_touches_nothing_else(e
     assert model["toast"] is None
 
 
+
+
+def _wait(event, seconds=5.0):
+    assert event.wait(seconds), "timed out"
+
+
+def test_background_scan_runs_off_the_caller_thread_and_reports_on_the_dispatcher():
+    import threading
+    from penpal.hud.controller import BackgroundScan
+
+    delivered, done = [], threading.Event()
+    scan = BackgroundScan(main_dispatcher=lambda fn: (fn(), done.set()))
+    assert scan.run("count", lambda: threading.current_thread().name, delivered.append) is True
+    _wait(done)
+    assert delivered and delivered[0].startswith("penpal-hud-scan")
+
+
+def test_background_scan_skips_a_scan_that_is_still_running():
+    import threading
+    from penpal.hud.controller import BackgroundScan
+
+    release, done = threading.Event(), threading.Event()
+    scan = BackgroundScan(main_dispatcher=lambda fn: (fn(), done.set()))
+    assert scan.run("count", lambda: release.wait(5), lambda _r: None) is True
+    assert scan.run("count", lambda: None, lambda _r: None) is False
+    release.set()
+    _wait(done)
+    assert scan.run("count", lambda: None, lambda _r: None) is True
+
+
+def test_background_scan_logs_a_failure_and_skips_the_callback(caplog):
+    import threading
+    from penpal.hud import controller as hud_controller
+
+    logged = threading.Event()
+
+    class _Handler(logging.Handler):
+        def emit(self, record):
+            if "hud scan count failed" in record.getMessage():
+                logged.set()
+
+    handler = _Handler()
+    hud_controller.LOGGER.addHandler(handler)
+    try:
+        delivered = []
+        scan = hud_controller.BackgroundScan(main_dispatcher=lambda fn: fn())
+        scan.run("count", lambda: 1 / 0, delivered.append)
+        _wait(logged)
+        assert delivered == []
+    finally:
+        hud_controller.LOGGER.removeHandler(handler)
+
+
+def test_worker_logs_a_turn_that_holds_the_panel(monkeypatch):
+    import threading
+    from penpal.hud import controller as hud_controller
+
+    monkeypatch.setattr(hud_controller, "SLOW_WORKER_SEC", 0.0)
+    messages, logged = [], threading.Event()
+
+    class _Handler(logging.Handler):
+        def emit(self, record):
+            if "hud worker busy" in record.getMessage():
+                messages.append(record.getMessage())
+                logged.set()
+
+    handler = _Handler()
+    hud_controller.LOGGER.addHandler(handler)
+    try:
+        def count_candidates():
+            return 3
+
+        worker = hud_controller.HudModelWorker(
+            types.SimpleNamespace(model=lambda fresh=False: {"tabs": []}),
+            main_dispatcher=lambda fn: fn(),
+            apply_script=lambda _s, _b: None,
+        )
+        worker.submit(count_candidates)
+        _wait(logged)
+        assert "count_candidates" in messages[0]
+    finally:
+        hud_controller.LOGGER.removeHandler(handler)

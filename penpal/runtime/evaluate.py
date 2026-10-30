@@ -32,7 +32,7 @@ HUD_MAIN_THREAD_STALE_SEC = 45.0
 # A freshly launched HUD reads not-visible for ~10-15 s until its status item is drawn (owner Mac, 2026-10-28).
 HUD_VISIBILITY_GRACE_SEC = 30.0
 # macOS 26 hides status items that do not fit right of the notch while still reporting them visible (owner Mac, 2026-10-29).
-ICON_OCCLUDED_HINT_ZH = "看不到图标时：可能被刘海挡住，先在系统设置 → 菜单栏关掉几个不常用的图标，再按住 ⌘ 把 Penpal 拖到右侧"
+ICON_OCCLUDED_HINT_ZH = "看不到图标？可能被刘海挡住：关掉几个菜单栏图标，再按住 ⌘ 把 Penpal 拖到右侧"
 WATCHER_PERMISSION_EVIDENCE_SEC = 30 * 60
 CORE_LOOP_NAME = "core_loop"
 

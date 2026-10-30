@@ -96,3 +96,15 @@ def test_approval_data_controller_approve_and_reject_flow(tmp_path):
     assert controller.reject_at(0, reason="no") is True
     assert controller.count() == 0
     assert [record.candidate_id for record in store.list_rejected()] == [store.candidate_id(second)]
+
+
+def test_approval_data_load_leaves_rows_alone_until_applied(tmp_path):
+    # load() runs on the scan thread; only apply(), on the main thread, changes what the table shows.
+    rows = [SimpleNamespace(app_name="Example", path="/tmp/example.db")]
+    data = ApprovalDataController(
+        approval_store=ApprovalStore(path=tmp_path / "sources-approval.json"),
+        list_pending_fn=lambda **_kwargs: rows,
+    )
+    loaded = data.load()
+    assert data.rows == [] and data.count() == 0
+    assert data.apply(loaded) == rows and data.count() == 1 and data.last_error is None

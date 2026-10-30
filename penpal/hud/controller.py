@@ -20,6 +20,7 @@ from __future__ import annotations
 import json
 import threading
 import time
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
 from datetime import datetime, timezone
 from typing import Any, Callable, Optional
@@ -29,6 +30,8 @@ from penpal.hud.viewmodel import NEW_HOST_CHOICES, Reveal, UiState, build_model,
 from penpal.utils.logging import get_logger
 
 LOGGER = get_logger("hud.controller")
+# One worker turn longer than this means the panel sat on stale content and queued taps.
+SLOW_WORKER_SEC = 3.0
 SNAPSHOT_TTL_SEC = 3.0
 SECRET_PAGES = ("reveal",)
 
@@ -108,6 +111,7 @@ class HudModelWorker:
                 self._refresh_requested = False
                 self._fresh = False
 
+            started = time.monotonic()
             try:
                 if self.before_model is not None and self.before_model():
                     continue
@@ -142,6 +146,53 @@ class HudModelWorker:
                     self.main_dispatcher(lambda script=script, badge=badge: self.apply_script(script, badge))
             except Exception as exc:  # one slow or broken reader must not take down the AppKit run loop
                 LOGGER.warning("hud model refresh failed: %s", type(exc).__name__)
+            finally:
+                elapsed = time.monotonic() - started
+                if elapsed >= SLOW_WORKER_SEC:
+                    LOGGER.warning(
+                        "hud worker busy %.1fs: tasks=%s actions=%s refresh=%s",
+                        elapsed, [getattr(task, "__name__", "?") for task, _, _ in tasks],
+                        [action for action, _ in actions], refresh,
+                    )
+
+
+class BackgroundScan:
+    """Run slow filesystem scans on their own thread, one at a time, so the model worker stays responsive.
+
+    Candidate discovery walks the home directory and took ~18 s on the owner Mac (2026-10-30).
+    On the model worker it held every panel refresh and tap for that long, once a minute.
+    """
+
+    def __init__(self, *, main_dispatcher: Callable[[Callable[[], None]], None]) -> None:
+        self.main_dispatcher = main_dispatcher
+        self._pool = ThreadPoolExecutor(max_workers=1, thread_name_prefix="penpal-hud-scan")
+        self._lock = threading.Lock()
+        self._running: set[str] = set()
+
+    def run(self, key: str, task: Callable[[], Any], callback: Callable[[Any], None]) -> bool:
+        """Start ``task`` unless the same scan is still running; ``callback`` gets its result on the main thread."""
+        with self._lock:
+            if key in self._running:
+                return False
+            self._running.add(key)
+        self._pool.submit(self._run_one, key, task, callback)
+        return True
+
+    def _run_one(self, key: str, task: Callable[[], Any], callback: Callable[[Any], None]) -> None:
+        started = time.monotonic()
+        try:
+            result = task()
+        except Exception as exc:
+            LOGGER.warning("hud scan %s failed: %s", key, type(exc).__name__)
+            return
+        finally:
+            with self._lock:
+                self._running.discard(key)
+        LOGGER.info("hud scan %s took %.1fs", key, time.monotonic() - started)
+        try:
+            self.main_dispatcher(lambda: callback(result))
+        except Exception as exc:
+            LOGGER.warning("hud main-thread dispatch failed: %s", type(exc).__name__)
 
 
 class HudController:

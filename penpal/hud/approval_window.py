@@ -136,14 +136,20 @@ class ApprovalDataController:
         self.rows: list[PendingCandidateRow] = []
         self.last_error: str | None = None
 
-    def reload(self) -> list[PendingCandidateRow]:
+    def load(self) -> tuple[list[PendingCandidateRow], str | None]:
+        """Read pending rows without touching this controller, so it can run off the main thread."""
         try:
-            self.rows = list(self._list_pending_fn(approval_store=self._store))
-            self.last_error = None
+            return list(self._list_pending_fn(approval_store=self._store)), None
         except Exception as exc:  # pragma: no cover - defensive
-            self.rows = []
-            self.last_error = str(exc) or exc.__class__.__name__
+            return [], str(exc) or exc.__class__.__name__
+
+    def apply(self, loaded: tuple[list[PendingCandidateRow], str | None]) -> list[PendingCandidateRow]:
+        rows, self.last_error = loaded
+        self.rows = list(rows)
         return list(self.rows)
+
+    def reload(self) -> list[PendingCandidateRow]:
+        return self.apply(self.load())
 
     def count(self) -> int:
         return len(self.rows)
@@ -182,6 +188,7 @@ if AppKit is not None:
             self.summary_label = None
             self.detail_view = None
             self.details_expanded = False
+            self.run_scan = None  # set by the HUD: runs discovery off the main thread
             return self
 
         def ensure_window(self) -> None:
@@ -284,7 +291,16 @@ if AppKit is not None:
 
         @objc.IBAction
         def reloadRows_(self, _sender):
-            self.data.reload()
+            if self.run_scan is None:
+                self.data.reload()
+                self._show_rows()
+                return
+            if self.summary_label is not None:
+                self.summary_label.setStringValue_("正在读取候选…")
+            self.run_scan("approval_rows", self.data.load, lambda loaded: (self.data.apply(loaded), self._show_rows()))
+
+        @objc.python_method
+        def _show_rows(self) -> None:
             if self.table_view is not None:
                 self.table_view.reloadData()
                 if self.data.count() > 0:

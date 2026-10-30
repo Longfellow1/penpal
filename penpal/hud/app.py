@@ -29,7 +29,7 @@ from WebKit import (
 from penpal.capabilities.store import load_states as load_capability_states
 from penpal.config import Config
 from penpal.hud.approval_window import ApprovalWindowController, safe_pending_candidate_count
-from penpal.hud.controller import HudController, HudModelWorker
+from penpal.hud.controller import BackgroundScan, HudController, HudModelWorker
 from penpal.hud.render import HUD_HEIGHT, HUD_WIDTH, build_html
 from penpal.hud.reload import HUDReloader, hud_exec_command
 from penpal.foundation.hud_record import HudRecordStore
@@ -37,9 +37,13 @@ from penpal.foundation.native_launcher import native_launcher
 from penpal.foundation.runtime_launchd import process_start_time
 from penpal.runtime.evaluate import current_identity, loaded_identity
 from penpal.store.repository import get_state, set_state
+from penpal.utils.logging import setup_logging
+from penpal.utils.paths import get_logs_dir
 
 REFRESH_SEC = 15.0
 SIGNAL_WAKE_SEC = 0.5
+# Counting pending candidates walks the home directory (~18 s); the count rarely changes.
+PENDING_COUNT_SEC = 600.0
 MESSAGE_HANDLER_NAME = "penpal"
 BADGE_COLORS = {"red": (0.77, 0.28, 0.23), "amber": (0.78, 0.54, 0.16)}
 
@@ -62,7 +66,7 @@ def _terminate_app() -> None:
 def _confirm_quit_alert() -> bool:
     alert = AppKit.NSAlert.alloc().init()
     alert.setMessageText_("退出 Penpal HUD？")
-    alert.setInformativeText_("HUD 退出后状态栏图标会消失，后台采集 daemon 继续运行。")
+    alert.setInformativeText_("退出后图标消失，后台照常记录。")
     alert.addButtonWithTitle_("退出")
     alert.addButtonWithTitle_("取消")
     return alert.runModal() == AppKit.NSAlertFirstButtonReturn
@@ -151,10 +155,12 @@ class PenpalHUDApp(NSObject):
             model_built=self._record_store.model_built,
         )
         self.controller.set_push_model(self._worker.push_current_model)
+        self._scan = BackgroundScan(main_dispatcher=AppHelper.callAfter)
         self._record_main_thread_tick()
         self._worker.refresh(fresh=True)
         self._worker.submit(self._read_browser_automation_guide, self._show_browser_automation_guide)
-        self._worker.submit(self._read_pending_count, self._apply_pending_count)
+        self._pending_count_last_sync = time.monotonic()
+        self._scan.run("pending_count", self._read_pending_count, self._apply_pending_count)
         return self
 
     # ── WebView ─────────────────────────────────────────────────────────────
@@ -322,9 +328,7 @@ class PenpalHUDApp(NSObject):
             return
         alert = AppKit.NSAlert.alloc().init()
         alert.setMessageText_("请开启浏览器自动化权限")
-        alert.setInformativeText_(
-            "请前往系统设置 → 隐私与安全性 → 自动化，勾选 Penpal 对 Safari / Google Chrome / Arc / Microsoft Edge / Brave Browser 的控制权限。"
-        )
+        alert.setInformativeText_("系统设置 → 隐私与安全性 → 自动化：允许 Penpal 控制你常用的浏览器。")
         alert.addButtonWithTitle_("知道了")
         alert.runModal()
         self._worker.submit(lambda: set_state("browser_automation_guide_shown", "1"))
@@ -386,10 +390,10 @@ class PenpalHUDApp(NSObject):
     @objc.python_method
     def _sync_pending_count(self) -> None:
         now = time.monotonic()
-        if now - self._pending_count_last_sync < 60.0:
+        if now - self._pending_count_last_sync < PENDING_COUNT_SEC:
             return
         self._pending_count_last_sync = now
-        self._worker.submit(self._read_pending_count, self._apply_pending_count)
+        self._scan.run("pending_count", self._read_pending_count, self._apply_pending_count)
 
     @objc.python_method
     def _read_pending_count(self):
@@ -435,7 +439,7 @@ class PenpalHUDApp(NSObject):
     @objc.python_method
     def _queue_pending_count_for_approval(self) -> None:
         self._pending_count_last_sync = time.monotonic()
-        self._worker.submit(self._read_pending_count, self._after_pending_count_for_approval)
+        self._scan.run("pending_count", self._read_pending_count, self._after_pending_count_for_approval)
 
     @objc.python_method
     def _after_pending_count_for_approval(self, result) -> None:
@@ -453,6 +457,7 @@ class PenpalHUDApp(NSObject):
     def _show_approval_window(self) -> None:
         if self.approval_window is None:
             self.approval_window = ApprovalWindowController.alloc().initWithStore_(None)
+            self.approval_window.run_scan = self._scan.run
         self.approval_window.showWindow_(None)
         self._pending_count_last_sync = 0.0
 
@@ -465,7 +470,7 @@ class PenpalHUDApp(NSObject):
         self.popover.performClose_(None)
         alert = AppKit.NSAlert.alloc().init()
         alert.setMessageText_("重启后台服务？")
-        alert.setInformativeText_("Penpal 会通过 launchd 重启后台服务并确认新代次开始推进。")
+        alert.setInformativeText_("将重启后台服务，并确认它恢复记录。")
         alert.addButtonWithTitle_("重启")
         alert.addButtonWithTitle_("取消")
         if alert.runModal() != AppKit.NSAlertFirstButtonReturn:
@@ -493,6 +498,8 @@ class PenpalHUDApp(NSObject):
 
 
 def run_hud(cfg: Config | None = None) -> None:
+    # The HUD keeps its own log: the shared app log has one writer, the daemon.
+    setup_logging(get_logs_dir() / "hud.log")
     config = cfg or Config.load()
     app = AppKit.NSApplication.sharedApplication()
     app.setActivationPolicy_(AppKit.NSApplicationActivationPolicyAccessory)

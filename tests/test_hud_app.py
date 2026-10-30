@@ -251,6 +251,8 @@ def test_run_hud_registers_signal_wake_timer(monkeypatch):
         types.SimpleNamespace(alloc=lambda: types.SimpleNamespace(initWithConfig_=lambda cfg: fake_delegate)),
     )
     monkeypatch.setattr(hud_app.signal, "signal", lambda sig, handler: None)
+    log_paths = []
+    monkeypatch.setattr(hud_app, "setup_logging", log_paths.append)
 
     def fake_timer(interval, target, selector, user_info, repeats):
         timers.append({
@@ -270,6 +272,7 @@ def test_run_hud_registers_signal_wake_timer(monkeypatch):
     fake_cfg = types.SimpleNamespace()
     hud_app.run_hud(fake_cfg)
 
+    assert [p.name for p in log_paths] == ["hud.log"]
     fast_timers = [t for t in timers if t["interval"] <= 1.0]
     assert len(fast_timers) == 1
     timer = fast_timers[0]
@@ -288,3 +291,32 @@ def test_quit_hud_schedules_confirm_quit_via_call_after(shell, monkeypatch):
     assert calls == [(shell.confirmQuit_, (None,))]
 
 
+
+
+class _Scan:
+    def __init__(self):
+        self.runs = []
+
+    def run(self, key, task, callback):
+        self.runs.append((key, task, callback))
+        return True
+
+
+def test_pending_count_runs_on_the_scan_lane_every_ten_minutes(shell, monkeypatch):
+    # The count walks the home directory; on the model worker it froze the panel once a minute.
+    shell._scan = _Scan()
+    shell._pending_count_last_sync = 0.0
+    now = [10_000.0]
+    monkeypatch.setattr(hud_app.time, "monotonic", lambda: now[0])
+
+    shell._sync_pending_count()
+    assert [key for key, _, _ in shell._scan.runs] == ["pending_count"]
+    assert shell._worker.tasks == []
+
+    now[0] += hud_app.PENDING_COUNT_SEC - 1
+    shell._sync_pending_count()
+    assert len(shell._scan.runs) == 1
+    now[0] += 1
+    shell._sync_pending_count()
+    assert len(shell._scan.runs) == 2
+    assert hud_app.PENDING_COUNT_SEC >= 600
