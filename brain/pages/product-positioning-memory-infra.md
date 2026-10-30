@@ -5,7 +5,7 @@ category: decision
 status: active
 tags: [positioning, roadmap]
 created: "2026-10-12T15:20:36"
-updated: "2026-10-28T20:08:53"
+updated: "2026-10-30T16:20:34"
 ---
 
 <!-- compiled_truth -->
@@ -74,3 +74,15 @@ Reversed 2026-10-28 (user): absorbing Memmy-class cross-AI-IDE memory is in scop
   summary: "Memmy-class write-back + adaptive multi-AI-tool capture moved into V1, before promotion"
   source: user 2026-10-28
   affects: [product-positioning-memory-infra, memory-distillation-by-agent, docs/Penpal_Eval_PRD.md, issue #24]
+
+- time: 2026-10-30T16:15:59
+  kind: decision
+  summary: "commit_memory evidence_ids are optional (design §3.5 wins over issue #24's 'no evidence is rejected'); any evidence given must be inside the token's grant, and writes need the 'write' operation. Auto-connected hosts get read,write grants."
+  source: "tech lead 2026-10-30, following the owner-approved design of 2026-10-28"
+  affects: [product-positioning-memory-infra, mcp-caller-auth-p0]
+
+- time: 2026-10-30T16:20:34
+  kind: decision
+  summary: "Memory visibility follows the existing buckets (Work/Personal/Private/Financial). A memory citing evidence carries the buckets of that evidence, and a reader must cover all of them. A memory without evidence goes to a bucket the writer names inside its grant, else the writing tool's default bucket. Memmy imports use the source tool's default bucket. scope=project needs an explicit project from the host, normalised by the project rules."
+  source: "owner 2026-10-30 (AskUserQuestion): 跟随分区（推荐）"
+  affects: [product-positioning-memory-infra, mcp-caller-auth-p0]
