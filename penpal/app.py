@@ -2,17 +2,14 @@ from __future__ import annotations
 import logging
 import os
 import signal
-import sqlite3
 import sys
 import threading
 import time
-from datetime import datetime, timezone
 from pathlib import Path
-from typing import Optional, Callable, Any
+from typing import Optional
 
 from penpal.capabilities.capture_facts import CAPTURE_FACT_CAPS as _CAPTURE_FACT_CAPS
 from penpal.capabilities.registry import CapabilityRegistry, get_default_registry
-from penpal.capabilities.store import save_states as save_capability_states
 from penpal.capture.browser_automation_state import clear_browser_automation_denied_browsers_on_startup
 from penpal.config import Config
 from penpal.foundation.runtime_logs import LAUNCHD_LOG_CHECK_INTERVAL_SEC, cap_launchd_output_logs
@@ -26,7 +23,6 @@ from penpal.store.migrations import SCHEMA_VERSION
 from penpal.runtime.evaluate import current_identity, loaded_identity
 from penpal.sources.scheduler import SourcesScheduler
 from penpal.services.capability_monitor import (
-    _apply_ax_denied_fact_overrides,
     run_capability_self_check as _run_capability_self_check,
 )
 

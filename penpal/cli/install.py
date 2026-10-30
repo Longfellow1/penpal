@@ -464,7 +464,7 @@ def install_onboard(non_interactive: bool, sources_opt: str | None, yes_all: boo
         # Trigger native prompt (will only show if state is undetermined).
         prompt_result = spec.request()
         if prompt_result == PermissionStatus.GRANTED:
-            console.print(f"  [green]→ 已通过原生授权框完成[/green]")
+            console.print("  [green]→ 已通过原生授权框完成[/green]")
             continue
 
         # State is denied → native prompt won't show, must open settings.
@@ -473,17 +473,17 @@ def install_onboard(non_interactive: bool, sources_opt: str | None, yes_all: boo
         if non_interactive:
             console.print("  [yellow]non-interactive 模式：跳过等待，请稍后重跑此命令验证[/yellow]")
             continue
-        console.print(f"  请在系统设置里勾选 Penpal 对此项的授权。")
+        console.print("  请在系统设置里勾选 Penpal 对此项的授权。")
         click.confirm("  完成后回车继续 →", default=True, show_default=False)
 
         # Re-check
         recheck = spec.check()
         if recheck == PermissionStatus.GRANTED:
-            console.print(f"  [green]✓ 已确认授权[/green]")
+            console.print("  [green]✓ 已确认授权[/green]")
         else:
             console.print(
-                f"  [yellow]仍未授权——如系统设置里没有 Penpal 条目，"
-                f"点击「➕」选择 /Applications/Penpal.app[/yellow]"
+                "  [yellow]仍未授权——如系统设置里没有 Penpal 条目，"
+                "点击「➕」选择 /Applications/Penpal.app[/yellow]"
             )
 
     if chosen_names:
@@ -573,7 +573,6 @@ def _echo_source_recheck(chosen: list[str]) -> None:
 
 def _onboard_first_import(chosen: list[str]) -> None:
     """First import of the chosen sources, in batches; a failure leaves the saved cursor for the next run."""
-    from datetime import datetime, timezone
 
     from penpal.sources import importer, onboarding
 

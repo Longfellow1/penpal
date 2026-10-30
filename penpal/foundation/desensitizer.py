@@ -3,7 +3,7 @@ from __future__ import annotations
 import re
 from typing import Any
 
-from penpal.foundation.detectors import PATTERNS, detect, has_sensitive_content
+from penpal.foundation.detectors import PATTERNS, detect
 
 # Email masking keeps the domain (useful for "which company / service") and drops the local part:
 # alice.w@gmail.com -> ***@gmail.com. Already-masked "***@x.com" does not match the pattern (the

@@ -315,7 +315,6 @@ def test_r3_sigkill_restarts_and_budget_exhaustion_stops_further_processes(monke
         _write_daemon_plist(monkeypatch, executable)
         initial_status = _wait_for(_running_status)
         assert initial_status, _diagnostic(harness)
-        initial = initial_status.generation
         restart_control, calls = _fake_restart(harness, [])
         state_path = home / ".penpal" / "run" / "watchdog.json"
 

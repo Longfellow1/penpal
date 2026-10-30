@@ -21,7 +21,7 @@ from pathlib import Path
 import pytest
 from mcp.shared.memory import create_connected_server_and_client_session
 
-from mcp_helpers import client_of, search, server_for
+from mcp_helpers import search, server_for
 from penpal.mcp import auth, tools
 from penpal.mcp.server import build_server
 from penpal.store.db import close, get_conn, init_db

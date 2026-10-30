@@ -14,6 +14,9 @@ from penpal.capture.browser_automation_state import (  # noqa: F401  (re-exporte
     mark_browser_automation_denied,
 )
 
+import logging
+logger = logging.getLogger(__name__)
+
 
 _AUTOMATION_ACTION = "open://x-apple.systempreferences:com.apple.preference.security?Privacy_Automation"
 
@@ -54,7 +57,8 @@ class BrowserAutomationCapability(Capability):
                     check=False,
                     timeout=1.0,
                 )
-            except Exception:
+            except Exception as exc:
+                logger.debug("monitor failed: %s", type(exc).__name__)
                 continue
             stderr = (result.stderr or "").strip()
             if is_browser_automation_denied(stderr, result.returncode):

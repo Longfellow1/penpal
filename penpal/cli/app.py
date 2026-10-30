@@ -3,7 +3,6 @@ import os
 import sys
 import time
 import signal
-import subprocess
 from pathlib import Path
 import click
 from rich.table import Table

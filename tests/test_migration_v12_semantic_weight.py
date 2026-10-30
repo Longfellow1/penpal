@@ -1,4 +1,3 @@
-import pytest
 
 """Test migration v12: semantic_weight column and per-source defaults."""
 import sqlite3
@@ -93,8 +92,6 @@ def test_backfill_weights_per_source():
         conn.commit()
 
         # Now apply v12 migration
-        from penpal.store.migrations import run_migrations
-        from penpal.store.db import init_db as reinit_db
 
         # Manually apply v12
         v12_sql = MIGRATIONS[11]

@@ -54,7 +54,7 @@ def _iter_jsonl_paths(root: Path, *, max_depth: int) -> Iterator[Path]:
         current_dir = Path(dirpath)
         try:
             depth = len(current_dir.relative_to(root).parts)
-        except Exception:
+        except ValueError:
             continue
 
         dirnames[:] = [name for name in dirnames if name not in _EXCLUDED_DIRS]
@@ -67,7 +67,7 @@ def _iter_jsonl_paths(root: Path, *, max_depth: int) -> Iterator[Path]:
             file_path = current_dir / filename
             try:
                 file_depth = len(file_path.relative_to(root).parts) - 1
-            except Exception:
+            except ValueError:
                 continue
             if file_depth > max_depth:
                 continue
@@ -135,7 +135,7 @@ def _sample_fields(path: Path) -> set[str]:
     for line in non_empty_lines:
         try:
             parsed = json.loads(line)
-        except Exception:
+        except (ValueError, TypeError):
             continue
         if not isinstance(parsed, dict):
             continue

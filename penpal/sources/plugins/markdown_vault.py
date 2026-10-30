@@ -119,7 +119,7 @@ class MarkdownVaultSource(DataSource):
                         continue
                     try:
                         stat = path.stat()
-                    except Exception:
+                    except OSError:
                         continue
 
                     event_time = datetime.fromtimestamp(stat.st_mtime, tz=timezone.utc)

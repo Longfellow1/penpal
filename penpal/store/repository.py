@@ -1,4 +1,3 @@
-import hashlib
 import sqlite3
 import json
 from datetime import datetime, timezone
@@ -7,7 +6,7 @@ from penpal.foundation.desensitizer import redact_secrets
 from penpal.store.capture_events import CAPTURE_SEARCHABLE_EVENT_TYPES, penpal_locator
 from penpal.store.db import get_conn
 from penpal.utils.text_filters import strip_invisible
-from penpal.store.models import RawEvent, Session, SearchDoc, Policy, AppState
+from penpal.store.models import RawEvent, Session, SearchDoc, Policy
 from penpal.store.snapshots import mark_previous_snapshot
 
 

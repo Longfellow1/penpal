@@ -4,6 +4,9 @@ import locale as _locale
 
 from penpal.utils.env import get_env_compat
 
+import logging
+logger = logging.getLogger(__name__)
+
 _LANG_CACHE: str | None = None
 
 
@@ -23,7 +26,8 @@ def detect_lang() -> str:
         sys_locale = (_locale.getlocale()[0] or "").lower()
         if "zh" in sys_locale or "chinese" in sys_locale:
             return "zh"
-    except Exception:
+    except Exception as exc:
+        logger.debug("detect lang failed: %s", type(exc).__name__)
         pass
 
     return "en"

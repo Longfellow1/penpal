@@ -9,7 +9,7 @@ from mcp.shared.memory import create_connected_server_and_client_session
 
 from mcp_helpers import search, server_for
 from penpal.mcp import auth, tools
-from penpal.store.db import close, get_conn, init_db
+from penpal.store.db import close, init_db
 from penpal.store.models import RawEvent
 from penpal.store.repository import insert_raw_event
 

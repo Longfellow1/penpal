@@ -1,5 +1,5 @@
 from __future__ import annotations
-from datetime import datetime, timezone
+from datetime import datetime
 from typing import Optional
 from penpal.services.sessionizer import sessions_for_date, sessions_for_today
 from penpal.utils.dates import local_timezone

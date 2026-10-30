@@ -163,7 +163,7 @@ def test_source_and_keyboard_toggle_match_cli_source_command(hud, env, monkeypat
 
 
 def test_source_toggle_persists_and_rejects_unknown_names(hud, env):
-    m = hud.dispatch("source.toggle", {"name": "clipboard", "enable": False})
+    hud.dispatch("source.toggle", {"name": "clipboard", "enable": False})
     assert "clipboard" in capture_control.disabled_sources()
     assert next(r for r in _tab_rows(hud.dispatch("nav.page", {"page": "group:live"})) if r["title"] == "剪贴板")["trail"]["on"] is False
     hud.dispatch("source.toggle", {"name": "not-a-source", "enable": False})
@@ -172,7 +172,7 @@ def test_source_toggle_persists_and_rejects_unknown_names(hud, env):
 
 def test_keyboard_switch_off_stops_writes_like_the_cli(hud, env):
     assert capture_control.source_writes_allowed("keyboard_chunk")
-    m = hud.dispatch("keyboard.toggle", {"enable": False})
+    hud.dispatch("keyboard.toggle", {"enable": False})
     assert not capture_control.source_writes_allowed("keyboard_chunk")
     kb = _tab_rows(hud.dispatch("nav.tab", {"tab": "privacy"}))[0]
     assert kb["trail"]["on"] is False and kb["args"] == {"enable": True}
@@ -427,7 +427,6 @@ def test_navigation_state_machine(hud, env):
 
 
 def test_recheck_panel_action_updates_status_subtext(hud, env, monkeypatch):
-    from penpal.hud.snapshot import Snapshot
 
     m = hud.dispatch("health.recheck")
     assert "已重新检测" in m["status"]["sub"]
@@ -460,7 +459,7 @@ def test_worker_does_not_monkeypatch_controller(env):
     ctrl = HudController(lambda: env)
     assert getattr(ctrl, "_push_model", None) is None
 
-    worker = HudModelWorker(
+    HudModelWorker(
         ctrl,
         main_dispatcher=lambda fn: fn(),
         apply_script=lambda _s, _b: None,

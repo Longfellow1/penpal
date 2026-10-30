@@ -51,7 +51,7 @@ def smoke_test_inner_binary(app_path: Path) -> str | None:
         tail = "\n  ".join(snippet[-8:]) if snippet else "<no output>"
         return f"smoke_test: inner --help exit={result.returncode}\n  {tail}"
     if "Usage:" not in (result.stdout or ""):
-        return f"smoke_test: inner --help stdout missing 'Usage:' marker"
+        return "smoke_test: inner --help stdout missing 'Usage:' marker"
     return None
 
 

@@ -17,7 +17,7 @@ import pytest
 from penpal import __version__
 from penpal.foundation.runtime_identity import RuntimeIdentity
 from penpal.foundation.hud_record import HudRecord
-from penpal.runtime import ICON_OCCLUDED_HINT_ZH, RuntimeState, RuntimeStatus, evaluate, state_text
+from penpal.runtime import ICON_OCCLUDED_HINT_ZH, RuntimeState, RuntimeStatus, evaluate
 from penpal.foundation.runtime_record import Component, Progress, RuntimeRecord, read_record, write_record
 from penpal.store.migrations import SCHEMA_VERSION
 

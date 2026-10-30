@@ -1,15 +1,13 @@
 """Tests for penpal.services.repair and penpal doctor --fix."""
 from __future__ import annotations
 
-import types
 from datetime import datetime, timezone
-import pytest
 from click.testing import CliRunner
 
 from penpal import cli
 from penpal.runtime.control import ControlResult
 from penpal.runtime.evaluate import Issue, RuntimeState, RuntimeStatus
-from penpal.services.repair import RepairResult, is_fixable_issue, repair
+from penpal.services.repair import is_fixable_issue, repair
 
 
 class FakeControl:

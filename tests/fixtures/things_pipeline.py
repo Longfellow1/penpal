@@ -10,7 +10,7 @@ def make_fixture_events() -> list[SemanticEvent]:
         SemanticEvent(
             time=datetime(2026, 4, 28, 0, 42, tzinfo=timezone.utc),
             source="terminal",
-            actor="Harland",
+            actor="alice",
             intent="在 Codex CLI 调整 Penpal 管道并检查 commit 11a3a9b",
             artifact="commit:11a3a9b",
             raw_ref="terminal://zsh/1",
@@ -20,7 +20,7 @@ def make_fixture_events() -> list[SemanticEvent]:
         SemanticEvent(
             time=datetime(2026, 4, 28, 1, 5, tzinfo=timezone.utc),
             source="git_log",
-            actor="Harland",
+            actor="alice",
             intent="提交 Penpal 管道修复，commit message: Penpal things cleanup，git 已落地",
             artifact="11a3a9b",
             raw_ref="git://commit/11a3a9b",
@@ -30,7 +30,7 @@ def make_fixture_events() -> list[SemanticEvent]:
         SemanticEvent(
             time=datetime(2026, 4, 28, 8, 36, tzinfo=timezone.utc),
             source="chrome_history",
-            actor="Harland",
+            actor="alice",
             intent="在 Chrome 查看邮件页面 wx.mail.qq.com 并确认收件箱主题",
             artifact="https://wx.mail.qq.com/cgi-bin/frame_html?sid=abc",
             raw_ref="chrome://history/1",
@@ -40,7 +40,7 @@ def make_fixture_events() -> list[SemanticEvent]:
         SemanticEvent(
             time=datetime(2026, 4, 28, 9, 18, tzinfo=timezone.utc),
             source="wechat",
-            actor="Harland",
+            actor="alice",
             intent="在微信里同步邮件结论和后续待办",
             artifact="WeChat chat",
             raw_ref="wechat://chat/1",
@@ -50,7 +50,7 @@ def make_fixture_events() -> list[SemanticEvent]:
         SemanticEvent(
             time=datetime(2026, 4, 28, 13, 22, tzinfo=timezone.utc),
             source="codex_cli",
-            actor="Harland",
+            actor="alice",
             intent="用 Codex CLI 写 tests/test_things_pipeline_e2e.py 并准备 e2e 验收",
             artifact="tests/test_things_pipeline_e2e.py",
             raw_ref="codex://session/1",
@@ -60,7 +60,7 @@ def make_fixture_events() -> list[SemanticEvent]:
         SemanticEvent(
             time=datetime(2026, 4, 28, 14, 2, tzinfo=timezone.utc),
             source="terminal",
-            actor="Harland",
+            actor="alice",
             intent="运行 pytest 检查 e2e 输出与分配结果",
             artifact="python3 -m pytest",
             raw_ref="terminal://zsh/2",
@@ -70,7 +70,7 @@ def make_fixture_events() -> list[SemanticEvent]:
         SemanticEvent(
             time=datetime(2026, 4, 28, 19, 11, tzinfo=timezone.utc),
             source="git_log",
-            actor="Harland",
+            actor="alice",
             intent="整理 Penpal 提交说明并保留 commit 11a3a9b 与测试记录",
             artifact="commit:11a3a9b message: Penpal",
             raw_ref="git://commit/11a3a9b#2",
@@ -80,7 +80,7 @@ def make_fixture_events() -> list[SemanticEvent]:
         SemanticEvent(
             time=datetime(2026, 4, 28, 21, 3, tzinfo=timezone.utc),
             source="chrome_history",
-            actor="Harland",
+            actor="alice",
             intent="回看 wx.mail.qq.com 邮件并记录后续待办",
             artifact="https://wx.mail.qq.com",
             raw_ref="chrome://history/2",
@@ -90,7 +90,7 @@ def make_fixture_events() -> list[SemanticEvent]:
         SemanticEvent(
             time=datetime(2026, 4, 28, 22, 48, tzinfo=timezone.utc),
             source="terminal",
-            actor="Harland",
+            actor="alice",
             intent="在 Codex CLI 收尾 README 文档说明并记录 Penpal",
             artifact="README.md",
             raw_ref="terminal://zsh/3",

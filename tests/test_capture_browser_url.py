@@ -4,7 +4,6 @@ import queue
 from types import SimpleNamespace
 from unittest.mock import patch
 
-import pytest
 
 from penpal.capture.normalizer import normalize_browser_url_event
 from penpal.capture.watchers.browser_url import (

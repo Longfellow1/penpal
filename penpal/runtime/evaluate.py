@@ -6,7 +6,6 @@ from datetime import datetime, timezone
 from enum import Enum
 from pathlib import Path
 import ctypes
-import os
 import sys
 from typing import Callable
 

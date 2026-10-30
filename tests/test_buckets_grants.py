@@ -12,8 +12,8 @@ from click.testing import CliRunner
 from penpal.capture.policy import ALLOW, DENY, PolicyEngine
 from penpal.config import Config
 from penpal.i18n import T
-from mcp_helpers import search, server_for
-from penpal.mcp import auth, tools
+from mcp_helpers import search
+from penpal.mcp import auth
 from penpal.mcp.cli import grant_output_lines, mcp_group
 from penpal.store import buckets
 from penpal.store.db import close, get_conn, init_db

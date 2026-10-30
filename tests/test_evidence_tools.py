@@ -17,7 +17,7 @@ from penpal.store.db import close, get_conn, init_db
 from penpal.store.models import RawEvent
 from penpal.store.repository import insert_raw_event
 from penpal.store.sync_repo import add_evidence
-from mcp_helpers import client_of, server_for
+from mcp_helpers import client_of
 from test_mainline_codex_git import _read_all, env  # noqa: F401  (fixture reused: claude + codex + repo)
 
 UNAVAILABLE_ZH = "原始出处已不可访问"

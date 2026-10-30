@@ -14,6 +14,9 @@ from penpal.capture.merge import (
 )
 from penpal.store.models import RawEvent
 
+import logging
+logger = logging.getLogger(__name__)
+
 
 @dataclass(frozen=True)
 class FusionResult:
@@ -121,7 +124,8 @@ class CaptureFusionEngine:
                 continue
             try:
                 payload.update(json.loads(candidate))
-            except Exception:
+            except Exception as exc:
+                logger.debug("merge metadata failed: %s", type(exc).__name__)
                 continue
 
         source_chain: list[str] = []

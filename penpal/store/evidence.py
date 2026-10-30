@@ -12,7 +12,6 @@ penpal.store.evidence_original, and only for the sources that define it.
 from __future__ import annotations
 
 import os
-import re
 import subprocess
 from typing import Iterable, Optional
 

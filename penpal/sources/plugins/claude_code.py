@@ -91,7 +91,7 @@ class ClaudeCodeSource(DataSource):
                 echo = False
                 try:
                     handle = jsonl_file.open("r", encoding="utf-8", errors="replace")
-                except Exception:
+                except OSError:
                     continue
                 with handle:
                     for line_idx, raw_line in enumerate(handle, start=1):

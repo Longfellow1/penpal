@@ -22,7 +22,6 @@ from penpal.capture.normalizer import (
 from penpal.config import Config
 from penpal.sources.plugins.zsh_history import ZshHistorySource, unmetafy
 from penpal.sources.registry import read_all
-from penpal.sources.types import DataSourceInstance
 from penpal.store import buckets
 from penpal.store.db import close, get_conn, init_db
 from penpal.store.migration_v26 import migrate_v26

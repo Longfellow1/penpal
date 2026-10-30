@@ -6,6 +6,9 @@ from typing import Callable, Protocol
 
 from penpal.capture.watchers.window import _get_frontmost_app
 
+import logging
+logger = logging.getLogger(__name__)
+
 
 class KeyboardInputSource(Protocol):
     def start(self, callback: Callable[..., None]) -> bool:
@@ -92,7 +95,8 @@ class MacOSKeyboardInputSource:
         if quartz is not None and self._run_loop is not None:
             try:
                 quartz.CFRunLoopStop(self._run_loop)
-            except Exception:
+            except Exception as exc:
+                logger.debug("stop failed: %s", type(exc).__name__)
                 pass
         if self._thread is not None:
             self._thread.join(timeout=2)
@@ -161,7 +165,8 @@ class MacOSKeyboardInputSource:
                     now=time.monotonic(),
                     secure_input=False,
                 )
-            except Exception:
+            except Exception as exc:
+                logger.debug("run loop forever failed: %s", type(exc).__name__)
                 pass
             return event
 

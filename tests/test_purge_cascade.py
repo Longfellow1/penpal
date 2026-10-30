@@ -7,7 +7,6 @@ MCP read path (search_context / get_evidence) after deletion. Synthetic data onl
 from __future__ import annotations
 
 import sqlite3
-from datetime import datetime, timezone
 
 import pytest
 from click.testing import CliRunner

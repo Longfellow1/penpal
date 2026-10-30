@@ -12,7 +12,6 @@ import os
 import sys
 import tomllib
 from contextlib import AsyncExitStack
-from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
@@ -28,7 +27,7 @@ from penpal.sources.cleaning.config import CleaningConfig
 from penpal.sources.plugins.claude_code import ClaudeCodeSource
 from penpal.sources.plugins.codex_cli import CodexCliSource
 from penpal.store import buckets
-from penpal.store.db import close, get_conn, init_db
+from penpal.store.db import close, init_db
 from test_mainline_codex_git import _read_all, _rollout_lines, _write_rollout
 
 KEYWORD = "narwhalquux"

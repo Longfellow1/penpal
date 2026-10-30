@@ -1,10 +1,9 @@
 from __future__ import annotations
-import sys
 import click
 from rich.table import Table
 from penpal.config import Config, read_config
 from penpal.store.repository import get_state
-from penpal.runtime import RuntimeState, evaluate, state_message, state_text
+from penpal.runtime import RuntimeState, evaluate, state_message
 from penpal.app import run
 from penpal.capture.capture_control import disabled_sources, set_capture_paused
 from penpal.i18n import T

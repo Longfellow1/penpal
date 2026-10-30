@@ -3,8 +3,7 @@ from __future__ import annotations
 import re
 import subprocess
 import threading
-import time
-from typing import Callable, Optional
+from typing import Callable
 
 from penpal.utils.logging import get_logger
 
@@ -61,7 +60,8 @@ class CameraMonitor:
             if stdout is not None:
                 try:
                     stdout.close()
-                except Exception:
+                except Exception as exc:
+                    logger.debug("stop failed: %s", type(exc).__name__)
                     pass
         thread = self._thread
         if thread is not None and threading.current_thread() is not thread:

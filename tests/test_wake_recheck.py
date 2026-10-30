@@ -7,9 +7,7 @@ daemon, launchd job or watcher thread touches the machine. A "fake wake" is a di
 """
 from __future__ import annotations
 
-import json
 import time
-from datetime import datetime, timedelta, timezone
 
 import pytest
 
@@ -29,7 +27,7 @@ from penpal.sources.types import DataSource, DataSourceInstance
 from penpal.store import buckets
 from penpal.store.db import close, get_conn, init_db
 from penpal.store.models import RawEvent
-from penpal.store.repository import get_state, insert_raw_event, set_state
+from penpal.store.repository import get_state, insert_raw_event
 
 G, D = PermissionStatus.GRANTED, PermissionStatus.DENIED
 

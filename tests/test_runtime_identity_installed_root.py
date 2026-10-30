@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from pathlib import Path
-import pytest
 
 from penpal.foundation.runtime_identity import (
     TEST_FINGERPRINT_ROOT_ENV,

@@ -73,7 +73,7 @@ def test_spotlight_read_maps_mdls_metadata(monkeypatch, tmp_path: Path) -> None:
                 "kMDItemDisplayName": "Architecture Note",
                 "kMDItemContentCreationDate": datetime(2026, 4, 20, 10, 0, tzinfo=timezone.utc),
                 "kMDItemLastUsedDate": datetime(2026, 4, 28, 12, 30, tzinfo=timezone.utc),
-                "kMDItemAuthors": ["Harland"],
+                "kMDItemAuthors": ["alice"],
                 "kMDItemSubject": "design",
                 "kMDItemPath": str(doc_path),
                 "kMDItemContentType": "net.daringfireball.markdown",

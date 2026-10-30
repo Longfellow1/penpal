@@ -1,6 +1,5 @@
 from __future__ import annotations
-from datetime import datetime, date, timedelta, timezone
-from typing import Optional
+from datetime import date
 from penpal.store.repository import get_sessions
 
 

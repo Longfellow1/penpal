@@ -26,7 +26,7 @@ def discover_json_files_candidates(*, exclude_paths: set[str]) -> list[Candidate
         current = Path(dirpath)
         try:
             depth = len(current.relative_to(root).parts)
-        except Exception:
+        except ValueError:
             continue
         dirnames[:] = [d for d in dirnames if d not in _EXCLUDED_DIRS and not _contains_excluded_token(d)]
         if depth >= 5:
@@ -40,7 +40,7 @@ def discover_json_files_candidates(*, exclude_paths: set[str]) -> list[Candidate
             path = current / filename
             try:
                 file_depth = len(path.relative_to(root).parts) - 1
-            except Exception:
+            except ValueError:
                 continue
             if file_depth > 5:
                 continue

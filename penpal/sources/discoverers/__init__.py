@@ -5,6 +5,9 @@ from pathlib import Path
 
 from penpal.sources.types import ContentShape
 
+import logging
+logger = logging.getLogger(__name__)
+
 
 @dataclass
 class CandidateSource:
@@ -44,7 +47,8 @@ def _normalize_paths(paths: set[str]) -> set[str]:
     for raw in paths:
         try:
             normalized.add(str(Path(raw).expanduser().resolve(strict=False)))
-        except Exception:
+        except Exception as exc:
+            logger.debug("normalize paths failed: %s", type(exc).__name__)
             continue
     return normalized
 

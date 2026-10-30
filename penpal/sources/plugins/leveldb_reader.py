@@ -13,6 +13,9 @@ from penpal.foundation.approval_store import ApprovalStore
 from penpal.sources.cleaning.path_filter import is_excluded_path
 from penpal.sources.types import ContentShape, DataSource, DataSourceInstance, SemanticEvent
 
+import logging
+logger = logging.getLogger(__name__)
+
 
 _PER_FILE_LIMIT = 5000
 _SUPPORTED_SUFFIXES = (".ldb", ".log")
@@ -144,7 +147,8 @@ def _iter_leveldb_files(leveldb_dir: Path, since: datetime, until: datetime) -> 
             continue
         try:
             modified = datetime.fromtimestamp(path.stat().st_mtime, tz=timezone.utc)
-        except Exception:
+        except Exception as exc:
+            logger.debug("iter leveldb files failed: %s", type(exc).__name__)
             continue
         if modified < since or modified > until:
             continue
@@ -179,7 +183,8 @@ def _read_strings(path: Path) -> list[str]:
         )
         if result.returncode == 0 and result.stdout:
             return [line.strip() for line in result.stdout.splitlines() if line.strip()]
-    except Exception:
+    except Exception as exc:
+        logger.debug("read strings failed: %s", type(exc).__name__)
         pass
 
     try:

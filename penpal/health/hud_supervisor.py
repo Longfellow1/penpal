@@ -13,7 +13,7 @@ from penpal.foundation.hud_supervisor_state import (
     parse_supervisor_time,
     persist_supervisor_state,
     read_supervisor_state,
-    read_supervisor_summary,
+    read_supervisor_summary as read_supervisor_summary,
     supervisor_state_path,
 )
 from penpal.runtime import RuntimeStatus, evaluate
