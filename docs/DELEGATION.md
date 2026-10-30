@@ -73,11 +73,12 @@
 ```
 
 固定安全段落（原样粘贴）：
-> - 不读 ~/.penpal、~/.keypulse、~/.claude、~/.codex、~/.cursor、~/.zsh_history、~/Library、浏览器数据、~/.memmy。
-> - 不运行 launchctl，不启动 GUI，不做系统级安装。
+> - 不读 ~/.penpal、~/.keypulse、~/.claude、~/.codex、~/.cursor、~/.zsh_history、~/Library、浏览器数据、~/.memmy。例外：可以只读 `~/.agents/skills/` 和 `~/.codex/skills/` 下的技能说明，可以运行 `brain list-pages`、`brain read-page`、`brain read-root`。
+> - 不运行 launchctl，不启动 GUI，不做系统级安装；不对真实 HOME 运行 `penpal connect`、`disconnect`、`install`、`import` 等会写配置或数据的命令。
 > - 测试只用 `penpal-isolated-pytest -q <路径>` 运行（会使用临时 HOME）；不在后台运行任何东西。
 > - 不 commit，不 push。
 > - 仓库是公开的：代码、测试、注释里不写真实数据或本机路径。
+> - 只有需要越过以上边界（权限、读取范围、写集）时才停下报告。设计上拿不准的地方，按简报里的裁决和现有代码惯例自己选，在报告里列出来，不要停工。
 
 调用方式：
 - **Claude 子 Agent**：用 Agent 工具，并写明 `model`；需要改代码的，设 `isolation: worktree`。
