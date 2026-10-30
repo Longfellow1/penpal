@@ -16,6 +16,8 @@ from penpal.utils.env import get_env_compat
 
 SEARCH_DESCRIPTION = """Search the user's local Penpal history (terminal, browser, git, AI chats, notes) within the scope the user granted this client.
 
+Active, visible distilled memories are returned before events with kind="memory", content, detail (up to 2000 characters), type, scope, project, source_tool, created_at and evidence_ids. Use each evidence_id with get_evidence; an empty list means no linked evidence. Event results retain their existing fields. The sources filter also applies to memory evidence; unbacked memories require the memory source.
+
 You do the language understanding; this tool only matches keywords. Before calling:
 - Extract 1-6 distinctive keywords from the user's question (names, projects, technical terms, distinctive nouns). Drop filler and question words. Never pass a sentence.
 - Add Chinese and English variants when plausible (签证 + visa).

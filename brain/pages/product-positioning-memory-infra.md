@@ -5,7 +5,7 @@ category: decision
 status: active
 tags: [positioning, roadmap]
 created: "2026-10-12T15:20:36"
-updated: "2026-10-30T16:20:34"
+updated: "2026-10-30T16:58:43"
 ---
 
 <!-- compiled_truth -->
@@ -86,3 +86,9 @@ Reversed 2026-10-28 (user): absorbing Memmy-class cross-AI-IDE memory is in scop
   summary: "Memory visibility follows the existing buckets (Work/Personal/Private/Financial). A memory citing evidence carries the buckets of that evidence, and a reader must cover all of them. A memory without evidence goes to a bucket the writer names inside its grant, else the writing tool's default bucket. Memmy imports use the source tool's default bucket. scope=project needs an explicit project from the host, normalised by the project rules."
   source: "owner 2026-10-30 (AskUserQuestion): 跟随分区（推荐）"
   affects: [product-positioning-memory-infra, mcp-caller-auth-p0]
+
+- time: 2026-10-30T16:58:43
+  kind: decision
+  summary: "Memmy 导入映射（2026-10-30，P3b）：只导 status=activated 的 L1→fact、Skill→procedure；content 取 info_json.summary 压成一行（退回 title、首行），全文进 memories.detail（v36 新列，与 content 一起建全文索引）；凭据打码后照导不跳过；桶 = 来源工具默认桶，否则 Work；按 (source, external_id) 幂等，计数须满足 eligible = imported + existing + invalid。检索时记忆排在事件前，但有事件命中时记忆最多占半页，避免短摘要挤掉带证据的原始事件；detail 截断 2000 字符。本机只读演练：3002 条全部可导、0 无效、246 条含敏感片段已打码。"
+  source: "PR feat/memmy-import; tests/test_memmy_import.py"
+  affects: [product-positioning-memory-infra]
