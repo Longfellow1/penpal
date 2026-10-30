@@ -5,7 +5,7 @@ category: decision
 status: active
 tags: [hud, macos, self-heal]
 created: "2026-10-29T19:18:40"
-updated: "2026-10-29T19:18:41"
+updated: "2026-10-30T09:49:59"
 ---
 
 <!-- compiled_truth -->
@@ -37,4 +37,10 @@ updated: "2026-10-29T19:18:41"
   kind: decision
   summary: "HUD launch entry, quit placement, and the notch limit"
   source: "manager 2026-10-29, owner report + CGWindowList check on the owner Mac"
+  affects: [hud-launch-entry]
+
+- time: 2026-10-30T09:49:59
+  kind: decision
+  summary: "Owner approved a notch hint over detection (none possible): doctor, install doctor and the 设置 tab show one shared hint (ICON_OCCLUDED_HINT_ZH): free menu bar space, then ⌘-drag Penpal right. A default preferred position for new installs is a separate, unverified idea."
+  source: "owner 2026-10-30 (选择：加提示)"
   affects: [hud-launch-entry]

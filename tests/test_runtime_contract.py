@@ -17,7 +17,7 @@ import pytest
 from penpal import __version__
 from penpal.foundation.runtime_identity import RuntimeIdentity
 from penpal.foundation.hud_record import HudRecord
-from penpal.runtime import RuntimeState, RuntimeStatus, evaluate, state_text
+from penpal.runtime import ICON_OCCLUDED_HINT_ZH, RuntimeState, RuntimeStatus, evaluate, state_text
 from penpal.foundation.runtime_record import Component, Progress, RuntimeRecord, read_record, write_record
 from penpal.store.migrations import SCHEMA_VERSION
 
@@ -468,6 +468,8 @@ def _assert_consumers_expose_same_runtime_state(runtime, monkeypatch, tmp_path):
     if runtime.hud is not None and runtime.hud.alive:
         hud_line = next(line for line in doctor_result.output.splitlines() if line.startswith("菜单栏 HUD:"))
         assert ("FAIL" if any(issue.component == "hud" for issue in runtime.issues) else "OK") in hud_line
+        # Visible-by-API can still mean hidden behind the notch, so a healthy HUD line carries the hint.
+        assert (ICON_OCCLUDED_HINT_ZH in hud_line) is not any(issue.component == "hud" for issue in runtime.issues)
 
     executable = tmp_path / "bin" / "penpal"
     executable.parent.mkdir(exist_ok=True)
@@ -483,6 +485,7 @@ def _assert_consumers_expose_same_runtime_state(runtime, monkeypatch, tmp_path):
     if runtime.hud is not None and runtime.hud.alive:
         hud_expected = "FAIL" if any(issue.component == "hud" for issue in runtime.issues) else "OK"
         assert f"hud={hud_expected}" in install_result.output
+        assert (ICON_OCCLUDED_HINT_ZH in install_result.output) is (hud_expected == "OK")
 
     line = cli_shared._runtime_status_line(daemon_cli.evaluate())
     assert runtime.code in line
