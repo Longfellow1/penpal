@@ -17,7 +17,7 @@ from penpal.mcp import auth
 from penpal.mcp.cli import grant_output_lines, mcp_group
 from penpal.store import buckets
 from penpal.store.db import close, get_conn, init_db
-from penpal.store.migrations import MIGRATIONS, run_migrations
+from penpal.store.migrations import MIGRATIONS, SCHEMA_VERSION, run_migrations
 from penpal.store.models import Policy, RawEvent
 from penpal.store.repository import insert_policy, insert_raw_event, seed_policies_from_config
 
@@ -263,7 +263,7 @@ def test_v21_adds_grant_scope_backfills_buckets_and_is_idempotent(tmp_path: Path
     conn.commit()
 
     run_migrations(conn)
-    assert conn.execute("SELECT MAX(version) FROM _schema_version").fetchone()[0] == 34
+    assert conn.execute("SELECT MAX(version) FROM _schema_version").fetchone()[0] == SCHEMA_VERSION
     g = conn.execute("SELECT buckets, sources, operations, purpose, expires_at FROM access_grants").fetchone()
     assert (g["buckets"], g["sources"], g["operations"]) == ('["Work"]', None, '["read"]')  # legacy grant -> least privilege
     got = {r["source"]: r["bucket"] for r in conn.execute("SELECT source, bucket FROM raw_events")}

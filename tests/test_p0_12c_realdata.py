@@ -25,7 +25,7 @@ from penpal.sources.registry import read_all
 from penpal.store import buckets
 from penpal.store.db import close, get_conn, init_db
 from penpal.store.migration_v26 import migrate_v26
-from penpal.store.migrations import MIGRATIONS, run_migrations
+from penpal.store.migrations import MIGRATIONS, SCHEMA_VERSION, run_migrations
 from penpal.store.models import RawEvent
 from penpal.store.repository import insert_raw_event
 from penpal.store.site_categories import browser_family, classify_host, classify_url, host_of, normalize_site_key
@@ -413,7 +413,7 @@ def _seed_v25(path: Path) -> tuple[sqlite3.Connection, dict]:
 def test_v26_migration_end_to_end_and_idempotent(tmp_path):
     conn, ids = _seed_v25(tmp_path / "old.db")
     run_migrations(conn)
-    assert conn.execute("SELECT MAX(version) FROM _schema_version").fetchone()[0] == 34
+    assert conn.execute("SELECT MAX(version) FROM _schema_version").fetchone()[0] == SCHEMA_VERSION
     assert list(tmp_path.glob("old.db.v25-*.bak"))
     q = lambda col, rid: conn.execute(f"SELECT {col} FROM raw_events WHERE id = ?", (rid,)).fetchone()
     exists = lambda rid: q("id", rid) is not None

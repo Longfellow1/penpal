@@ -17,10 +17,11 @@ from penpal.store.migration_v31 import migrate_v31
 from penpal.store.migration_v32 import migrate_v32
 from penpal.store.migration_v33 import migrate_v33
 from penpal.store.migration_v34 import migrate_v34
+from penpal.store.migration_v35 import migrate_v35
 
 LOGGER = logging.getLogger("penpal.store.migrations")
 
-SCHEMA_VERSION = 34
+SCHEMA_VERSION = 35
 
 MIGRATIONS = [
     # v1
@@ -252,6 +253,7 @@ MIGRATIONS = [
     migrate_v33,
     # v34 — re-mark progressive-typing snapshots with the spaced-pinyin and same-draft-edit rules (see migration_v34).
     migrate_v34,
+    migrate_v35,
 ]
 
 

@@ -27,7 +27,7 @@ from penpal.foundation.detectors import luhn_valid, valid_id_card
 from penpal.store import buckets
 from penpal.store.db import close, get_conn, init_db
 from penpal.store.migration_v24 import migrate_v24
-from penpal.store.migrations import MIGRATIONS, run_migrations
+from penpal.store.migrations import MIGRATIONS, SCHEMA_VERSION, run_migrations
 
 VALID_ID = "110101199003071233"  # synthetic, passes GB 11643
 VALID_CARD = "6222021234567890128"  # synthetic, passes Luhn
@@ -362,7 +362,7 @@ def test_v24_scrubs_existing_rows_transactionally_and_idempotently(tmp_path):
     assert fts('"hello world"') == [keep]
     ev = {r["event_id"] for r in conn.execute("SELECT event_id FROM evidence")}
     assert {pinyin, wechat, overlay, bili}.isdisjoint(ev) and keep in ev  # evidence of deleted events is gone
-    assert conn.execute("SELECT MAX(version) FROM _schema_version").fetchone()[0] == 34
+    assert conn.execute("SELECT MAX(version) FROM _schema_version").fetchone()[0] == SCHEMA_VERSION
 
     before = [tuple(r) for r in conn.execute("SELECT * FROM raw_events ORDER BY id")]
     migrate_v24(conn)

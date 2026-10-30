@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "source": "docs/Penpal_Eval_PRD.md §3.2.2; baseline P0 definitions in docs/Penpal_V2.md §6.3 (AT16 deferred by D30)",
+  "source": "docs/Penpal_Eval_PRD.md §3.2.2 (AT16 restored to P0)",
   "p0_at_ids": [
     "AT01",
     "AT02",
@@ -10,6 +10,7 @@
     "AT09",
     "AT12",
     "AT13",
+    "AT16",
     "AT17",
     "AT18",
     "AT19",
@@ -168,6 +169,21 @@
       ],
       "权限受限": [
         "tests/test_eval_at_matrix.py::test_permission_limited_variant[AT21]"
+      ]
+    },
+    "AT16": {
+      "有答案": [
+        "tests/test_eval_at_matrix.py::test_answerable_variant[AT16]",
+        "tests/test_memory_write.py::test_writes_merges_and_history"
+      ],
+      "无答案": [
+        "tests/test_eval_at_matrix.py::test_no_answer_variant[AT16]",
+        "tests/test_memory_write.py::test_project_secret_and_correction"
+      ],
+      "权限受限": [
+        "tests/test_eval_at_matrix.py::test_permission_limited_variant[AT16]",
+        "tests/test_memory_write.py::test_rejects_unauthorized_without_disclosure",
+        "tests/test_memory_write.py::test_multibucket_and_source_visibility"
       ]
     }
   }

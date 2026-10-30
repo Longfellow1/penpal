@@ -148,10 +148,10 @@ def test_new_history_ingest_already_writes_the_same_locator(home):
 
 def test_v31_is_registered_as_latest_schema_version(home):
     conn = get_conn()
-    assert SCHEMA_VERSION == 34 == len(MIGRATIONS)
+    assert SCHEMA_VERSION == len(MIGRATIONS)
     conn.execute("DELETE FROM _schema_version WHERE version >= 31")  # re-run v31 and v32 on top
     conn.commit()
     run_migrations(conn)
     run_migrations(conn)
     assert conn.execute("SELECT COUNT(*) FROM _schema_version WHERE version = 31").fetchone()[0] == 1
-    assert conn.execute("SELECT MAX(version) FROM _schema_version").fetchone()[0] == 34
+    assert conn.execute("SELECT MAX(version) FROM _schema_version").fetchone()[0] == SCHEMA_VERSION

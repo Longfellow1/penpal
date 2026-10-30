@@ -9,7 +9,7 @@ from mcp.types import CallToolResult, TextContent
 from pydantic import Field
 
 from penpal.health.capture_health import current_capture_health
-from penpal.mcp import tools
+from penpal.mcp import memory_tools, tools
 from penpal.mcp.auth import CLIENT_ENV, TOKEN_ENV
 from penpal.utils.env import get_env_compat
 
@@ -184,6 +184,14 @@ def build_server(
     ) -> CallToolResult:
         payload = tools.rate_result(token_provider(), result_id, verdict, note, query, client=client_provider())
         return _result(payload)
+
+    @server.tool(description="Store distilled memories. Project scope requires a project; evidence IDs are optional. Without evidence, supply bucket if the grant has multiple buckets and the client has no catalog default.")
+    def commit_memory(items: Any) -> CallToolResult:
+        return _result(memory_tools.commit_memory(token_provider(), items, client=client_provider()))
+
+    @server.tool(description="Correct, revoke, or invalidate a visible memory. Correction requires a complete replacement item.")
+    def update_memory(memory_id: Any, action: Any, item: Any = None) -> CallToolResult:
+        return _result(memory_tools.update_memory(token_provider(), memory_id, action, item, client=client_provider()))
 
     return server
 
