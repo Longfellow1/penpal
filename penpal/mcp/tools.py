@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 import sqlite3
+import json
+from dataclasses import replace
 from typing import Any, Optional
 
 from penpal.mcp import audit
@@ -219,6 +221,12 @@ def search_context(
     return payload
 
 
+def _merge_memory_hits(memory_hits: list, results: list, page: int) -> list:
+    """Memories lead the page but take at most half of it while events also matched."""
+    quota = (page + 1) // 2 if results else page
+    return (memory_hits[:quota] + results)[:page]
+
+
 def _search(grant: Grant, keywords: Any, time_range: Any, sources: Any, limit: Any,
             include_echoes: Any = False) -> dict[str, Any]:
 
@@ -264,16 +272,60 @@ def _search(grant: Grant, keywords: Any, time_range: Any, sources: Any, limit: A
     try:
         hits = search_events(keywords, limit=limit, **scope)
         in_scope = {term: keyword_in_scope(term, **scope) for term in terms}
+        from penpal.memory.writer import visible
+
+        memory_hits = []
+        if effective_sources is None or effective_sources:
+            conn = get_conn()
+            conditions = ["status = 'active'", "superseded_by IS NULL"]
+            params = []
+            search_grant = replace(grant, sources=tuple(effective_sources) if effective_sources is not None else None)
+            if start is not None:
+                conditions.append("created_at >= ?")
+                params.append(start)
+            if end is not None:
+                conditions.append("created_at <= ?")
+                params.append(end)
+            matchable = [term for term in terms if len(term) >= 3]
+            short = [term for term in terms if len(term) < 3]
+            alternatives = []
+            if matchable:
+                alternatives.append("id IN (SELECT rowid FROM memories_fts WHERE memories_fts MATCH ?)")
+                params.append(" OR ".join('"' + term.replace('"', '""') + '"' for term in matchable))
+            for term in short:
+                alternatives.append("(instr(lower(content), lower(?)) > 0 OR instr(lower(coalesce(detail, '')), lower(?)) > 0)")
+                params.extend((term, term))
+            if alternatives:
+                conditions.append("(" + " OR ".join(alternatives) + ")")
+            rows = conn.execute("SELECT * FROM memories WHERE " + " AND ".join(conditions) + " ORDER BY created_at DESC, id DESC", params)
+            for row in rows:
+                text = (row["content"] + "\n" + (row["detail"] or "")).casefold()
+                matched = [term for term in terms if term.casefold() in text]
+                if not matched or not visible(row, search_grant):
+                    continue
+                memory_hits.append({"id": f"mem_{row['id']}", "kind": "memory", "content": row["content"],
+                                    "detail": (row["detail"] or "")[:2000], "type": row["type"],
+                                    "scope": row["scope"], "project": row["project"],
+                                    "source_tool": row["source_tool"], "created_at": row["created_at"],
+                                    "evidence_ids": json.loads(row["evidence_ids"]), "_matched": matched})
+        # Most matched terms first; memories never take more than half the page, so the raw
+        # events that carry verifiable evidence are not crowded out by many short summaries.
+        memory_hits.sort(key=lambda hit: len(hit["_matched"]), reverse=True)
+        memory_hits = memory_hits[:max(1, min(limit, 100))]
     except sqlite3.Error:
         # Never surface SQLite / FTS error text: it can echo query fragments or index internals.
         return {"status": "error", "message": "search failed"}
     coverage = _coverage(grant, start, end)
     in_results = {term: sum(1 for h in hits if term in h.get("matched_terms", ())) for term in terms}
+    for hit in memory_hits:
+        for term in hit.pop("_matched"):
+            in_scope[term] = True
+            in_results[term] += 1
     keyword_feedback = [
         {"index": first_index[term.lower()], "in_scope": in_scope[term], "in_results": in_results[term]}
         for term in terms
     ]
-    if not hits:
+    if not hits and not memory_hits:
         time_range_given = start is not None or end is not None
         hint = _no_results_hints(keyword_feedback, time_range_given, effective_sources, coverage)
         return {"status": "no_results", "results": [], "coverage": coverage, "keywords": keyword_feedback,
@@ -308,7 +360,7 @@ def _search(grant: Grant, keywords: Any, time_range: Any, sources: Any, limit: A
         }
         for h in hits
     ]
-    return {"status": "ok", "results": results, "coverage": coverage, "keywords": keyword_feedback}
+    return {"status": "ok", "results": _merge_memory_hits(memory_hits, results, max(1, min(limit, 100))), "coverage": coverage, "keywords": keyword_feedback}
 
 
 # Fixed next-step hints on no_results (a closed enum: never built from caller text).
