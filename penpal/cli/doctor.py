@@ -146,7 +146,7 @@ def doctor(plain, json_output, fix):
         hud_detail = (
             hud_issues[0].message_zh if hud_issues else
             f"主线程有响应；状态栏图标可见。{ICON_OCCLUDED_HINT_ZH}" if visible is True else
-            f"主线程有响应；若菜单栏看不到图标，请在系统设置 → 菜单栏打开 Penpal。{ICON_OCCLUDED_HINT_ZH}"
+            f"主线程有响应；图标可见性未知，请在系统设置 → 菜单栏确认 Penpal 已打开。{ICON_OCCLUDED_HINT_ZH}"
         )
         if runtime_status.hud.supervisor_summary_zh:
             hud_detail += f"；{runtime_status.hud.supervisor_summary_zh}"

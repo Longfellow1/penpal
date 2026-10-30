@@ -274,7 +274,7 @@ def test_access_tab_hosts_and_recent_queries():
     assert titles(hosts) == ["Claude Code", "Codex", "连接新的 AI"]
     assert hosts["rows"][0]["value"]["text"] == "今天 24 次" and hosts["rows"][0]["args"] == {"page": "host:claude"}
     recent = m["sections"][1]
-    assert recent["header"] == "最近查询" and "不记录查到的内容" in recent["footer"]
+    assert recent["header"] == "最近查询" and "不记内容" in recent["footer"]
     assert [r["value"]["text"] for r in recent["rows"]] == ["找到 5 条", "找到 1 条", "没有找到", "已拒绝：没有授权"]
     assert recent["rows"][3]["value"]["tone"] == "red"
     assert recent["rows"][0]["title"] == "Claude Code · 搜索" and recent["rows"][1]["title"] == "Claude Code · 打开出处"
@@ -341,7 +341,7 @@ def test_privacy_tab_keyboard_note_chat_exclusions_storage_delete():
     scope = m["sections"][0]
     kb = scope["rows"][0]
     assert kb["title"] == "键盘片段"
-    assert kb["sub"] == "过滤为尽力而为，可能记录到敏感内容，返回云端 AI 时可能出站"  # issue #29
+    assert kb["sub"] == "过滤不保证完整，可能记下敏感内容，并随查询发往云端 AI"  # issue #29
     assert kb["trail"] == {"type": "switch", "on": True}
     assert (kb["action"], kb["args"]) == ("keyboard.toggle", {"enable": False})
     assert scope["rows"][1]["value"]["text"] == "1 个开启" and scope["rows"][1]["args"] == {"page": "chat"}
@@ -355,7 +355,7 @@ def test_privacy_tab_keyboard_note_chat_exclusions_storage_delete():
     assert titles(quit_sec) == ["退出 HUD"]
     assert quit_sec["rows"][0]["title_tone"] == "red"
     assert quit_sec["rows"][0]["action"] == "hud.quit"
-    assert "退出后菜单栏图标消失" in quit_sec["footer"]
+    assert quit_sec["footer"].startswith("退出后图标消失")
 
 
 def test_keyboard_off_state_and_command_args():
@@ -383,8 +383,7 @@ def test_settings_tab_viewmodel_label_and_quit_hud_section():
     assert row["title"] == "退出 HUD"
     assert row["title_tone"] == "red"
     assert row["action"] == "hud.quit"
-    assert last_section["footer"].startswith("退出后菜单栏图标消失，后台记录继续。重新打开：打开 Penpal.app，或运行 penpal hud start。")
-    assert "刘海" in last_section["footer"] and "按住 ⌘" in last_section["footer"]
+    assert last_section["footer"] == "退出后图标消失，后台照常记录；打开 Penpal.app 即可恢复。"
 
 
 def test_exclusion_page_is_a_read_only_list():
@@ -410,7 +409,7 @@ def test_delete_page_with_dry_run_counts_and_danger_button():
     counts = next(s for s in m["sections"] if s.get("header") == "将删除")
     assert [(r["title"], r["value"]["text"]) for r in counts["rows"]] == [
         ("记录原文", "128 条"), ("搜索索引", "128 条"), ("出处", "40 条"), ("相关 AI 查询记录", "3 条")]
-    assert "原始文件不受影响" in counts["footer"]
+    assert "不动原文件" in counts["footer"]
     btn = m["sections"][-1]
     assert (btn["label"], btn["tone"], btn["action"], btn["args"]) == ("删除 128 条记录", "danger", "confirm.ask", {"kind": "purge"})
 
@@ -432,7 +431,7 @@ def test_delete_options_map_to_purge_selectors():
 
 def test_confirm_dialog_only_for_revoke_and_delete():
     revoke = build_model(snap(), UiState(tab="access", page="host:claude", confirm={"kind": "revoke", "client_id": "claude"}))
-    assert revoke["confirm"] == {"title": "撤销授权？", "body": "Claude Code 的下一次查询会被拒绝。之后可以重新连接。", "ok": "撤销"}
+    assert revoke["confirm"] == {"title": "撤销授权？", "body": "Claude Code 的下一次查询会被拒绝，之后可重新连接。", "ok": "撤销"}
     purge = build_model(snap(), UiState(tab="privacy", page="delete", confirm={"kind": "purge"}), {"raw_events": 42})
     assert purge["confirm"]["title"] == "删除「今天的全部记录」？" and "42 条" in purge["confirm"]["body"]
     assert purge["confirm"]["ok"] == "删除"

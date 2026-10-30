@@ -5,7 +5,7 @@ category: decision
 status: active
 tags: [hud, macos, self-heal]
 created: "2026-10-29T19:18:40"
-updated: "2026-10-30T09:49:59"
+updated: "2026-10-30T10:40:41"
 ---
 
 <!-- compiled_truth -->
@@ -43,4 +43,10 @@ updated: "2026-10-30T09:49:59"
   kind: decision
   summary: "Owner approved a notch hint over detection (none possible): doctor, install doctor and the 设置 tab show one shared hint (ICON_OCCLUDED_HINT_ZH): free menu bar space, then ⌘-drag Penpal right. A default preferred position for new installs is a separate, unverified idea."
   source: "owner 2026-10-30 (选择：加提示)"
+  affects: [hud-launch-entry]
+
+- time: 2026-10-30T10:40:41
+  kind: reversal
+  summary: "The notch hint left the HUD 设置 tab (owner: footer too long; anyone reading the panel can already see the icon). It stays in doctor and install doctor, shortened. HUD copy was trimmed to one plain sentence per place, without launchd/daemon/hash jargon."
+  source: "owner 2026-10-30: 设置最低下的文本字数太长"
   affects: [hud-launch-entry]

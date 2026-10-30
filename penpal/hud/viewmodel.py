@@ -15,7 +15,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any, Optional
 
-from penpal.runtime import ICON_OCCLUDED_HINT_ZH, RuntimeState, state_message, state_text
+from penpal.runtime import RuntimeState, state_message, state_text
 from penpal.hud.snapshot import (
     BUCKET_LABELS,
     GROUPS,
@@ -26,8 +26,8 @@ from penpal.hud.snapshot import (
 )
 
 TABS = (("overview", "概览"), ("access", "AI 访问"), ("privacy", "设置"))
-KEYBOARD_RISK_NOTE = "过滤为尽力而为，可能记录到敏感内容，返回云端 AI 时可能出站"
-EGRESS_FOOTER = "查到的内容会进入它的对话，可能发送到它的云端服务。"
+KEYBOARD_RISK_NOTE = "过滤不保证完整，可能记下敏感内容，并随查询发往云端 AI"
+EGRESS_FOOTER = "查到的内容会进入它的对话，可能发往云端。"
 
 REASON_TEXT = {
     "file_missing": "找不到来源文件",
@@ -355,7 +355,7 @@ def page_perm(snap: Snapshot, key: str) -> Optional[tuple[str, list[dict]]]:
         lst([row(source_label(s), dot="amber", sub="需要这项权限，目前没有在记录") for s in issue.sources], "受影响的来源"),
     ]
     if exes:
-        sections.append(lst(exes, "需要授权的程序", "权限属于后台记录进程，不属于这个窗口；请授权给上面的程序。"))
+        sections.append(lst(exes, "需要授权的程序", "权限要授给上面的后台程序，不是这个窗口。"))
     sections.append(button(f"打开系统设置 › {label}", "settings.open", {"pane": issue.key}))
     return label, sections
 
@@ -381,7 +381,7 @@ def page_access(snap: Snapshot) -> list[dict]:
         for r in snap.audit:
             text, tone = _result_text(r)
             recent.append(row(f"{host_name(r.client)} · {TOOL_TEXT.get(r.tool, r.tool)}", sub=clock(r.ts), value=text, value_tone=tone))
-        sections.append(lst(recent, "最近查询", "只记录谁在什么时候查了、结果有几条，不记录查到的内容。"))
+        sections.append(lst(recent, "最近查询", "只记谁、何时查过、查到几条，不记内容。"))
     return sections
 
 
@@ -423,14 +423,14 @@ def page_new_host(snap: Snapshot, ui: UiState) -> tuple[str, list[dict]]:
     sections.append(lst([row(HOST_LABELS[c], check=c == host, action="host.pick", args={"host": c}) for c in choices], "选择 AI"))
     sections.append(lst(
         [row(BUCKET_LABELS[b], switch=b in ui.new_buckets, action="host.bucket", args={"bucket": b}) for b in BUCKET_LABELS],
-        "能看到的分类", "默认只给「工作」。" + EGRESS_FOOTER + "密钥只会显示一次，只保存它的哈希。"))
+        "能看到的分类", "默认只给「工作」。" + EGRESS_FOOTER + "密钥只显示一次。"))
     sections.append(button("授权并生成配置", "grant.create", {"host": host}))
     return "连接新的 AI", sections
 
 
 def page_reveal(reveal: Reveal) -> tuple[str, list[dict]]:
     return reveal.title, [
-        lst([row("密钥只显示这一次", dot="amber", sub="关闭后无法再查看；只保存它的哈希。丢了就轮换一个新的。", sub_tone="amber")]),
+        lst([row("密钥只显示这一次", dot="amber", sub="关闭后无法再看；丢了就轮换一个新的。", sub_tone="amber")]),
         {"kind": "code", "header": "连接配置", "text": reveal.text},
         button("复制配置", "reveal.copy"),
     ]
@@ -447,7 +447,7 @@ def page_privacy(snap: Snapshot) -> list[dict]:
                 action="keyboard.toggle", args={"enable": not snap.keyboard_on}),
             row("聊天 App", value=f"{chat_on} 个开启", nav=True, action="nav.page", args={"page": "chat"}),
             row("不记录的 App 和网站", value=f"{len(snap.exclusions)} 项", nav=True, action="nav.page", args={"page": "exclude"}),
-        ], "采集范围", "只存过滤后的文字片段，不存逐个按键；和其他来源一样，只有获得对应分类授权的 AI 能查到。"),
+        ], "采集范围", "只存过滤后的文字片段，不存按键；只有获准的 AI 能查到。"),
         lst([
             row("已存储", value=f"{fmt_records(snap.total_records)} · {fmt_bytes(snap.db_bytes)}"),
             row("保留时间", value="永久保留"),
@@ -456,7 +456,7 @@ def page_privacy(snap: Snapshot) -> list[dict]:
         lst([row("删除数据", title_tone="red", nav=True, action="nav.page", args={"page": "delete"})]),
         lst(
             [row("退出 HUD", title_tone="red", action="hud.quit")],
-            footer=f"退出后菜单栏图标消失，后台记录继续。重新打开：打开 Penpal.app，或运行 penpal hud start。{ICON_OCCLUDED_HINT_ZH}。",
+            footer="退出后图标消失，后台照常记录；打开 Penpal.app 即可恢复。",
         ),
     ]
 
@@ -464,7 +464,7 @@ def page_privacy(snap: Snapshot) -> list[dict]:
 def page_chat(snap: Snapshot) -> list[dict]:
     rows = [row(label, switch=allowed, action="chat.toggle", args={"name": key, "allow": not allowed})
             for key, label, allowed in snap.chat_apps]
-    return [lst(rows, footer="默认都不记录。打开后，这个 App 的内容进入「私密」分类，只有授权了「私密」的 AI 能查到。"
+    return [lst(rows, footer="默认不记录。打开后归入「私密」，只有获准查看「私密」的 AI 能查到；"
                              "更改约 1 分钟内生效。")]
 
 
@@ -486,7 +486,7 @@ def page_delete(snap: Snapshot, ui: UiState, preview: Optional[dict[str, int]]) 
     related = preview.get("mcp_returned_results", 0) + preview.get("mcp_feedback", 0)
     if related:
         shown.append(row("相关 AI 查询记录", value=f"{related} 条"))
-    foot = "只删 Penpal 里的副本，原始文件不受影响；若不想再导入，请先在数据来源里关闭它。"
+    foot = "只删 Penpal 里的副本，不动原文件；不想再导入，先在数据来源里关闭它。"
     if n == 0:
         sections.append(lst([row("没有可删除的内容")], "将删除", foot))
     else:
@@ -505,14 +505,14 @@ def build_confirm(ui: UiState, snap: Snapshot, preview: Optional[dict[str, int]]
         h = next((x for x in snap.hosts if x.client_id == c.get("client_id")), None)
         if h is None:
             return None
-        return {"title": "撤销授权？", "body": f"{host_name(h.client_id)} 的下一次查询会被拒绝。之后可以重新连接。", "ok": "撤销"}
+        return {"title": "撤销授权？", "body": f"{host_name(h.client_id)} 的下一次查询会被拒绝，之后可重新连接。", "ok": "撤销"}
     if c.get("kind") == "purge":
         chosen = next((o for o in delete_options(snap) if o.id == ui.delete_scope), None)
         if chosen is None or not preview:
             return None
         n = preview.get("raw_events", 0)
         return {"title": f"删除「{chosen.label}」？",
-                "body": f"共 {n} 条记录及其索引和出处。删除后不能恢复，AI 也再查不到。", "ok": "删除"}
+                "body": f"共 {n} 条记录。删除后无法恢复，AI 也查不到。", "ok": "删除"}
     return None
 
 
