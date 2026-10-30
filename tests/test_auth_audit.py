@@ -258,7 +258,7 @@ def test_v22_migration_backfills_whitelist_from_active_grants(tmp_path) -> None:
     conn.execute("INSERT INTO access_grants(client_id, token_hash, created_at, revoked_at) VALUES ('dead','h2','2026-01-01','2026-01-02')")
     conn.commit()
     run_migrations(conn)
-    assert conn.execute("SELECT MAX(version) FROM _schema_version").fetchone()[0] == migrations.SCHEMA_VERSION == 34
+    assert conn.execute("SELECT MAX(version) FROM _schema_version").fetchone()[0] == migrations.SCHEMA_VERSION
     assert [r[0] for r in conn.execute("SELECT client_id FROM client_whitelist")] == ["live"]
     cols = {r[1] for r in conn.execute("PRAGMA table_info(mcp_audit)")}
     assert cols == {"id", "ts", "client_id", "tool", "decision", "reason_code", "scope", "result_count"}

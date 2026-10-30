@@ -132,7 +132,7 @@ def test_v27_rebuckets_personal_history_rows_by_url(tmp_path):
 
     run_migrations(conn)
 
-    assert conn.execute("SELECT MAX(version) FROM _schema_version").fetchone()[0] == SCHEMA_VERSION == 34
+    assert conn.execute("SELECT MAX(version) FROM _schema_version").fetchone()[0] == SCHEMA_VERSION
     q = lambda rid: conn.execute("SELECT bucket FROM raw_events WHERE id = ?", (rid,)).fetchone()[0]
     assert q(gh) == "Work"
     assert q(feishu) == "Work"

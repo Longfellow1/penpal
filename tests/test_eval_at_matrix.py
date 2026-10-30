@@ -11,8 +11,8 @@ from types import ModuleType
 import pytest
 
 from mcp_helpers import search
-from penpal.mcp import auth
-from penpal.store.db import close, init_db
+from penpal.mcp import auth, memory_tools
+from penpal.store.db import close, get_conn, init_db
 from penpal.store.models import RawEvent
 from penpal.store.repository import insert_raw_event
 
@@ -22,7 +22,7 @@ MATRIX_PATH = ROOT / "evals" / "at_matrix.json"
 PRD_PATH = ROOT / "docs" / "Penpal_Eval_PRD.md"
 P0_AT_IDS = (
     "AT01", "AT02", "AT03", "AT04", "AT08", "AT09",
-    "AT12", "AT13", "AT17", "AT18", "AT19", "AT21",
+    "AT12", "AT13", "AT16", "AT17", "AT18", "AT19", "AT21",
 )
 VARIANT_TESTS = {
     "有答案": "test_answerable_variant",
@@ -58,6 +58,22 @@ def _seed(at_id: str, variant: str, *, bucket: str = "Work", content: str | None
 
 def _assert_variant(at_id: str, variant: str) -> None:
     marker = f"synthetic-{at_id.lower()}-{variant}-marker"
+    if at_id == "AT16":
+        if variant != "no_answer":
+            _seed(at_id, variant, bucket="Private" if variant == "permission_limited" else "Work")
+            conn = get_conn()
+            event_id = conn.execute("SELECT max(id) FROM raw_events").fetchone()[0]
+            conn.execute("INSERT INTO evidence(event_id, locator, created_at) VALUES (?, 'synthetic', '2026-01-01')", (event_id,))
+            conn.commit()
+            evidence_id = f"evd_{conn.execute('SELECT max(id) FROM evidence').fetchone()[0]}"
+        else:
+            evidence_id = "evd_999999"
+        token = auth.create_grant("eval-at16", buckets=["Work"], operations=["write"])
+        response = memory_tools.commit_memory(token, [{"type": "fact", "content": marker,
+                                                        "scope": "global", "evidence_ids": [evidence_id]}],
+                                              client="eval-at16")
+        assert response["status"] == ("ok" if variant == "answerable" else "not_found")
+        return
     if variant == "answerable":
         _seed(at_id, variant)
     elif variant == "no_answer":

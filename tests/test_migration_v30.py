@@ -148,10 +148,10 @@ def test_v30_rerun_is_a_no_op(db, monkeypatch):
 
 def test_v30_is_registered_as_schema_version_30(db):
     conn = get_conn()
-    assert SCHEMA_VERSION == 34 == len(MIGRATIONS)
+    assert SCHEMA_VERSION == len(MIGRATIONS)
     conn.execute("DELETE FROM _schema_version WHERE version >= 30")  # re-run v30 and v31 on top
     conn.commit()
     run_migrations(conn)
     run_migrations(conn)
     assert conn.execute("SELECT COUNT(*) FROM _schema_version WHERE version = 30").fetchone()[0] == 1
-    assert conn.execute("SELECT MAX(version) FROM _schema_version").fetchone()[0] == 34
+    assert conn.execute("SELECT MAX(version) FROM _schema_version").fetchone()[0] == SCHEMA_VERSION

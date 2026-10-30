@@ -47,6 +47,8 @@ G1_COVERED_TOOLS = {
     "get_timeline": {"start", "end", "sources", "limit", "cursor", "include_penpal_echoes", "include_keypulse_echoes"},
     # M2-3: its G1 tests (unseen / other-bucket ids, differential) live in tests/test_feedback.py
     "rate_result": {"result_id", "verdict", "note", "query"},
+    "commit_memory": {"items"},
+    "update_memory": {"memory_id", "action", "item"},
 }
 G1_COVERED_RESPONSE_FIELDS = {
     "status", "reason_code", "message", "next_action",
@@ -371,6 +373,33 @@ def test_g1_canary_scan_new_tools_through_mcp_transport(canary_db) -> None:
 
     for (name, args), text in zip(calls, asyncio.run(run())):
         _assert_no_canary(text, f"{name} {str(args)[:80]}")
+
+
+def test_g1_memory_write_scope_through_mcp_transport(canary_db) -> None:
+    from penpal.mcp import memory_tools
+
+    owner = auth.create_grant("owner", buckets=["Private"], operations=["write"])
+    private = memory_tools.commit_memory(owner, [{"type": "fact", "scope": "global", "content": CANARIES[1]}], client="owner")
+    memory_id = private["items"][0]["id"]
+    token = auth.create_grant("host", buckets=["Work"], operations=["write"])
+    server = server_for(token)
+    outside = get_conn().execute(
+        "SELECT evidence.id FROM evidence JOIN raw_events ON raw_events.id = evidence.event_id WHERE raw_events.bucket = 'Private' LIMIT 1"
+    ).fetchone()[0]
+
+    async def run():
+        async with create_connected_server_and_client_session(server._mcp_server) as client:
+            results = []
+            for evidence_id in (f"evd_{outside}", "evd_999999999"):
+                args = {"items": [{"type": "fact", "scope": "global", "content": "synthetic", "evidence_ids": [evidence_id]}]}
+                results.append(json.loads((await client.call_tool("commit_memory", args)).content[0].text))
+            for ident in (memory_id, "mem_999999999"):
+                results.append(json.loads((await client.call_tool("update_memory", {"memory_id": ident, "action": "revoke"})).content[0].text))
+            return results
+
+    results = asyncio.run(run())
+    assert results[0] == results[1] == results[2] == results[3]
+    _assert_no_canary(json.dumps(results), "memory writes")
 
 
 def test_g1_canary_scan_denied_and_failure_paths(canary_db, monkeypatch) -> None:

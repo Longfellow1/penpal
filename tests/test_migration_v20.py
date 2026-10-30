@@ -37,7 +37,7 @@ def _tables(conn: sqlite3.Connection) -> set[str]:
 
 
 def test_schema_version_is_21() -> None:
-    assert SCHEMA_VERSION == 34 == len(MIGRATIONS)
+    assert SCHEMA_VERSION == len(MIGRATIONS)
 
 
 def test_v20_upgrades_v19_in_place_and_keeps_data(tmp_path: Path) -> None:
@@ -49,7 +49,7 @@ def test_v20_upgrades_v19_in_place_and_keeps_data(tmp_path: Path) -> None:
     assert _version(conn) == 19
     run_migrations(conn)
 
-    assert _version(conn) == 34
+    assert _version(conn) == SCHEMA_VERSION
     cols = {r[1] for r in conn.execute("PRAGMA table_info(raw_events)")}
     assert {"source_id", "external_id", "bucket", "kind"} <= cols
     assert {"sources", "sync_cursors", "evidence", "access_grants", "raw_events_fts"} <= _tables(conn)
@@ -119,7 +119,7 @@ def test_v20_is_idempotent_on_partially_applied_schema(tmp_path: Path) -> None:
                  "created_at TEXT NOT NULL, UNIQUE(type, locator))")
     conn.commit()
     run_migrations(conn)
-    assert _version(conn) == 34
+    assert _version(conn) == SCHEMA_VERSION
     conn.close()
 
 
@@ -173,5 +173,5 @@ def test_v20_failure_rolls_back_to_v19_with_data_intact(tmp_path: Path, monkeypa
     monkeypatch.undo()
     conn = sqlite3.connect(db)
     run_migrations(conn)
-    assert _version(conn) == 34
+    assert _version(conn) == SCHEMA_VERSION
     conn.close()
