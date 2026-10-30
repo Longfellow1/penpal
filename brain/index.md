@@ -1,6 +1,6 @@
 # Brain Index
 
-_Auto-generated. Last updated 2026-10-30T01:49:59.272Z._
+_Auto-generated. Last updated 2026-10-30T02:40:41.097Z._
 
 - [ai-tool-auto-coverage](pages/ai-tool-auto-coverage.md) — category: decision | tags: [capture, mcp, coverage, memmy] | Requirement (user, 2026-10-28, must ship): Phase 1 of the Memmy-class work covers at least 80% of the mainstream AI agents and IDEs a Mac us
 - [anchors-json-is-ssot](pages/anchors-json-is-ssot.md) — category: decision | ## Decision
@@ -22,6 +22,7 @@ _Auto-generated. Last updated 2026-10-30T01:49:59.272Z._
 - [homebrew-runtime-deps](pages/homebrew-runtime-deps.md) — category: decision | tags: [release, homebrew, dependencies] | - The Homebrew formula in Longfellow1/homebrew-penpal installs Penpal from an explicit list of `resource` blocks. It does not resolve `pypro
 - [host-does-query-preprocessing](pages/host-does-query-preprocessing.md) — category: decision | tags: [v1, mcp, search, decision] | <current best understanding — replace this with the real content>
 - [hud-launch-entry](pages/hud-launch-entry.md) — category: decision | tags: [hud, macos, self-heal] | - `penpal hud start` opens Penpal.app through LaunchServices (`relaunch_hud`, `open -a`) and waits for a matching HUD record. It never runs
+- [hud-worker-stays-fast](pages/hud-worker-stays-fast.md) — category: decision | tags: [hud, performance, threading] | - `HudModelWorker` is one thread. Every panel refresh and every tap queues on it, so one slow job there freezes the panel: stale content, ta
 - [irreplaceability-vs-bash](pages/irreplaceability-vs-bash.md) — category: decision | tags: [v1, product, positioning, eval, decision] | <current best understanding — replace this with the real content>
 - [keyboard-capture-p0-experimental](pages/keyboard-capture-p0-experimental.md) — category: decision | tags: [scope, capture, privacy] | ## Decision
 - [keypulse-v1-local-memory-infra](pages/keypulse-v1-local-memory-infra.md) — category: decision | tags: [product, v1, mcp] | ## Decision
