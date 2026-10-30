@@ -49,6 +49,7 @@ G1_COVERED_TOOLS = {
     "rate_result": {"result_id", "verdict", "note", "query"},
     "commit_memory": {"items"},
     "update_memory": {"memory_id", "action", "item"},
+    "propose_source_recipe": {"recipe_toml"},
 }
 G1_COVERED_RESPONSE_FIELDS = {
     "status", "reason_code", "message", "next_action",
@@ -704,3 +705,13 @@ def test_g1_canary_financial_site_in_browser_is_unreachable_for_work_grant(tmp_p
     for canary in bank:
         assert search(wide, [canary])["status"] == "ok", canary
     close()
+
+
+def test_recipe_proposal_denies_read_only_without_leaking(canary_db):
+    from penpal.mcp.recipe_tools import propose_source_recipe
+
+    token = auth.create_grant("recipe-host", operations=["read"])
+    canary = OUT_OF_SCOPE[0][3]
+    result = propose_source_recipe(token, canary, client="recipe-host")
+    assert result["status"] == "permission_denied"
+    assert canary not in json.dumps(result)

@@ -280,6 +280,15 @@ class RecipeEngine:
         self.last_cursor = None
         self.last_error = None
 
+        if tool.user_recipe:
+            from penpal.sources.recipes.identity_gate import validate_binding
+
+            try:
+                validate_binding(tool, self._env)
+            except (ValueError, OSError) as exc:
+                self.last_error = str(exc)
+                return
+
         if history.format == "sqlite":
             yield from self._stream_sqlite(tool, history, root_path, source_id, initial_cursor)
         else:

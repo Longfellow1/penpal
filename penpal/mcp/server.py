@@ -9,7 +9,7 @@ from mcp.types import CallToolResult, TextContent
 from pydantic import Field
 
 from penpal.health.capture_health import current_capture_health
-from penpal.mcp import memory_tools, tools
+from penpal.mcp import memory_tools, recipe_tools, tools
 from penpal.mcp.auth import CLIENT_ENV, TOKEN_ENV
 from penpal.utils.env import get_env_compat
 
@@ -192,6 +192,12 @@ def build_server(
     @server.tool(description="Correct, revoke, or invalidate a visible memory. Correction requires a complete replacement item.")
     def update_memory(memory_id: Any, action: Any, item: Any = None) -> CallToolResult:
         return _result(memory_tools.update_memory(token_provider(), memory_id, action, item, client=client_provider()))
+
+    @server.tool(description="Validate and enable a declarative source recipe; requires write access.")
+    def propose_source_recipe(
+        recipe_toml: Annotated[Any, Field(json_schema_extra={"type": "string", "description": "Recipe TOML text."})],
+    ) -> CallToolResult:
+        return _result(recipe_tools.propose_source_recipe(token_provider(), recipe_toml, client=client_provider()))
 
     return server
 

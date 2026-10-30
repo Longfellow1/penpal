@@ -107,6 +107,8 @@ class ToolRecipe:
     detect: DetectConfig = field(default_factory=DetectConfig)
     history: list[HistoryRecipe] = field(default_factory=list)
     mcp: McpConfig | None = None
+    user_recipe: bool = False
+    enabled: bool = True
 
 
 def expand_vars_and_tilde(text: str, env: Mapping[str, str] | None = None) -> str:
@@ -392,3 +394,22 @@ def is_tool_detected(
             if _check_app_bundle(rule.app_bundle, app_roots=app_roots):
                 return True
     return False
+
+
+def load_combined_catalog(catalog_dir: Path | None = None, user_dir: Path | None = None) -> list[ToolRecipe]:
+    from penpal.utils.paths import get_data_dir
+
+    builtins = load_catalog(catalog_dir)
+    directory = user_dir if user_dir is not None else get_data_dir() / "catalog"
+    merged = {tool.id: tool for tool in builtins}
+    for path in sorted(directory.glob("*.toml")):
+        try:
+            recipe = load_recipe(path)
+            if path.stem != recipe.id or recipe.adapter or (recipe.id in merged and merged[recipe.id].adapter):
+                continue
+            recipe.user_recipe = True
+            recipe.enabled = not (directory / (recipe.id + ".disabled")).exists()
+            merged[recipe.id] = recipe
+        except (OSError, ValueError):
+            logger.warning("Invalid user recipe: %s", path.name)
+    return list(merged.values())

@@ -38,6 +38,7 @@ TOOL_GET_TIMELINE = "get_timeline"
 TOOL_RATE_RESULT = "rate_result"
 TOOL_COMMIT_MEMORY = "commit_memory"
 TOOL_UPDATE_MEMORY = "update_memory"
+TOOL_PROPOSE_SOURCE_RECIPE = "propose_source_recipe"
 EXCERPT_CHARS = 400
 EVIDENCE_NOT_FOUND = {"status": "not_found", "message": "No evidence with this id is available to this client."}
 SOURCE_UNAVAILABLE_MESSAGE = "原始出处已不可访问 / original source is no longer accessible"
