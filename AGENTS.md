@@ -1,6 +1,7 @@
 ## Engineering charter
 
 All changes follow `docs/ENGINEERING.md` (non-negotiables, module layers, D36 cross-process contract, tests, repo hygiene).
+Whoever dispatches AI workers also follows `docs/DELEGATION.md` (when and to whom to delegate, briefs, acceptance, token cost); workers do not need it.
 
 <!-- BEGIN brain.md -->
 ## Project Brain
