@@ -5,7 +5,7 @@ category: decision
 status: active
 tags: [capture, mcp, coverage, memmy]
 created: "2026-10-28T20:18:26"
-updated: "2026-10-29T11:11:17"
+updated: "2026-10-30T16:20:34"
 ---
 
 <!-- compiled_truth -->
@@ -62,3 +62,9 @@ Baseline on 2026-10-28: Penpal captured only Claude Code and Codex CLI, and 77% 
   summary: "Codex ids come from the per-file thread id; the root session_id stays in metadata.session_id; main-thread ids stay byte-identical"
   source: "manager 2026-10-29, real-Mac probe of Codex rollouts"
   affects: [penpal/sources/plugins/codex_cli.py]
+
+- time: 2026-10-30T16:20:34
+  kind: decision
+  summary: "Host-written recipes (P4) auto-enable after a tightened gate. Penpal verifies the install identity itself (.app Info.plist or a non-system executable). Data paths, after resolving symlinks, must sit under roots named after that identity. A sensitive-store deny list always wins. Only jsonl/json/sqlite are allowed, sqlite opened read-only. The engine re-checks the binding on every sync. Recipes show as 'AI 生成' and can be switched off."
+  source: "owner 2026-10-30 (AskUserQuestion): 收紧规则后自动启用（推荐）"
+  affects: [ai-tool-auto-coverage]
