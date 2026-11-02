@@ -14,6 +14,11 @@ description: Penpal is the user's local memory, shared across their AI tools. Us
 - 只对当前项目有效的，用 `scope: "project"` 并传 `project`（当前仓库或项目名）；其余用 `scope: "global"`。
 - 有出处时附 `evidence_ids`（来自 `search_context` 的结果）；替代旧记忆时用 `supersedes`。
 - 改正或作废已有记忆用 `update_memory`。
+- 写入需要读写授权。返回 `permission_denied` 时告诉用户运行 `penpal connect --auto`，不要重试。
+
+## 发现 Penpal 没在读的 AI 工具
+- 用户在用某个 AI 工具，而 `search_context` 返回的覆盖率里没有它时，可以查看该工具的本地存储，按 `propose_source_recipe` 说明里的格式写配方提交。
+- 被拒绝时按返回的原因改一次；仍被拒绝就告诉用户，不要反复提交。
 
 ## 不写
 - 密码、token、API key 等任何凭据（会被拒绝）。

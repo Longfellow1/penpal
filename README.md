@@ -90,8 +90,11 @@ daemon 单独写入轮转的 `penpal.log`（5 MiB，最多 3 个备份）。laun
 | `get_timeline` | 按时间浏览某段时间做了什么 |
 | `get_evidence` | 打开某条结果的原始出处 |
 | `rate_result` | 对结果打分，用来改进排序 |
+| `commit_memory` | 记下一条已确认的事实、偏好、决策或做法，之后接入的所有 AI 都能查到 |
+| `update_memory` | 修正、撤回或作废一条记忆 |
+| `propose_source_recipe` | 为 Penpal 还没在读的 AI 工具提交读取配方，校验通过后开始采集 |
 
-只读：AI 不能写入或修改记忆（`rate_result` 只在本机记一条评分）。查到的内容会进入该 AI 的对话，可能发送到它的云端服务。授权时按分类（Work / Personal / Private / Financial）限定，`penpal mcp audit` 能看到谁在什么时候查过、结果有几条，不记录查询内容。
+读写分开授权：只读授权只能查，后三个工具需要写权限。`penpal connect --auto` 接入时给读写；`penpal mcp grant` 默认只读，加 `--operations read,write` 才能写。记忆只存在本机。查到的内容会进入该 AI 的对话，可能发送到它的云端服务。授权时按分类（Work / Personal / Private / Financial）限定，`penpal mcp audit` 能看到谁在什么时候调用过哪个工具、结果有几条，不记录查询内容。
 
 注意：Work 包含 Claude Code / Codex 里的全部对话，也可能包含私人项目。查看已导入的项目和当前分桶用 `penpal rules projects`；要把项目归到 Personal，按项目目录名执行 `penpal rules add --scope project --value <项目目录名> --bucket Personal`，再运行 `penpal rules rebucket` 更新已有记录。
 

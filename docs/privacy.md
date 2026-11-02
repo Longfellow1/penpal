@@ -159,11 +159,13 @@
 | 审计日志记：谁（客户端名）、什么时候、哪个工具、放行还是拒绝、授权的分类名、放行时返回几条；**不记查询内容、片段、令牌** | `mcp/audit.py`（表里没有能放查询文字的列）；`penpal mcp audit`；`tests/test_auth_audit.py` |
 | 被拒绝的调用也进审计，且对调用方返回统一的拒绝内容，不透露原因 | `tests/test_auth_audit.py::test_at15_every_denial_has_identical_body_and_an_audit_row` |
 | 返回给 AI 的文字再过一遍凭据打码和邮箱打码 | `mcp/tools.py` `_redact_text` |
-| 现有工具只有四个：`search_context`、`get_timeline`、`get_evidence`、`rate_result` | `mcp/server.py` |
+| 现有工具七个：只读的 `search_context`、`get_timeline`、`get_evidence`、`rate_result`，需要写权限的 `commit_memory`、`update_memory`、`propose_source_recipe` | `mcp/server.py`；`tests/test_g1_leakage.py` |
 
 要说清的边界：
 
-- **只读，有一个例外**：`rate_result` 会在本机写一条评分记录（你的 AI 传来的评分、可选的备注和查询文字，限长）。它只需要读权限，只能评它自己拿到过的结果，`penpal purge` 会连带清掉。授权里虽然有 `write` 这个操作名，但目前没有任何工具要求它。
+- **写入要单独授权**：`commit_memory`、`update_memory`、`propose_source_recipe` 只接受带 `write` 的授权；只读授权调用会被拒绝，也会进审计（`mcp/memory_tools.py`、`mcp/recipe_tools.py`；`tests/test_memory_write.py::test_rejects_unauthorized_without_disclosure`、`tests/test_recipe_submission.py::test_read_only_grant_cannot_propose_a_recipe`）。`penpal connect --auto` 接入时给读写（`mcp/connect.py`），`penpal mcp grant` 默认只读。`rate_result` 只需要读权限，只在本机写一条评分记录（评分、可选的备注和查询文字，限长），只能评它自己拿到过的结果，`penpal purge` 会连带清掉。
+- **记忆**：AI 写入的记忆和 `penpal import memmy` 导入的记忆，存在本机 `penpal.db` 的 `memories` 表。写入时含凭据的内容会被拒绝，导入时会被打码（`memory/writer.py`、`memory/memmy_import.py`；`tests/test_memory_write.py`、`tests/test_memmy_import.py`）。授权必须覆盖一条记忆所属的全部分类，才能读到它。**已知缺口：`penpal purge` 目前不删除记忆，也还没有查看或删除记忆的命令**，撤回只能让 AI 调用 `update_memory`。
+- **AI 提交的读取配方**：通过 `propose_source_recipe` 新增的来源要先过身份和路径校验，系统保护库、浏览器、凭据目录、聊天 App、密码管理器一律拒绝，每次同步都会重新校验。`penpal sources recipes` 查看，`penpal sources disable` / `rollback` 停用或回滚（`sources/recipes/identity_gate.py`；`tests/test_recipe_identity_gate.py`）。
 - **客户端身份是自报的**。通过 stdio 连接时，Penpal 无法证明对端进程是谁；`PENPAL_CLIENT` 只是 Host 配置里的一个名字，真正的凭证是令牌。能读到你 Host 配置文件的程序，就能同时拿到令牌和名字（`mcp/auth.py` 文件头注释）。保护好那份配置文件。
 - **被查到的内容会进入那个 AI 的对话**。如果它是云端服务（Claude、ChatGPT、Cursor 的后端等），这些内容可能离开你的电脑。Penpal 无法控制 Host 之后怎么处理。授权前想清楚给哪个分类。
 - 这里的"AI"指你自己授权的 Host。Penpal 核心不内置大模型，自己不调用任何模型。
