@@ -5,7 +5,7 @@ category: decision
 status: active
 tags: [positioning, roadmap]
 created: "2026-10-12T15:20:36"
-updated: "2026-10-30T16:58:43"
+updated: "2026-11-03T21:57:57"
 ---
 
 <!-- compiled_truth -->
@@ -91,4 +91,10 @@ Reversed 2026-10-28 (user): absorbing Memmy-class cross-AI-IDE memory is in scop
   kind: decision
   summary: "Memmy 导入映射（2026-10-30，P3b）：只导 status=activated 的 L1→fact、Skill→procedure；content 取 info_json.summary 压成一行（退回 title、首行），全文进 memories.detail（v36 新列，与 content 一起建全文索引）；凭据打码后照导不跳过；桶 = 来源工具默认桶，否则 Work；按 (source, external_id) 幂等，计数须满足 eligible = imported + existing + invalid。检索时记忆排在事件前，但有事件命中时记忆最多占半页，避免短摘要挤掉带证据的原始事件；detail 截断 2000 字符。本机只读演练：3002 条全部可导、0 无效、246 条含敏感片段已打码。"
   source: "PR feat/memmy-import; tests/test_memmy_import.py"
+  affects: [product-positioning-memory-infra]
+
+- time: 2026-11-03T21:57:57
+  kind: reversal
+  summary: "Owner, 2026-11-03: 'wrapping Memmy' means two things. (1) Capability coverage: Penpal ships Memmy-class abilities natively for every user, whether or not they ever used Memmy. These are capture of AI-tool conversations, host-distilled memories, recall, and IDE wiring. (2) Compatibility: an optional third-party import (Memmy is one source) that must be cleaned and keep only distilled memories and skills. Undistilled conversation turns are skipped (reverses the same-day choice to import them with first-line headlines). Never assume users have Memmy, and never treat the owner's own setup as representative. Trigger: after a real import, 1674 of 3002 imported rows were raw transcripts that crowded search results."
+  source: owner chat 2026-11-03
   affects: [product-positioning-memory-infra]
