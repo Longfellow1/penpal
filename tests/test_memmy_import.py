@@ -140,9 +140,9 @@ def test_placeholder_summaries_and_front_matter_get_readable_headlines(databases
     source = sqlite3.connect(databases)
     source.executemany("INSERT INTO memories(id,agent_id,memory_value,info_json,memory_layer,status,created_at) VALUES (?,?,?,?,?,?,?)", [
         ("6", "codex", "Summary: 摘要排队中\nUser:\n  station id stays in every log\nAgent:\nagreed", json.dumps({"summary": "摘要排队中"}), "L1", "activated", "2026-01-03"),
-        ("7", "cursor", "---\nname: backend-patterns\ndescription: API design notes\n---\n\n# Body", "{}", "Skill", "activated", "2026-01-04"),
+        ("7", "cursor", "---\nname: backend-patterns\ndescription: API design notes\n---\n\n# Body", json.dumps({"summary": "---"}), "Skill", "activated", "2026-01-04"),
         ("8", "cursor", "---\norigin: x\n---\n\n# Plain heading", "{}", "Skill", "activated", "2026-01-05"),
-        ("9", "cursor", "User: " + "y" * 300, "{}", "L1", "activated", "2026-01-06"),
+        ("9", "cursor", "User: " + "y" * 300, json.dumps({"summary": "<heartbeat>"}), "L1", "activated", "2026-01-06"),
     ])
     source.commit()
     source.close()

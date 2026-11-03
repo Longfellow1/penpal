@@ -10,10 +10,14 @@ from penpal.memory.writer import source_default_bucket
 from penpal.mcp import audit
 
 
-# Memmy writes this summary while distillation is still queued; it says nothing about the memory.
-_PLACEHOLDERS = frozenset({"摘要排队中"})
+# Memmy stores these as summaries while distillation is queued, or as the first line of a skill's front matter; neither says anything.
+_PLACEHOLDERS = frozenset({"摘要排队中", "---"})
 _HEADLINE_CHARS = 200
 _TRANSCRIPT_LABELS = ("Summary:", "User:", "Agent:")
+
+
+def _is_noise(text: str) -> bool:
+    return text in _PLACEHOLDERS or (text.startswith("<") and text.endswith(">"))
 
 
 def _headline(detail: str) -> str:
@@ -34,7 +38,7 @@ def _headline(detail: str) -> str:
             if text.startswith(label):
                 text = text[len(label):].strip()
                 break
-        if text and text != "---" and not (text.startswith("<") and text.endswith(">")):
+        if text and not _is_noise(text):
             return text
     return ""
 
@@ -78,7 +82,7 @@ def import_memmy(path: Path, target: sqlite3.Connection | None, *, dry_run: bool
         except (ValueError, TypeError):
             info = {}
         candidates = (info.get("summary"), info.get("title"), _headline(detail))
-        content = next((" ".join(value.split())[:_HEADLINE_CHARS] for value in candidates if isinstance(value, str) and value.strip() and value.strip() not in _PLACEHOLDERS), "")
+        content = next((" ".join(value.split())[:_HEADLINE_CHARS] for value in candidates if isinstance(value, str) and value.strip() and not _is_noise(value.strip())), "")
         if not content:
             reasons["missing_summary"] += 1
             continue
