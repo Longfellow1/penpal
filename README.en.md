@@ -89,8 +89,11 @@ The daemon alone writes the rotating `penpal.log` (5 MiB with up to 3 backups). 
 | `get_timeline` | Browse what you did over a period of time |
 | `get_evidence` | Open the original source of a result |
 | `rate_result` | Rate a result to improve ranking |
+| `commit_memory` | Save a settled fact, preference, decision or procedure that every connected AI can recall later |
+| `update_memory` | Correct, withdraw or invalidate a memory |
+| `propose_source_recipe` | Submit a reading recipe for an AI tool Penpal does not read yet; it starts syncing once the recipe passes validation |
 
-Read-only: the AI can't write or change memory (`rate_result` only stores a rating locally). Whatever is returned enters that AI's conversation and may be sent to its cloud service. Grants are scoped by category (Work / Personal / Private / Financial). `penpal mcp audit` shows who queried when and how many results came back; query text is not logged.
+Read and write are granted separately: a read-only grant can only search, and the last three tools need write access. `penpal connect --auto` grants read and write; `penpal mcp grant` is read-only unless you add `--operations read,write`. Memories stay on your machine. Whatever is returned enters that AI's conversation and may be sent to its cloud service. Grants are scoped by category (Work / Personal / Private / Financial). `penpal mcp audit` shows which client called which tool when, and how many results came back; query text is not logged.
 
 Note: Work includes every conversation in Claude Code and Codex, including private projects. Run `penpal rules projects` to see imported projects and their current buckets. To move a project to Personal, use its project folder name with `penpal rules add --scope project --value <project-folder> --bucket Personal`, then run `penpal rules rebucket` to update stored events.
 

@@ -152,3 +152,28 @@ content = "body"
     assert runner.invoke(sources_group, ["propose", str(file)]).exit_code == 0
     assert runner.invoke(sources_group, ["rollback", "orbit"]).exit_code == 0
     assert (home / "data" / "catalog" / "orbit.toml").read_text() == recipe
+
+
+def test_recipe_example_in_tool_description_is_a_valid_recipe() -> None:
+    # Hosts copy this example; it must pass Penpal's own schema check.
+    from penpal.mcp.server import RECIPE_DESCRIPTION
+    from penpal.sources.recipes.catalog import load_recipe_from_string
+
+    example = RECIPE_DESCRIPTION.split("Format (example):\n", 1)[1].split("\nRules:", 1)[0]
+    recipe = load_recipe_from_string(example)
+    assert (recipe.id, recipe.kind, recipe.history[0].format) == ("orbit", "agent", "jsonl")
+
+
+def test_read_only_grant_cannot_propose_a_recipe(tmp_path, monkeypatch):
+    from penpal.mcp.recipe_tools import propose_source_recipe
+
+    monkeypatch.setattr("penpal.utils.paths.get_data_dir", lambda: tmp_path / "data")
+    init_db(tmp_path / "test.db")
+    token = auth.create_grant("reader", operations=["read"])
+
+    result = propose_source_recipe(token, 'id = "orbit"\nname = "Orbit"\nkind = "agent"\n', client="reader")
+
+    assert result["status"] == "permission_denied"
+    assert not (tmp_path / "data").exists()
+    row = get_conn().execute("SELECT decision FROM mcp_audit WHERE tool = 'propose_source_recipe'").fetchone()
+    assert row[0] == "deny"

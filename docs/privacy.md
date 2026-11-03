@@ -159,11 +159,13 @@
 | 审计日志记：谁（客户端名）、什么时候、哪个工具、放行还是拒绝、授权的分类名、放行时返回几条；**不记查询内容、片段、令牌** | `mcp/audit.py`（表里没有能放查询文字的列）；`penpal mcp audit`；`tests/test_auth_audit.py` |
 | 被拒绝的调用也进审计，且对调用方返回统一的拒绝内容，不透露原因 | `tests/test_auth_audit.py::test_at15_every_denial_has_identical_body_and_an_audit_row` |
 | 返回给 AI 的文字再过一遍凭据打码和邮箱打码 | `mcp/tools.py` `_redact_text` |
-| 现有工具只有四个：`search_context`、`get_timeline`、`get_evidence`、`rate_result` | `mcp/server.py` |
+| 现有工具七个：只读的 `search_context`、`get_timeline`、`get_evidence`、`rate_result`，需要写权限的 `commit_memory`、`update_memory`、`propose_source_recipe` | `mcp/server.py`；`tests/test_g1_leakage.py` |
 
 要说清的边界：
 
-- **只读，有一个例外**：`rate_result` 会在本机写一条评分记录（你的 AI 传来的评分、可选的备注和查询文字，限长）。它只需要读权限，只能评它自己拿到过的结果，`penpal purge` 会连带清掉。授权里虽然有 `write` 这个操作名，但目前没有任何工具要求它。
+- **写入要单独授权**：`commit_memory`、`update_memory`、`propose_source_recipe` 只接受带 `write` 的授权；只读授权调用会被拒绝，也会进审计（`mcp/memory_tools.py`、`mcp/recipe_tools.py`；`tests/test_memory_write.py::test_rejects_unauthorized_without_disclosure`、`tests/test_recipe_submission.py::test_read_only_grant_cannot_propose_a_recipe`）。`penpal connect --auto` 接入时给读写（`mcp/connect.py`），`penpal mcp grant` 默认只读。`rate_result` 只需要读权限，只在本机写一条评分记录（评分、可选的备注和查询文字，限长），只能评它自己拿到过的结果，`penpal purge` 会连带清掉。
+- **记忆**：AI 写入的记忆和 `penpal import memmy` 导入的记忆，存在本机 `penpal.db` 的 `memories` 表。写入时含凭据的内容会被拒绝，导入时会被打码（`memory/writer.py`、`memory/memmy_import.py`；`tests/test_memory_write.py`、`tests/test_memmy_import.py`）。授权必须覆盖一条记忆所属的全部分类，才能读到它。可用 `penpal memory list` 查看，`penpal memory delete mem_<id>` 或 `penpal memory delete --source memmy` 删除（可加 `--dry-run` 预览）；删除也会清除被替代的旧版本（`cli/memory.py`、`store/memories.py`；`tests/test_memory_cli.py`）。
+- **AI 提交的读取配方**：通过 `propose_source_recipe` 新增的来源要先过身份和路径校验，系统保护库、浏览器、凭据目录、聊天 App、密码管理器一律拒绝，每次同步都会重新校验。`penpal sources recipes` 查看，`penpal sources disable` / `rollback` 停用或回滚（`sources/recipes/identity_gate.py`；`tests/test_recipe_identity_gate.py`）。
 - **客户端身份是自报的**。通过 stdio 连接时，Penpal 无法证明对端进程是谁；`PENPAL_CLIENT` 只是 Host 配置里的一个名字，真正的凭证是令牌。能读到你 Host 配置文件的程序，就能同时拿到令牌和名字（`mcp/auth.py` 文件头注释）。保护好那份配置文件。
 - **被查到的内容会进入那个 AI 的对话**。如果它是云端服务（Claude、ChatGPT、Cursor 的后端等），这些内容可能离开你的电脑。Penpal 无法控制 Host 之后怎么处理。授权前想清楚给哪个分类。
 - 这里的"AI"指你自己授权的 Host。Penpal 核心不内置大模型，自己不调用任何模型。
@@ -173,7 +175,7 @@
 - **位置**：`~/.penpal/`，数据库 `penpal.db`、日志 `penpal.log`、配置 `config.toml`（`config.py` `AppConfig`、`utils/paths.py`）。
 - **无埋点**：`penpal/` 源码里没有使用 `requests`、`httpx`、`urllib.request`、`http.client`、`aiohttp` 的网络代码，也没有任何统计 SDK。这是检索代码得出的结论，没有抓包验证；安装 Penpal 时下载（如 Homebrew）不在此列。
 - **不自动删除**：启动、停止都不会删数据，旧的保留天数配置已被忽略。测试：`tests/test_d32_no_auto_delete.py`（D32）。删除只在你主动执行时发生。
-- **清除**：`penpal purge --source <来源>` / `--app <App>` / `--today` / `--last-hours N`，加 `--dry-run` 先看会删多少（`cli.py` `purge`，`services/purge.py`）。一次事务里同时删：原始记录、全文索引、出处（evidence）、返回给 AI 的结果记录、评分记录、剪贴板/手动记录的搜索文档，以及随之清空的会话（只删掉部分事件的会话会被重建，不残留被删文字）。没带任何筛选条件会被拒绝，不会"全删"。出错整体回滚。测试：`tests/test_purge_cascade.py`。
+- **清除**：`penpal purge --source <来源>` / `--app <App>` / `--today` / `--last-hours N`，加 `--dry-run` 先看会删多少（`cli.py` `purge`，`services/purge.py`）。一次事务里同时删：原始记录、关联出处的记忆及其旧版本（`--source memmy` 删除全部 Memmy 记忆）、全文索引、出处（evidence）、返回给 AI 的结果记录、评分记录、剪贴板/手动记录的搜索文档，以及随之清空的会话（只删掉部分事件的会话会被重建，不残留被删文字）。没带任何筛选条件会被拒绝，不会"全删"。出错整体回滚。测试：`tests/test_purge_cascade.py`、`tests/test_memory_cli.py`。
 - 日志文件里是否可能出现内容片段，这里没有逐行核查；代码约定是日志只记原因计数、不记内容（`hygiene.py` 文件头注释）。
 
 ## 11. 不承诺的事

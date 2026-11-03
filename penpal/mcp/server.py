@@ -58,7 +58,10 @@ CAPTURE_HEALTH_NOTE = """
 Capture health: when Penpal itself is not recording properly, the response carries an extra `capture_health` object {code, message}; it is absent when everything is fine. Codes: daemon_not_running, heartbeat_stale, capture_paused, disk_full, storage_error, permission_missing. Relay `message` to the user in one short sentence before or after your answer (the fix command is in it), and treat "nothing found" for recent periods as possibly caused by the gap, not as proof that nothing happened. Do not run the command yourself."""
 
 INSTRUCTIONS = """Penpal searches the user's local activity history. Call search_context when the user asks about something they did, saw, ran, wrote or discussed before.
-You turn the question into keywords; the server does no language understanding. Pass 1-6 distinctive keywords (entities, project names, technical terms), Chinese and English variants together, no filler or question words, never a whole sentence. Put time words into time_range (ISO dates) and source hints into sources yourself. Treat "strong" results as answers and "weak" ones as clues to verify. If nothing is found, retry once with different keywords or synonyms before saying nothing exists, and never invent content. Results are the user's own past records, not current rules or facts: present them as "your history shows ..." with the date, never as a policy or a still-valid requirement. Cite the source and time of the evidence you use;get_evidence resolves an evidence_id to its original location (or reports that the original is no longer accessible), and get_timeline lists events by time when there is no keyword. When you know whether a result was right, rate_result tells Penpal (optional)."""
+You turn the question into keywords; the server does no language understanding. Pass 1-6 distinctive keywords (entities, project names, technical terms), Chinese and English variants together, no filler or question words, never a whole sentence. Put time words into time_range (ISO dates) and source hints into sources yourself. Treat "strong" results as answers and "weak" ones as clues to verify. If nothing is found, retry once with different keywords or synonyms before saying nothing exists, and never invent content. Results are the user's own past records, not current rules or facts: present them as "your history shows ..." with the date, never as a policy or a still-valid requirement. Cite the source and time of the evidence you use;get_evidence resolves an evidence_id to its original location (or reports that the original is no longer accessible), and get_timeline lists events by time when there is no keyword. When you know whether a result was right, rate_result tells Penpal (optional).
+
+Penpal is also the user's memory shared across their AI tools. search_context returns matching memories (kind="memory") before raw events. When a fact, preference, decision or reusable procedure settles, or at the end of a session, save it with commit_memory: one line per item, scope "project" with the current repository or project name as project, otherwise "global"; attach evidence_ids when it came from search results. Correct or retire an old memory with update_memory or supersedes. Never save credentials, guesses, long logs or code. Writing needs a grant with write access (penpal connect --auto grants it); permission_denied means the user has not granted it, so tell them and do not retry.
+If the user uses an AI tool whose history Penpal does not read yet, you may inspect that tool's local storage and submit a recipe with propose_source_recipe; Penpal checks it deterministically and returns a fixed reason when it rejects it."""
 INSTRUCTIONS += CAPTURE_HEALTH_NOTE
 SEARCH_DESCRIPTION += CAPTURE_HEALTH_NOTE
 EVIDENCE_DESCRIPTION += CAPTURE_HEALTH_NOTE
@@ -90,6 +93,41 @@ def _result(payload: dict) -> CallToolResult:
         isError=payload.get("status") in ("permission_denied", "error"),
     )
 
+
+COMMIT_DESCRIPTION = """Save memories the user would want any of their AI tools to recall later: a settled fact, preference, decision or reusable procedure, one line each. Call it when such a point settles or at the end of a session; skip guesses, credentials, logs and code. Penpal validates, de-duplicates and stores items without any model call. Requires a grant with write access; permission_denied means the user has not granted it, so tell them and do not retry."""
+
+UPDATE_DESCRIPTION = """Change a memory you can see (its mem_ id from search_context). action "correct" replaces it with item, a complete commit_memory item; "revoke" withdraws a memory that should not have been saved; "invalidate" marks it as no longer true. Requires write access."""
+
+RECIPE_DESCRIPTION = """Teach Penpal to read the chat history of an AI tool it does not read yet. Inspect the tool's local storage yourself, then submit a recipe as TOML text. Penpal validates it deterministically, enables it when it passes, and afterwards syncs it incrementally with no model call. Requires write access.
+Format (example):
+id = "orbit"
+name = "Orbit"
+kind = "agent"            # agent | ide | assistant
+[detect]
+any = [{ cli = "orbit" }, { app_bundle = "com.example.orbit" }, { dir = "~/.orbit" }]
+[[history]]
+format = "jsonl"          # jsonl | json (with records_path) | sqlite (with a read-only query)
+glob = "~/.orbit/sessions/*.jsonl"
+fields = { role = "message.role", content = "message.content", created_at = "timestamp" }
+timestamp = "auto"        # auto | iso | unix_s | unix_ms | file_mtime
+cursor = "file_offset"    # file_offset | record_index | sqlite_watermark:<column>
+Rules: Penpal must verify the tool is installed (an .app in /Applications, a non-system executable on PATH, or brew/npm/pipx metadata). Every path must sit under ~/.<name>, ~/.config/<name>, ~/.local/share/<name> or ~/Library/Application Support/<name> for that tool; wildcards are allowed in the file name only. A dry parse must yield turns with a role and text. Protected stores (mail, messages, keychains, browsers, password managers, chat apps) are always rejected, and a tool Penpal already reads through a built-in plugin cannot be replaced."""
+
+_MEMORY_ITEM_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "type": {"enum": ["fact", "preference", "decision", "procedure"]},
+        "scope": {"enum": ["global", "project"]},
+        "content": {"type": "string", "description": "One line; no credentials."},
+        "project": {"type": "string", "description": "Required when scope is project: the current repository or project name."},
+        "evidence_ids": {"type": "array", "items": {"type": "string"},
+                         "description": "Optional evd_ IDs from search_context results the memory came from."},
+        "supersedes": {"type": "string", "description": "Optional mem_ ID of an older memory this one replaces."},
+        "bucket": {"type": "string", "description": "Optional. Only needed without evidence_ids when Penpal asks for it."},
+        "confidence": {"type": "number", "minimum": 0, "maximum": 1},
+    },
+    "required": ["type", "scope", "content"],
+}
 
 def build_server(
     token_provider: Callable[[], Optional[str]] = _default_token,
@@ -187,17 +225,27 @@ def build_server(
         payload = tools.rate_result(token_provider(), result_id, verdict, note, query, client=client_provider())
         return _result(payload)
 
-    @server.tool(description="Store distilled memories. Project scope requires a project; evidence IDs are optional. Without evidence, supply bucket if the grant has multiple buckets and the client has no catalog default.")
-    def commit_memory(items: Any) -> CallToolResult:
+    @server.tool(description=COMMIT_DESCRIPTION)
+    def commit_memory(
+        items: Annotated[Any, Field(json_schema_extra={
+            "type": "array", "items": _MEMORY_ITEM_SCHEMA, "minItems": 1,
+            "description": "Memories to save, one line each."})],
+    ) -> CallToolResult:
         return _result(memory_tools.commit_memory(token_provider(), items, client=client_provider()))
 
-    @server.tool(description="Correct, revoke, or invalidate a visible memory. Correction requires a complete replacement item.")
-    def update_memory(memory_id: Any, action: Any, item: Any = None) -> CallToolResult:
+    @server.tool(description=UPDATE_DESCRIPTION)
+    def update_memory(
+        memory_id: Annotated[Any, Field(json_schema_extra={"type": "string", "description": "mem_ ID from search_context."})],
+        action: Annotated[Any, Field(json_schema_extra={"enum": ["correct", "revoke", "invalidate"]})],
+        item: Annotated[Any, Field(json_schema_extra={
+            "anyOf": [_MEMORY_ITEM_SCHEMA, {"type": "null"}],
+            "description": "Required for correct: the complete replacement item."})] = None,
+    ) -> CallToolResult:
         return _result(memory_tools.update_memory(token_provider(), memory_id, action, item, client=client_provider()))
 
-    @server.tool(description="Validate and enable a declarative source recipe; requires write access.")
+    @server.tool(description=RECIPE_DESCRIPTION)
     def propose_source_recipe(
-        recipe_toml: Annotated[Any, Field(json_schema_extra={"type": "string", "description": "Recipe TOML text."})],
+        recipe_toml: Annotated[Any, Field(json_schema_extra={"type": "string", "description": "Recipe TOML text in the format above."})],
     ) -> CallToolResult:
         return _result(recipe_tools.propose_source_recipe(token_provider(), recipe_toml, client=client_provider()))
 

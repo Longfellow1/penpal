@@ -57,19 +57,18 @@ def purge(today, last_hours, app, source, dry_run, confirm):
         sys.exit(1)
 
     counts = run_purge(selector, dry_run=True)
-    if counts["raw_events"] == 0:
-        console.print("[yellow]No data found to delete.[/yellow]")
-        return
-
     console.print("Would delete:" if dry_run else "Will delete:")
     for name, n in counts.items():
         console.print(f"  {name}: {n}")
     if dry_run:
         console.print("[yellow]Dry run: nothing deleted.[/yellow]")
         return
+    if counts["raw_events"] == 0 and counts["memories"] == 0:
+        console.print("[yellow]No data found to delete.[/yellow]")
+        return
 
     if not confirm:
-        msg = f"Delete {counts['raw_events']} events"
+        msg = f"Delete {counts['raw_events']} events and {counts['memories']} memories"
         if app:
             msg += f" from app {app}"
         if source:
