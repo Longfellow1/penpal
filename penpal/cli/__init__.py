@@ -55,6 +55,7 @@ from . import app as _app  # noqa: F401  # registers CLI commands
 from . import search as _search  # noqa: F401  # registers CLI commands
 from . import data as _data  # noqa: F401  # registers CLI commands
 from . import memory_import as _memory_import  # noqa: F401
+from . import memory as _memory  # noqa: F401  # registers CLI commands
 from . import config as _config  # noqa: F401  # registers CLI commands
 from . import privacy as _privacy  # noqa: F401  # registers CLI commands
 from . import maintenance as _maintenance  # noqa: F401  # registers CLI commands

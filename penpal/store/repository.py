@@ -5,6 +5,7 @@ from typing import Optional
 from penpal.foundation.desensitizer import redact_secrets
 from penpal.store.capture_events import CAPTURE_SEARCHABLE_EVENT_TYPES, penpal_locator
 from penpal.store.db import get_conn
+from penpal.store import memories
 from penpal.utils.text_filters import strip_invisible
 from penpal.store.models import RawEvent, Session, SearchDoc, Policy
 from penpal.store.snapshots import mark_previous_snapshot
@@ -131,7 +132,7 @@ def query_raw_events(
 
 PURGE_COUNT_KEYS = (
     "raw_events", "raw_events_fts", "evidence", "mcp_returned_results", "mcp_feedback",
-    "search_docs", "sessions",
+    "search_docs", "sessions", "memories",
 )
 
 
@@ -196,6 +197,10 @@ def purge_raw_events(
         conn.execute(
             "INSERT INTO purge_evidence_ids SELECT id FROM evidence WHERE event_id IN (SELECT id FROM purge_event_ids)"
         )
+        selected_memories = memories.memory_ids(conn, """SELECT m.id FROM memories m
+            WHERE EXISTS (SELECT 1 FROM json_each(m.evidence_ids) j
+                          JOIN purge_evidence_ids e ON j.value = 'evd_' || e.id)
+               OR (m.source = 'memmy' AND ? = 'memmy')""", (source,))
         # Sessions that lose every event. A session that keeps events outside the selector stays.
         conn.execute(
             """INSERT INTO purge_session_ids SELECT s.id FROM sessions s
@@ -226,10 +231,12 @@ def purge_raw_events(
                          "DELETE FROM sessions WHERE id IN (SELECT id FROM purge_session_ids)"),
         }
         counts = {name: conn.execute(count_sql).fetchone()[0] for name, (count_sql, _) in targets.items()}
+        counts["memories"] = len(selected_memories)
         if dry_run:
             conn.execute("ROLLBACK")
             return counts
 
+        memories.delete_ids(conn, selected_memories)
         # Children first. raw_events last: its AFTER DELETE trigger removes the FTS rows.
         for name in ("mcp_returned_results", "mcp_feedback", "search_docs", "sessions"):
             conn.execute(targets[name][1])

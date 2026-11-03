@@ -142,6 +142,7 @@ def test_app_delete_removes_raw_text_fts_evidence_ledgers_docs_and_sessions(seed
         "mcp_feedback": 1,
         "search_docs": 2,  # manual doc + clipboard doc for Notes
         "sessions": 1,  # sess-notes only; sess-mixed still has a Cursor event
+        "memories": 0,
     }
     for term in ("zebracorn", "zebraclip", "zebramanual", "zebrawindow"):
         assert _raw_text(term) == 0, term
