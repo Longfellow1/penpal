@@ -10,6 +10,35 @@ from penpal.memory.writer import source_default_bucket
 from penpal.mcp import audit
 
 
+# Memmy writes this summary while distillation is still queued; it says nothing about the memory.
+_PLACEHOLDERS = frozenset({"摘要排队中"})
+_HEADLINE_CHARS = 200
+_TRANSCRIPT_LABELS = ("Summary:", "User:", "Agent:")
+
+
+def _headline(detail: str) -> str:
+    """Pick a readable headline: a skill's front matter name and description, else the first spoken line that is not a bare tag."""
+    lines = detail.splitlines()
+    if lines and lines[0].strip() == "---" and "---" in (line.strip() for line in lines[1:]):
+        end = next(i for i, line in enumerate(lines[1:], 1) if line.strip() == "---")
+        meta = {key.strip(): value.strip() for key, sep, value in (line.partition(":") for line in lines[1:end]) if sep}
+        headline = ": ".join(value for value in (meta.get("name"), meta.get("description")) if value)
+        if headline:
+            return headline
+        lines = lines[end + 1:]
+    for line in lines:
+        text = line.strip()
+        if text.startswith("Summary:"):
+            continue
+        for label in _TRANSCRIPT_LABELS:
+            if text.startswith(label):
+                text = text[len(label):].strip()
+                break
+        if text and text != "---" and not (text.startswith("<") and text.endswith(">")):
+            return text
+    return ""
+
+
 def import_memmy(path: Path, target: sqlite3.Connection | None, *, dry_run: bool = False) -> dict:
     try:
         with sqlite3.connect(f"{Path(path).resolve().as_uri()}?mode=ro", uri=True, timeout=0.2) as source:
@@ -48,8 +77,8 @@ def import_memmy(path: Path, target: sqlite3.Connection | None, *, dry_run: bool
                 info = {}
         except (ValueError, TypeError):
             info = {}
-        candidates = (info.get("summary"), info.get("title"), detail.splitlines()[0])
-        content = next((" ".join(value.split()) for value in candidates if isinstance(value, str) and value.strip()), "")
+        candidates = (info.get("summary"), info.get("title"), _headline(detail))
+        content = next((" ".join(value.split())[:_HEADLINE_CHARS] for value in candidates if isinstance(value, str) and value.strip() and value.strip() not in _PLACEHOLDERS), "")
         if not content:
             reasons["missing_summary"] += 1
             continue
