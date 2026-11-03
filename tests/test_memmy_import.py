@@ -136,7 +136,7 @@ def test_many_memories_leave_room_for_events(databases):
     assert len(only_memories) == 10 and all(item.get("kind") == "memory" for item in only_memories)
 
 
-def test_placeholder_summaries_and_front_matter_get_readable_headlines(databases):
+def test_undistilled_turns_skipped_and_skills_get_readable_headlines(databases):
     source = sqlite3.connect(databases)
     source.executemany("INSERT INTO memories(id,agent_id,memory_value,info_json,memory_layer,status,created_at) VALUES (?,?,?,?,?,?,?)", [
         ("6", "codex", "Summary: 摘要排队中\nUser:\n  station id stays in every log\nAgent:\nagreed", json.dumps({"summary": "摘要排队中"}), "L1", "activated", "2026-01-03"),
@@ -147,6 +147,7 @@ def test_placeholder_summaries_and_front_matter_get_readable_headlines(databases
     source.commit()
     source.close()
     conn = get_conn()
-    import_memmy(databases, conn)
+    counts = import_memmy(databases, conn)
+    assert counts["invalid_reasons"]["unsummarized"] == 2
     content = dict(conn.execute("SELECT external_id, content FROM memories WHERE external_id IN ('6','7','8','9')").fetchall())
-    assert content == {"6": "station id stays in every log", "7": "backend-patterns: API design notes", "8": "# Plain heading", "9": "y" * 200}
+    assert content == {"7": "backend-patterns: API design notes", "8": "# Plain heading"}
