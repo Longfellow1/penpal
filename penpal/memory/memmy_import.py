@@ -1,4 +1,4 @@
-"""Read and transform Memmy's distilled memories without modifying its database."""
+"""Read Memmy's distilled memories and skills without modifying its database; undistilled conversation turns are skipped."""
 from collections import Counter
 import hashlib
 import json
@@ -81,7 +81,12 @@ def import_memmy(path: Path, target: sqlite3.Connection | None, *, dry_run: bool
                 info = {}
         except (ValueError, TypeError):
             info = {}
-        candidates = (info.get("summary"), info.get("title"), _headline(detail))
+        summary = info.get("summary")
+        if row["memory_layer"] == "L1" and not (isinstance(summary, str) and summary.strip() and not _is_noise(summary.strip())):
+            # A conversation turn that was never distilled is a raw transcript, not a memory.
+            reasons["unsummarized"] += 1
+            continue
+        candidates = (summary, info.get("title"), _headline(detail))
         content = next((" ".join(value.split())[:_HEADLINE_CHARS] for value in candidates if isinstance(value, str) and value.strip() and not _is_noise(value.strip())), "")
         if not content:
             reasons["missing_summary"] += 1
