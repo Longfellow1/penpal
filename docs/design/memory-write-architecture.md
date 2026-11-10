@@ -191,6 +191,8 @@ style = "json_mcpServers"
 
 ### 3.6 Memmy 导入
 
+> 2026-11-10 起被 `memory-import-architecture.md`（第三方记忆通用导入）取代；下文保留作历史记录。
+
 - `penpal import memmy`，HUD 首次检测到 `~/.memmy/memory-service/memory.sqlite` 时提示：
   - 以只读方式读 `memories`（`memory_layer in ('L1','Skill')`、`status = 'activated'`）；
   - 映射：L1 → fact，Skill → procedure；`app_id` → `source_tool`，`created_at` 原样保留；

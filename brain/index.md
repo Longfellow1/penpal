@@ -1,6 +1,6 @@
 # Brain Index
 
-_Auto-generated. Last updated 2026-11-03T13:57:57.764Z._
+_Auto-generated. Last updated 2026-11-10T10:17:07.567Z._
 
 - [ai-tool-auto-coverage](pages/ai-tool-auto-coverage.md) — category: decision | tags: [capture, mcp, coverage, memmy] | Requirement (user, 2026-10-28, must ship): Phase 1 of the Memmy-class work covers at least 80% of the mainstream AI agents and IDEs a Mac us
 - [anchors-json-is-ssot](pages/anchors-json-is-ssot.md) — category: decision | ## Decision
@@ -18,6 +18,7 @@ _Auto-generated. Last updated 2026-11-03T13:57:57.764Z._
 - [delegation-and-token-cost](pages/delegation-and-token-cost.md) — category: decision | tags: [process, agents, cost, hygiene] | - The rules are in `docs/DELEGATION.md` (dispatch, briefs, acceptance, token cost) and `docs/ENGINEERING.md` §7 (release hygiene gates).
 - [email-domain-kept-mask](pages/email-domain-kept-mask.md) — category: decision | tags: [privacy, redaction, mcp] | D31 (2026-10-12, product owner): emails are masked in the local part only, keeping the domain (`***@gmail.com`).
 - [eval-prd-separate](pages/eval-prd-separate.md) — category: decision | tags: [eval, prd] | ## Decision
+- [generic-memory-import](pages/generic-memory-import.md) — category: decision | tags: [memory, import] | `penpal import` is generic (owner 2026-11-10: hardcoding Memmy was wrong).
 - [geo-discoverability](pages/geo-discoverability.md) — category: decision | tags: [geo, positioning, growth] | - Public name is **"Penpal MCP"** (zh "Penpal MCP（笔友）"): bare "Penpal" collides with the common word "pen pal" and other projects. Category
 - [gold-set-gated-prompt-changes](pages/gold-set-gated-prompt-changes.md) — category: decision | status: archived | ## Decision
 - [homebrew-runtime-deps](pages/homebrew-runtime-deps.md) — category: decision | tags: [release, homebrew, dependencies] | - The Homebrew formula in Longfellow1/homebrew-penpal installs Penpal from an explicit list of `resource` blocks. It does not resolve `pypro
