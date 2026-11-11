@@ -64,6 +64,18 @@ def _no_object_object_artifacts() -> None:
 
 
 @pytest.fixture(autouse=True)
+def _pinned_ui_language(monkeypatch):
+    """Tests assert the Chinese copy. Pin it so a runner with an English locale (CI) sees the same text;
+    tests about language detection override or delete PENPAL_LANG themselves."""
+    from penpal.i18n import set_lang
+
+    monkeypatch.setenv("PENPAL_LANG", "zh")
+    set_lang()
+    yield
+    set_lang()
+
+
+@pytest.fixture(autouse=True)
 def _mcp_capture_health_off_by_default(monkeypatch):
     """MCP tests assert exact payloads; runtime adapter tests exercise capture_health explicitly."""
     monkeypatch.setattr("penpal.mcp.server.current_capture_health", lambda: None)
