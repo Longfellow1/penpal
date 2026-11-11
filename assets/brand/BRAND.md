@@ -12,3 +12,5 @@
 **Typography:** Inter SemiBold converted to SVG paths for consistent rendering. No font file embedded or distributed.
 
 **Recommended README display:** 400px wide, left aligned, with positioning line and tagline underneath.
+
+**Seam refinement:** the stem now uses a vertical alpha mask. Its visibility fades smoothly to zero inside the translucent circle, removing the conspicuous internal contour without changing the asymmetric Bézier outline or the frontmost circle.
