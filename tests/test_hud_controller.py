@@ -174,7 +174,7 @@ def test_keyboard_switch_off_stops_writes_like_the_cli(hud, env):
     assert capture_control.source_writes_allowed("keyboard_chunk")
     hud.dispatch("keyboard.toggle", {"enable": False})
     assert not capture_control.source_writes_allowed("keyboard_chunk")
-    kb = _tab_rows(hud.dispatch("nav.tab", {"tab": "privacy"}))[0]
+    kb = next(r for r in _tab_rows(hud.dispatch("nav.tab", {"tab": "privacy"})) if r.get("action") == "keyboard.toggle")
     assert kb["trail"]["on"] is False and kb["args"] == {"enable": True}
 
 
@@ -577,3 +577,40 @@ def test_worker_logs_a_turn_that_holds_the_panel(monkeypatch):
         assert "count_candidates" in messages[0]
     finally:
         hud_controller.LOGGER.removeHandler(handler)
+
+
+def test_language_set_action_updates_config_and_immediately_switches_model(hud, env, monkeypatch):
+    from penpal.config import read_config, get_config_path
+
+    changed = []
+    hud._on_language_changed = lambda: changed.append(True)
+
+    # Force starting in zh
+    monkeypatch.delenv("PENPAL_LANG", raising=False)
+    monkeypatch.setenv("LANG", "zh_CN.UTF-8")
+    from penpal.i18n import set_lang
+    set_lang()
+
+    initial = hud.model(fresh=True)
+    assert initial["title"] == "概览"
+    assert [t["label"] for t in initial["tabs"]] == ["概览", "AI 访问", "设置"]
+
+    # Switch to en
+    m_en = hud.dispatch("language.set", {"value": "en"})
+    assert len(changed) == 1
+    assert m_en["title"] == "Overview"
+    assert [t["label"] for t in m_en["tabs"]] == ["Overview", "AI Access", "Settings"]
+    assert read_config(get_config_path()).app.language == "en"
+
+    # Switch to zh
+    m_zh = hud.dispatch("language.set", {"value": "zh"})
+    assert len(changed) == 2
+    assert m_zh["title"] == "概览"
+    assert [t["label"] for t in m_zh["tabs"]] == ["概览", "AI 访问", "设置"]
+    assert read_config(get_config_path()).app.language == "zh"
+
+    # Invalid value does not change
+    m_same = hud.dispatch("language.set", {"value": "invalid"})
+    assert len(changed) == 2
+    assert m_same["title"] == "概览"
+

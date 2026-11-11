@@ -28,6 +28,7 @@ from WebKit import (
 
 from penpal.capabilities.store import load_states as load_capability_states
 from penpal.config import Config
+from penpal.i18n import T
 from penpal.hud.approval_window import ApprovalWindowController, safe_pending_candidate_count
 from penpal.hud.controller import BackgroundScan, HudController, HudModelWorker
 from penpal.hud.render import HUD_HEIGHT, HUD_WIDTH, build_html
@@ -67,10 +68,10 @@ def _terminate_app() -> None:
 
 def _confirm_quit_alert() -> bool:
     alert = AppKit.NSAlert.alloc().init()
-    alert.setMessageText_("退出 Penpal HUD？")
-    alert.setInformativeText_("退出后图标消失，后台照常记录。")
-    alert.addButtonWithTitle_("退出")
-    alert.addButtonWithTitle_("取消")
+    alert.setMessageText_(T("退出 Penpal HUD？", "Quit Penpal HUD?"))
+    alert.setInformativeText_(T("退出后图标消失，后台照常记录。", "The icon will disappear, but recording continues in the background."))
+    alert.addButtonWithTitle_(T("退出", "Quit"))
+    alert.addButtonWithTitle_(T("取消", "Cancel"))
     return alert.runModal() == AppKit.NSAlertFirstButtonReturn
 
 
@@ -121,6 +122,7 @@ class PenpalHUDApp(NSObject):
             Config.load,
             copy_to_clipboard=lambda text: AppHelper.callAfter(_copy_to_pasteboard, text),
             quit_hud=self._quit_hud,
+            on_language_changed=lambda: AppHelper.callAfter(self._on_language_changed),
         )
         self.pending_count = 0
         self.pending_count_error = None
@@ -327,13 +329,20 @@ class PenpalHUDApp(NSObject):
         return True
 
     @objc.python_method
+    def _on_language_changed(self) -> None:
+        self._setup_status_menu()
+        self._refresh_approval_menu_item()
+        if self.approval_window is not None:
+            self.approval_window.refresh_language()
+
+    @objc.python_method
     def _show_browser_automation_guide(self, should_show: bool) -> None:
         if not should_show:
             return
         alert = AppKit.NSAlert.alloc().init()
-        alert.setMessageText_("请开启浏览器自动化权限")
-        alert.setInformativeText_("系统设置 → 隐私与安全性 → 自动化：允许 Penpal 控制你常用的浏览器。")
-        alert.addButtonWithTitle_("知道了")
+        alert.setMessageText_(T("请开启浏览器自动化权限", "Enable Browser Automation Permission"))
+        alert.setInformativeText_(T("系统设置 → 隐私与安全性 → 自动化：允许 Penpal 控制你常用的浏览器。", "System Settings → Privacy & Security → Automation: allow Penpal to control your browsers."))
+        alert.addButtonWithTitle_(T("知道了", "Got It"))
         alert.runModal()
         self._worker.submit(lambda: set_state("browser_automation_guide_shown", "1"))
 
@@ -378,12 +387,12 @@ class PenpalHUDApp(NSObject):
     @objc.python_method
     def _setup_status_menu(self) -> None:
         self.status_menu = AppKit.NSMenu.alloc().init()
-        self.approval_menu_item = self._menu_item("候选审批", self.openApprovalWindow_)
+        self.approval_menu_item = self._menu_item(T("候选审批", "Candidate Approval"), self.openApprovalWindow_)
         self.status_menu.addItem_(self.approval_menu_item)
         self.status_menu.addItem_(AppKit.NSMenuItem.separatorItem())
-        self.status_menu.addItem_(self._menu_item("重新检测", self.recheckHealth_))
-        self.status_menu.addItem_(self._menu_item("重启后台服务", self.restartDaemon_))
-        self.status_menu.addItem_(self._menu_item("退出 HUD", self.confirmQuit_))
+        self.status_menu.addItem_(self._menu_item(T("重新检测", "Recheck"), self.recheckHealth_))
+        self.status_menu.addItem_(self._menu_item(T("重启后台服务", "Restart Background Service"), self.restartDaemon_))
+        self.status_menu.addItem_(self._menu_item(T("退出 HUD", "Quit HUD"), self.confirmQuit_))
 
     @objc.python_method
     def _menu_item(self, title, handler):
@@ -416,12 +425,13 @@ class PenpalHUDApp(NSObject):
         item = getattr(self, "approval_menu_item", None)
         if item is None:
             return
+        base_title = T("候选审批", "Candidate Approval")
         if self.pending_count_error:
-            item.setTitle_("候选审批 (?)")
+            item.setTitle_(f"{base_title} (?)")
             item.setEnabled_(True)
             return
         count = max(int(self.pending_count), 0)
-        item.setTitle_(f"候选审批 ({count})" if count else "候选审批")
+        item.setTitle_(f"{base_title} ({count})" if count else base_title)
         item.setEnabled_(count > 0)
 
     @objc.python_method
@@ -450,7 +460,7 @@ class PenpalHUDApp(NSObject):
         self._apply_pending_count(result)
         if self.pending_count_error:
             alert = AppKit.NSAlert.alloc().init()
-            alert.setMessageText_("候选审批读取失败")
+            alert.setMessageText_(T("候选审批读取失败", "Failed to Read Candidate Approvals"))
             alert.setInformativeText_(self.pending_count_error)
             alert.addButtonWithTitle_("OK")
             alert.runModal()
@@ -473,10 +483,10 @@ class PenpalHUDApp(NSObject):
     def restartDaemon_(self, _sender):
         self.popover.performClose_(None)
         alert = AppKit.NSAlert.alloc().init()
-        alert.setMessageText_("重启后台服务？")
-        alert.setInformativeText_("将重启后台服务，并确认它恢复记录。")
-        alert.addButtonWithTitle_("重启")
-        alert.addButtonWithTitle_("取消")
+        alert.setMessageText_(T("重启后台服务？", "Restart Background Service?"))
+        alert.setInformativeText_(T("将重启后台服务，并确认它恢复记录。", "This will restart the background service and verify recording resumes."))
+        alert.addButtonWithTitle_(T("重启", "Restart"))
+        alert.addButtonWithTitle_(T("取消", "Cancel"))
         if alert.runModal() != AppKit.NSAlertFirstButtonReturn:
             return
 
@@ -512,7 +522,7 @@ def run_hud(cfg: Config | None = None) -> None:
     app.setDelegate_(delegate)
 
     def _force_shutdown(sig, frame):
-        print("\n[Penpal] 接收到退出信号，清理并关闭...")
+        print(T("\n[Penpal] 接收到退出信号，清理并关闭...", "\n[Penpal] Received exit signal, cleaning up and shutting down..."))
         from penpal.foundation.hud_record import remove_hud_record
 
         remove_hud_record()
@@ -528,5 +538,5 @@ def run_hud(cfg: Config | None = None) -> None:
     NSTimer.scheduledTimerWithTimeInterval_target_selector_userInfo_repeats_(
         REFRESH_SEC, delegate, objc.selector(delegate.pollSignals_, signature=b"v@:@"), None, True
     )
-    print("Penpal HUD 已启动。")
+    print(T("Penpal HUD 已启动。", "Penpal HUD started."))
     app.run()

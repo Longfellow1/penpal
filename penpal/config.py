@@ -23,6 +23,7 @@ _DEFAULT_USER_CONFIG = """# Penpal user config.
 db_path = "~/.penpal/penpal.db"
 log_path = "~/.penpal/penpal.log"
 flush_interval_sec = 5
+language = "auto"
 
 [watchers]
 window = true
@@ -44,6 +45,14 @@ class AppConfig(BaseModel):
     # D32: deprecated and ignored. Kept only so old config files still parse; nothing is deleted automatically.
     retention_days: int = 30
     timezone: str | None = None  # IANA name (e.g. "Asia/Shanghai"); None = follow system tz
+    language: str = "auto"
+
+    @field_validator("language")
+    @classmethod
+    def _validate_language(cls, value: str) -> str:
+        # A hand-edited unknown value must not stop the whole config from loading; it falls back to auto.
+        val = str(value or "auto").strip().lower()
+        return val if val in {"auto", "zh", "en"} else "auto"
 
 
 class WatchersConfig(BaseModel):
@@ -411,6 +420,41 @@ def _write_privacy_list(path: Path, key: str, values: list[str]) -> None:
     persisted = read_config(path)
     if getattr(persisted.privacy, key) != values:
         raise ValueError("could not verify privacy." + key + " in " + str(path))
+
+
+def write_app_language(path: Path | str | None, value: str) -> None:
+    """Update `[app] language = "..."` without reformatting the rest of config.toml."""
+    val = str(value or "").strip().lower()
+    if val not in {"auto", "zh", "en"}:
+        raise ValueError(f"language must be one of: auto, zh, en (got {value!r})")
+
+    config_path = Path(path) if path is not None else get_config_path()
+    text = config_path.read_text(encoding="utf-8") if config_path.exists() else ""
+    line = f'language = "{val}"'
+
+    key_re = re.compile(r'^[ \t]*language[ \t]*=[ \t]*(?:"[^"\\]*"|\'[^\']*\')[ \t]*(?:#.*)?$', re.M)
+    app = re.search(r"^[ \t]*\[app\][ \t]*(?:#.*)?$", text, re.M)
+    if app is None:
+        sep = "" if not text or text.endswith("\n\n") else ("\n" if text.endswith("\n") else "\n\n")
+        new = f"{text}{sep}[app]\n{line}\n"
+    else:
+        nxt = _TABLE_HEADER_RE.search(text, app.end())
+        end = nxt.start() if nxt else len(text)
+        body = text[app.end():end]
+        if key_re.search(body):
+            body = key_re.sub(lambda _m: line, body, count=1)
+        else:
+            body = "\n" + line + body
+        new = text[: app.end()] + body + text[end:]
+
+    parsed = Config.model_validate(tomllib.loads(new))
+    if parsed.app.language != val:
+        raise ValueError("could not update app.language in " + str(config_path))
+    config_path.parent.mkdir(parents=True, exist_ok=True)
+    atomic_write_text(config_path, new)
+    persisted = read_config(config_path)
+    if persisted.app.language != val:
+        raise ValueError("could not verify app.language in " + str(config_path))
 
 
 def write_chat_apps_opt_in(path: Path, keys: list[str]) -> None:

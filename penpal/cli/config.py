@@ -40,3 +40,16 @@ def config_path():
     """Config path."""
     path = get_config_path()
     print(str(path))
+
+@config_group.command("set-language", help=T("设置语言（auto/zh/en）。", "Set language (auto/zh/en)."))
+@click.argument("language", type=click.Choice(["auto", "zh", "en"], case_sensitive=False))
+def config_set_language(language: str):
+    """Set language."""
+    from penpal.config import write_app_language
+    from penpal.i18n import set_lang
+
+    lang = language.lower()
+    path = get_config_path()
+    write_app_language(path, lang)
+    set_lang(lang)
+    console.print(T(f"已设置语言为：{lang}。", f"Language set to: {lang}."), markup=False)

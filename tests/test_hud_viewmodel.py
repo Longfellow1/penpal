@@ -338,7 +338,11 @@ def test_reveal_page_shows_secret_once_with_copy_and_done():
 def test_privacy_tab_keyboard_note_chat_exclusions_storage_delete():
     m = build_model(snap(), UiState(tab="privacy"))
     assert m["title"] == "设置"
-    scope = m["sections"][0]
+    lang_sec = m["sections"][0]
+    assert lang_sec["header"] == "语言"
+    assert titles(lang_sec) == ["跟随系统", "中文", "English"]
+    assert lang_sec["rows"][0]["trail"]["on"] is True  # auto is default
+    scope = m["sections"][1]
     kb = scope["rows"][0]
     assert kb["title"] == "键盘片段"
     assert kb["sub"] == "过滤不保证完整，可能记下敏感内容，并随查询发往云端 AI"  # issue #29
@@ -346,12 +350,12 @@ def test_privacy_tab_keyboard_note_chat_exclusions_storage_delete():
     assert (kb["action"], kb["args"]) == ("keyboard.toggle", {"enable": False})
     assert scope["rows"][1]["value"]["text"] == "1 个开启" and scope["rows"][1]["args"] == {"page": "chat"}
     assert scope["rows"][2]["value"]["text"] == "2 项" and scope["rows"][2]["args"] == {"page": "exclude"}
-    storage = m["sections"][1]
+    storage = m["sections"][2]
     assert [(r["title"], r["value"]["text"]) for r in storage["rows"]] == [
         ("已存储", "38.2 万条 · 1.4 GB"), ("保留时间", "永久保留"), ("磁盘剩余", "86.0 GB")]
-    delete = m["sections"][2]["rows"][0]
+    delete = m["sections"][3]["rows"][0]
     assert delete["title"] == "删除数据" and delete["title_tone"] == "red" and delete["args"] == {"page": "delete"}
-    quit_sec = m["sections"][3]
+    quit_sec = m["sections"][4]
     assert titles(quit_sec) == ["退出 HUD"]
     assert quit_sec["rows"][0]["title_tone"] == "red"
     assert quit_sec["rows"][0]["action"] == "hud.quit"
@@ -360,7 +364,7 @@ def test_privacy_tab_keyboard_note_chat_exclusions_storage_delete():
 
 def test_keyboard_off_state_and_command_args():
     m = build_model(snap(keyboard_on=False), UiState(tab="privacy"))
-    kb = m["sections"][0]["rows"][0]
+    kb = m["sections"][1]["rows"][0]
     assert kb["trail"]["on"] is False and kb["args"] == {"enable": True}
 
 
@@ -473,3 +477,182 @@ def test_all_pages_follow_the_v3_component_rules():
                 assert r["sub_tone"] in {None, "amber", "red"} and r["title_tone"] in {None, "red"}
         # at most two levels: a page is either a tab home or one step below it
         assert ":" not in m["view"]["page"].split(":", 1)[-1] or m["view"]["page"].startswith(("group:", "host:", "perm:"))
+
+
+def _has_cjk(text: str) -> bool:
+    return any(
+        ('\u4e00' <= ch <= '\u9fff')
+        or ('\u3400' <= ch <= '\u4dbf')
+        or ('\u3000' <= ch <= '\u303f')
+        or ('\uff00' <= ch <= '\uffef')
+        for ch in text
+    )
+
+
+def _find_cjk_in_structure(val, path=""):
+    violations = []
+    if isinstance(val, str):
+        if _has_cjk(val):
+            violations.append(f"{path}: {val!r}")
+    elif isinstance(val, dict):
+        for k, v in val.items():
+            violations.extend(_find_cjk_in_structure(k, f"{path}.key({k})"))
+            violations.extend(_find_cjk_in_structure(v, f"{path}.{k}"))
+    elif isinstance(val, (list, tuple)):
+        for i, item in enumerate(val):
+            violations.extend(_find_cjk_in_structure(item, f"{path}[{i}]"))
+    return violations
+
+
+def _ascii_sources() -> tuple[SourceInfo, ...]:
+    return (
+        SourceInfo("window", "Active Window", "live", "capture", True, last_ts=_ago(seconds=20), today=412),
+        SourceInfo("clipboard", "Clipboard", "live", "capture", True, last_ts=_ago(minutes=5), today=38),
+        SourceInfo("keyboard_chunk", "Keyboard Snippets", "live", "capture", True, last_ts=_ago(minutes=2), today=9),
+        SourceInfo("ax_text", "On-screen Text", "live", "capture", False),
+        SourceInfo("chrome_history", "Chrome History", "browser", "plugin", True, last_ts=_ago(minutes=10), today=96),
+        SourceInfo("safari_history", "Safari History", "browser", "plugin", True, last_ts=_ago(hours=1), today=12),
+        SourceInfo("claude_code", "Claude Code", "ai", "plugin", True, last_ts=_ago(minutes=3), today=210),
+    )
+
+
+def ascii_snap(**over) -> Snapshot:
+    base = dict(
+        now=NOW, last_write_ts=_ago(minutes=2), today_records=1284, sources=_ascii_sources(),
+        hosts=(
+            HostInfo("claude", ("Work", "Personal"), None, ("read",), today=24, week=132, denied=3, last_ts=_ago(minutes=2)),
+            HostInfo("codex", ("Work",), ("claude_code",), ("read",), today=0, week=61, denied=0, last_ts=_ago(hours=1)),
+        ),
+        audit=(
+            AuditRow(_ago(minutes=2), "claude", "search_context", True, "ok", 5),
+            AuditRow(_ago(minutes=3), "claude", "get_evidence", True, "ok", 1),
+            AuditRow(_ago(hours=3), "codex", "search_context", True, "ok", 0),
+            AuditRow(_ago(hours=4), "unknown", "search_context", False, "token_unknown", None),
+        ),
+        perm_issues=(PermIssue("accessibility", "Accessibility", ("window",), ("/usr/bin/daemon",)),),
+        ai_queries_today=36, keyboard_on=True,
+        chat_apps=(("WeChat", "WeChat", False), ("Slack", "Slack", True)),
+        exclusions=(("app", "Xcode"), ("domain", "example.com")),
+        delete_sources=(("window", 10), ("clipboard", 5)),
+        delete_apps=(("Safari", 8), ("Notes", 3)),
+    )
+    base.update(over)
+    return Snapshot(**base)
+
+
+def test_english_mode_outputs_zero_cjk_with_ascii_snapshot(monkeypatch):
+    from penpal.i18n import set_lang
+
+    monkeypatch.setenv("PENPAL_LANG", "en")
+    set_lang()
+
+    try:
+        s = ascii_snap()
+        pages = [
+            UiState(),  # overview
+            UiState(page="group:live"),
+            UiState(page="perm:accessibility"),
+            UiState(tab="access"),
+            UiState(tab="access", page="host:claude"),
+            UiState(tab="access", page="host:new"),
+            UiState(tab="access", page="reveal", reveal=Reveal("Title", "Body", "claude")),
+            UiState(tab="privacy"),
+            UiState(tab="privacy", page="chat"),
+            UiState(tab="privacy", page="exclude"),
+            UiState(tab="privacy", page="delete"),
+            UiState(confirm={"kind": "revoke", "client_id": "claude"}),
+            UiState(tab="privacy", page="delete", confirm={"kind": "purge"}),
+        ]
+
+        all_cjk = []
+        for ui in pages:
+            m = build_model(s, ui, delete_preview={"raw_events": 10, "evidence": 2})
+            cjk_found = _find_cjk_in_structure(m, path=f"{ui.tab}:{ui.page}")
+            all_cjk.extend(cjk_found)
+
+        assert not all_cjk, "Found CJK in English model output:\n" + "\n".join(all_cjk)
+    finally:
+        set_lang()
+
+
+def test_hud_i18n_static_guard():
+    import ast
+    from pathlib import Path
+
+    hud_dir = Path(__file__).parent.parent / "penpal" / "hud"
+    py_files = sorted(hud_dir.glob("*.py"))
+    assert len(py_files) >= 5
+
+    def is_docstring(node, parent_map):
+        parent = parent_map.get(node)
+        if isinstance(parent, ast.Expr):
+            grandparent = parent_map.get(parent)
+            if isinstance(grandparent, (ast.Module, ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+                if grandparent.body and grandparent.body[0] is parent:
+                    return True
+        return False
+
+    def check_file(path_or_content, is_path=True):
+        if is_path:
+            source = path_or_content.read_text(encoding="utf-8")
+            filename = str(path_or_content)
+        else:
+            source = path_or_content
+            filename = "<test_snippet>"
+        tree = ast.parse(source, filename)
+
+        parent_map = {}
+        for p in ast.walk(tree):
+            for child in ast.iter_child_nodes(p):
+                parent_map[child] = p
+
+        violations = []
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Constant) and isinstance(node.value, str):
+                if is_docstring(node, parent_map):
+                    continue
+                if not _has_cjk(node.value):
+                    continue
+
+                parent = parent_map.get(node)
+                # Rule 1: T(node, en_node)
+                is_t_arg0 = (
+                    isinstance(parent, ast.Call)
+                    and isinstance(parent.func, ast.Name)
+                    and parent.func.id == "T"
+                    and parent.args
+                    and parent.args[0] is node
+                    and len(parent.args) >= 2
+                    and isinstance(parent.args[1], ast.Constant)
+                    and isinstance(parent.args[1].value, str)
+                    and not _has_cjk(parent.args[1].value)
+                )
+                # Rule 2: 2-tuple (node, en_node) where en_node has no CJK
+                is_tuple_zh = (
+                    isinstance(parent, ast.Tuple)
+                    and len(parent.elts) == 2
+                    and parent.elts[0] is node
+                    and isinstance(parent.elts[1], ast.Constant)
+                    and isinstance(parent.elts[1].value, str)
+                    and not _has_cjk(parent.elts[1].value)
+                )
+
+                if not (is_t_arg0 or is_tuple_zh):
+                    lineno = getattr(node, "lineno", "?")
+                    violations.append(f"{filename}:{lineno} violation: {node.value!r}")
+
+        return violations
+
+    all_violations = []
+    for f in py_files:
+        all_violations.extend(check_file(f, is_path=True))
+
+    assert not all_violations, "Found bare CJK strings in hud:\n" + "\n".join(all_violations)
+
+    # Negative tests: ensure guard catches illegal CJK constants
+    assert check_file('x = "裸中文"', is_path=False)
+    assert check_file('T("中文", "含中文English")', is_path=False)
+    assert check_file('("中文", "含中文English")', is_path=False)
+    assert check_file('("a", "b", "中文")', is_path=False)
+    assert check_file('["中文"]', is_path=False)
+    assert check_file('f"前缀{x}中文"', is_path=False)

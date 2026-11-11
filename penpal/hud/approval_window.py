@@ -27,8 +27,16 @@ except Exception:  # pragma: no cover - optional runtime dependency
     objc = _ObjCShim()
 
 from penpal.foundation.approval_store import ApprovalStore
+from penpal.i18n import T
 from penpal.sources.discoverers import CandidateSource, discover_all_candidates
 from penpal.sources.registry import discover_all
+
+BUTTON_APPROVE = ("批准", "Approve")
+BUTTON_REJECT = ("拒绝", "Reject")
+BUTTON_SKIP = ("跳过", "Skip")
+BUTTON_DETAILS = ("查看详情", "Details")
+BUTTON_RELOAD = ("刷新", "Refresh")
+BUTTON_CLOSE = ("关闭", "Close")
 
 
 _DISCOVERER_ORDER = {
@@ -208,7 +216,7 @@ if AppKit is not None:
                 False,
             )
             self.window.setReleasedWhenClosed_(False)
-            self.window.setTitle_("候选审批")
+            self.window.setTitle_(T("候选审批", "Candidate Approval"))
 
             content = self.window.contentView()
 
@@ -216,7 +224,7 @@ if AppKit is not None:
             self.summary_label.setEditable_(False)
             self.summary_label.setBordered_(False)
             self.summary_label.setDrawsBackground_(False)
-            self.summary_label.setStringValue_("待审批候选")
+            self.summary_label.setStringValue_(T("待审批候选", "Pending Candidates"))
             content.addSubview_(self.summary_label)
 
             scroll = AppKit.NSScrollView.alloc().initWithFrame_(AppKit.NSMakeRect(20.0, 120.0, 800.0, 290.0))
@@ -254,20 +262,31 @@ if AppKit is not None:
             content.addSubview_(self.detail_view)
 
             button_specs = [
-                ("批准", "approveSelected_", 20.0),
-                ("拒绝", "rejectSelected_", 110.0),
-                ("跳过", "skipSelected_", 200.0),
-                ("查看详情", "toggleDetails_", 290.0),
-                ("刷新", "reloadRows_", 410.0),
-                ("关闭", "closeWindow_", 500.0),
+                (BUTTON_APPROVE, "approveSelected_", 20.0),
+                (BUTTON_REJECT, "rejectSelected_", 110.0),
+                (BUTTON_SKIP, "skipSelected_", 200.0),
+                (BUTTON_DETAILS, "toggleDetails_", 290.0),
+                (BUTTON_RELOAD, "reloadRows_", 410.0),
+                (BUTTON_CLOSE, "closeWindow_", 500.0),
             ]
-            for title, action_name, x in button_specs:
+            self._buttons = []
+            for pair, action_name, x in button_specs:
                 button = AppKit.NSButton.alloc().initWithFrame_(AppKit.NSMakeRect(x, 420.0, 100.0, 24.0))
-                button.setTitle_(title)
+                button.setTitle_(T(pair[0], pair[1]))
                 button.setBezelStyle_(AppKit.NSBezelStyleRounded)
                 button.setTarget_(self)
                 button.setAction_(objc.selector(getattr(self, action_name), signature=b"v@:@"))
                 content.addSubview_(button)
+                self._buttons.append((button, pair))
+
+        @objc.python_method
+        def refresh_language(self) -> None:
+            if self.window is not None:
+                self.window.setTitle_(T("候选审批", "Candidate Approval"))
+            if hasattr(self, "_buttons"):
+                for button, pair in self._buttons:
+                    button.setTitle_(T(pair[0], pair[1]))
+            self._update_summary()
 
         def showWindow_(self, _sender):
             self.ensure_window()
@@ -284,9 +303,13 @@ if AppKit is not None:
             if self.summary_label is None:
                 return
             if self.data.last_error:
-                self.summary_label.setStringValue_(f"候选读取失败: {self.data.last_error}")
+                self.summary_label.setStringValue_(
+                    T("候选读取失败: {err}", "Failed to read candidates: {err}").format(err=self.data.last_error)
+                )
                 return
-            self.summary_label.setStringValue_(f"待审批候选: {self.data.count()} 个")
+            self.summary_label.setStringValue_(
+                T("待审批候选: {n} 个", "Pending candidates: {n}").format(n=self.data.count())
+            )
 
         @objc.IBAction
         def reloadRows_(self, _sender):
@@ -295,7 +318,7 @@ if AppKit is not None:
                 self._show_rows()
                 return
             if self.summary_label is not None:
-                self.summary_label.setStringValue_("正在读取候选…")
+                self.summary_label.setStringValue_(T("正在读取候选…", "Loading candidates…"))
             self.run_scan("approval_rows", self.data.load, lambda loaded: (self.data.apply(loaded), self._show_rows()))
 
         @objc.python_method
