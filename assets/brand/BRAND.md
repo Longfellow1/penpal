@@ -3,7 +3,7 @@
 - `penpal-mark.svg` / `penpal-mark-dark.svg`: transparent standalone symbols.
 - `penpal-lockup-light.svg`: blue mark and dark navy Penpal outlined wordmark, transparent; use on light backgrounds.
 - `penpal-lockup-dark.svg`: blue mark and white Penpal outlined wordmark, transparent; use on dark backgrounds.
-- `penpal-social-preview.png`: 1280 × 640 social sharing image. Upload manually in GitHub repository **Settings → General → Social preview** (separate from versioned files).
+- A 1280 × 640 `penpal-social-preview.png` is included in the downloadable asset package (not yet part of this repository). To set it as the link thumbnail, upload it under GitHub repository **Settings → General → Social preview**.
 
 **Geometry:** original B3 translucent overlay: left edge + asymmetric continuous cubic Bézier; complete circle in front. The Bézier body and circle are editable vector shapes.
 
