@@ -55,6 +55,20 @@ def test_import_repeat_dry_run_and_index(databases):
     assert sum(again[key] for key in ("imported", "existing", "invalid")) == again["eligible"]
 
 
+def test_imported_passport_numbers_are_masked(databases):
+    source = sqlite3.connect(databases)
+    source.execute("INSERT INTO memories(id,agent_id,memory_value,info_json,memory_layer,status,created_at) VALUES (?,?,?,?,?,?,?)",
+                   ("6", "codex", "Passport No: X1234567B", json.dumps({"summary": "护照号是E12345678"}), "L1", "activated", "2026-01-03"))
+    source.commit()
+    source.close()
+    conn = get_conn()
+    import_memmy(databases, conn)
+    row = conn.execute("SELECT content, detail FROM memories WHERE external_id = '6'").fetchone()
+    assert (row["content"], row["detail"]) == ("护照号是[PASSPORT]", "Passport No: [PASSPORT]")
+    dump = "\n".join(conn.iterdump())
+    assert "E12345678" not in dump and "X1234567B" not in dump
+
+
 def test_import_errors(databases, tmp_path):
     missing = tmp_path / "empty.sqlite"
     sqlite3.connect(missing).close()

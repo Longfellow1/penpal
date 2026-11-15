@@ -1,6 +1,6 @@
 # Brain Index
 
-_Auto-generated. Last updated 2026-11-03T13:57:57.764Z._
+_Auto-generated. Last updated 2026-11-15T15:55:56.897Z._
 
 - [ai-tool-auto-coverage](pages/ai-tool-auto-coverage.md) — category: decision | tags: [capture, mcp, coverage, memmy] | Requirement (user, 2026-10-28, must ship): Phase 1 of the Memmy-class work covers at least 80% of the mainstream AI agents and IDEs a Mac us
 - [anchors-json-is-ssot](pages/anchors-json-is-ssot.md) — category: decision | ## Decision
@@ -37,6 +37,7 @@ _Auto-generated. Last updated 2026-11-03T13:57:57.764Z._
 - [no-real-data-in-repo](pages/no-real-data-in-repo.md) — category: decision | tags: [privacy, eval, git, secrets] | ## Rule
 - [product-positioning-memory-infra](pages/product-positioning-memory-infra.md) — category: decision | tags: [positioning, roadmap] | Positioning: KeyPulse persists the user's authorized digital trail and turns cross-app, cross-time traces into personal memory that any AI c
 - [py2app-preflight-smoke-test](pages/py2app-preflight-smoke-test.md) — category: decision | ## Decision
+- [query-time-document-masking](pages/query-time-document-masking.md) — category: decision | tags: [privacy, redaction, mcp] | Every text field returned over MCP (events and memory `content`/`detail`) passes `redact_secrets` then `redact_documents` (passport/permit,
 - [refactor-in-place-with-legacy-tag](pages/refactor-in-place-with-legacy-tag.md) — category: decision | tags: [refactor, repo, legacy] | ## Decision
 - [retention-keep-forever](pages/retention-keep-forever.md) — category: decision | tags: [retention, data-lifecycle, privacy] | Decision (user, 2026-10-13): KeyPulse does not delete anything automatically. All sources, including raw streams such as keyboard chunks, ar
 - [runtime-contract](pages/runtime-contract.md) — category: decision | tags: [runtime, health, hud, doctor, launchd, mcp] | Decision (D36, 2026-10-24, owner accepted all recommendations after a deep-fix audit of 80+ liveness/HUD/doctor commits since 2026-04):

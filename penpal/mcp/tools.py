@@ -8,7 +8,7 @@ from typing import Any, Optional
 
 from penpal.mcp import audit
 from penpal.mcp.auth import Grant, check_access
-from penpal.foundation.desensitizer import mask_emails, redact_secrets
+from penpal.foundation.desensitizer import mask_emails, redact_documents, redact_secrets
 from penpal.search.engine import (
     TIMELINE_DEFAULT_LIMIT, TIMELINE_MAX_LIMIT, keyword_in_scope, normalize_keywords, parse_time_bound, scoped_evidence,
     search_events, source_coverage, timeline_events,
@@ -70,7 +70,9 @@ def _looks_like_sentence(keyword: str) -> bool:
     )
 
 
-_TEXT_FIELDS = frozenset({"snippet", "excerpt", "title", "app", "app_name", "window_title", "url", "text"})
+# "content" / "detail" carry memory hits (kind="memory").
+_TEXT_FIELDS = frozenset({"snippet", "excerpt", "title", "app", "app_name", "window_title", "url", "text",
+                          "content", "detail"})
 
 
 # privacy.redact_emails, applied at query time too (default on = fail safe). `penpal mcp serve` sets it
@@ -84,7 +86,7 @@ def configure(*, mask_emails: bool) -> None:
 
 
 def _redact_text(text: str) -> str:
-    text = redact_secrets(text)
+    text = redact_documents(redact_secrets(text))
     return mask_emails(text) if _mask_emails_at_query else text
 
 

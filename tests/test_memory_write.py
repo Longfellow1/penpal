@@ -4,12 +4,13 @@ import json
 
 import pytest
 
-from penpal.mcp import auth, memory_tools
+from penpal.mcp import auth, memory_tools, tools
 from penpal.memory.writer import visible
 from penpal.store.db import close, get_conn, init_db
 from penpal.store.models import RawEvent
 from penpal.store.repository import insert_raw_event
 from penpal.store.migration_v35 import migrate_v35
+from mcp_helpers import client_of, search
 
 
 @pytest.fixture
@@ -92,6 +93,41 @@ def test_project_secret_and_correction(db):
     mid = write(t, item(scope="project", project="/tmp/example"))["items"][0]["id"]
     assert get_conn().execute("SELECT project FROM memories").fetchone()[0] == "example"
     assert memory_tools.update_memory(t, mid, "correct", item(content="Corrected."), client="claude_code")["status"] == "ok"
+
+
+def test_passport_number_is_masked_before_the_memory_is_stored(db):
+    t = grant()
+    result = write(t, item(content="我的护照号是E12345678，下周出发"))
+    assert result["status"] == "ok"
+    assert get_conn().execute("SELECT content FROM memories").fetchone()[0] == "我的护照号是[PASSPORT]，下周出发"
+    assert "E12345678" not in "\n".join(get_conn().iterdump())
+
+
+def test_legacy_unmasked_document_numbers_are_masked_when_returned_to_the_host(db):
+    # Synthetic numbers: the ID passes GB 11643, the card passes Luhn (same fixtures as test_capture_hygiene).
+    passport, id_card, card = "E12345678", "110101199003071233", "6222021234567890128"
+    t = grant()
+    # Stored before the rules existed: insert_raw_event only masks credentials, the memory row is raw SQL.
+    event = insert_raw_event(RawEvent(source="claude_code", event_type="semantic_event", ts_start="2026-01-01",
+                                      content_text=f"zebracorn trip: passport {passport}, ID {id_card}, card {card}",
+                                      content_hash="legacy", bucket="Work"))
+    conn = get_conn()
+    conn.execute("INSERT INTO evidence(event_id, locator, created_at) VALUES (?, 'synthetic', '2026-01-01')", (event,))
+    evd = f"evd_{conn.execute('SELECT max(id) FROM evidence').fetchone()[0]}"
+    conn.execute("INSERT INTO memories(type,content,detail,scope,source_tool,evidence_ids,buckets,content_hash,valid_from,"
+                 "status,created_at,confidence,source) VALUES ('fact',?,?,'global','claude_code',?,?,'legacy',"
+                 "'2026-01-01','active','2026-01-01',1.0,'host')",
+                 (f"zebracorn 护照号是{passport}", f"身份证{id_card}，卡号{card}", json.dumps([evd]), json.dumps(["Work"])))
+    conn.commit()
+
+    found = search(t, ["zebracorn"])
+    assert found["status"] == "ok"
+    memory = next(r for r in found["results"] if r.get("kind") == "memory")
+    assert (memory["content"], memory["detail"]) == ("zebracorn 护照号是[PASSPORT]", "身份证[ID_CARD]，卡号[BANK_CARD]")
+    evidence_payload = tools.get_evidence(t, evd, client=client_of(t))
+    assert evidence_payload["evidence"]["excerpt"].startswith("zebracorn trip: passport [PASSPORT], ID [ID_CARD], card [BANK_CARD]")
+    returned = json.dumps([found, evidence_payload], ensure_ascii=False)
+    assert passport not in returned and id_card not in returned and card not in returned
 
 
 def test_no_evidence_bucket_resolution(db, monkeypatch):
