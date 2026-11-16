@@ -106,7 +106,7 @@ def test_disk_full_stops_writes_and_reports_error(mgr, monkeypatch) -> None:
     assert not state.ok and state.code == DISK_FULL_CODE
     signal = cap.diagnose(state)
     assert signal.level == "err"
-    assert "磁盘已满" in (signal.hint or "")
+    assert any(word in (signal.hint or "") for word in ("磁盘已满", "Disk is full"))  # hint follows the UI language
     assert "kubectl" not in storage.detail
 
 
