@@ -6,7 +6,7 @@ from typing import Any
 from penpal.mcp import audit, tools
 from penpal.mcp.auth import check_access
 from penpal.sources.recipes.catalog import load_recipe_from_string
-from penpal.sources.recipes.identity_gate import save_recipe
+from penpal.sources.recipes.identity_gate import propose_recipe
 
 
 def propose_source_recipe(token: str | None, recipe_toml: Any, *, client: str | None = None) -> dict[str, Any]:
@@ -23,7 +23,7 @@ def propose_source_recipe(token: str | None, recipe_toml: Any, *, client: str | 
         except (ValueError, TypeError, KeyError):
             raise ValueError("invalid recipe TOML or schema") from None
         summary: dict[str, Any] = {}
-        save_recipe(recipe_toml, summary=summary)
+        propose_recipe(recipe_toml, summary=summary)
     except (ValueError, OSError) as exc:
         reason = str(exc) if isinstance(exc, ValueError) else "recipe storage unavailable"
         # Only fixed gate messages may cross this boundary; never echo caller data.
@@ -34,5 +34,9 @@ def propose_source_recipe(token: str | None, recipe_toml: Any, *, client: str | 
                      reason_code="recipe_rejected", scope=decision.scope)
         return {"status": "rejected", "reason": reason}
     audit.record(client=decision.client, tool=tools.TOOL_PROPOSE_SOURCE_RECIPE, allowed=True,
-                 reason_code="ok", scope=decision.scope, result_count=summary["parsed_turns"])
-    return {"status": "ok", **summary}
+                 reason_code="pending_approval", scope=decision.scope, result_count=summary["parsed_turns"])
+    return {
+        "status": "pending_approval",
+        **summary,
+        "message": "Saved for the user's approval. Ask them to run `penpal sources approve` with this id; Penpal reads nothing from it before that.",
+    }
