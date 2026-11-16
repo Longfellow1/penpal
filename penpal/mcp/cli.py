@@ -9,7 +9,7 @@ import sys
 import click
 
 from penpal.config import Config
-from penpal.foundation.runtime_identity import RELOAD_EXIT_CODE
+from penpal.i18n import T
 from penpal.mcp.auth import CLIENT_ENV, TOKEN_ENV
 from penpal.store.db import DatabaseSchemaTooNewError, init_db
 
@@ -139,10 +139,13 @@ def serve_command() -> None:
         init_db(cfg.db_path_expanded)
     except DatabaseSchemaTooNewError as exc:
         click.echo(
-            f"Database schema {exc.recorded} is newer than this version supports ({exc.supported}); refusing writes.",
+            T(
+                f"数据库版本 {exc.recorded} 高于当前支持的版本 {exc.supported}；请升级 Penpal。",
+                f"Database schema {exc.recorded} is newer than supported version {exc.supported}; please upgrade Penpal.",
+            ),
             err=True,
         )
-        raise click.exceptions.Exit(RELOAD_EXIT_CODE) from exc
+        raise click.exceptions.Exit(1) from exc
     serve_stdio(parent_pid=parent_pid)
 
 

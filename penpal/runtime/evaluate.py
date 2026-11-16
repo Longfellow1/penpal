@@ -20,7 +20,14 @@ from penpal.foundation.runtime_identity import (
 )
 from penpal.foundation.hud_record import HudRecord, read_hud_record
 from penpal.foundation.runtime_launchd import is_installed, probe_daemon, probe_label, process_start_time
-from penpal.foundation.runtime_record import RECORD_WRITE_INTERVAL_SEC, Component, RuntimeRecord, read_record
+from penpal.foundation.runtime_record import (
+    RECORD_WRITE_INTERVAL_SEC,
+    Component,
+    RuntimeRecord,
+    read_record,
+    utc_now,
+    write_record,
+)
 from penpal.i18n import T
 from penpal.store.db import read_schema_version
 from penpal.store.migrations import SCHEMA_VERSION
@@ -44,6 +51,7 @@ class RuntimeState(str, Enum):
     HUNG = "hung"
     OUTDATED = "outdated"
     PAUSED = "paused"
+    SCHEMA_TOO_NEW = "schema_too_new"
 
 
 STATE_COPY: dict[RuntimeState, tuple[str, str, str, str, str]] = {
@@ -54,9 +62,10 @@ STATE_COPY: dict[RuntimeState, tuple[str, str, str, str, str]] = {
     RuntimeState.HUNG: ("后台无响应", "not responding", "后台服务核心循环没有推进。", "The daemon core loop has stopped making progress.", "penpal restart"),
     RuntimeState.OUTDATED: ("后台代码已过期", "daemon code is outdated", "后台服务仍在运行旧版本代码。", "The daemon is running outdated code.", "penpal restart"),
     RuntimeState.PAUSED: ("已暂停", "paused", "采集已暂停。", "Capture is paused.", "penpal resume"),
+    RuntimeState.SCHEMA_TOO_NEW: ("数据库版本过新", "database schema is too new", "数据库由更新版本的 Penpal 创建，当前版本不支持，请升级 Penpal。", "Database was created by a newer version of Penpal and is not supported by this version; please upgrade Penpal.", "brew upgrade longfellow1/penpal/penpal"),
 }
 _FAILED_STATES = frozenset({
-    RuntimeState.NOT_INSTALLED, RuntimeState.NOT_RUNNING, RuntimeState.HUNG, RuntimeState.OUTDATED,
+    RuntimeState.NOT_INSTALLED, RuntimeState.NOT_RUNNING, RuntimeState.HUNG, RuntimeState.OUTDATED, RuntimeState.SCHEMA_TOO_NEW,
 })
 
 
@@ -279,14 +288,11 @@ def _unrecorded_process_status(pid: int, started_at: str | None, now: datetime) 
 
 
 def _paused() -> bool:
-    from penpal.capture.capture_control import is_capture_paused
-    from penpal.store import db
+    from penpal.capture.capture_control import PAUSED_STATUS
+    from penpal.store.db import initialized_db_path, read_app_state
 
-    # evaluate() is the first call of every status entry point (doctor, hud status, the HUD, the watchdog),
-    # so it opens the configured DB itself instead of relying on the caller having done so.
-    if not db.is_initialized():
-        db.init_db(Config.load().db_path_expanded)
-    return is_capture_paused()
+    value = read_app_state(initialized_db_path() or Config.load().db_path_expanded, "status")
+    return (value or "").strip() == PAUSED_STATUS
 
 
 def _state_issue(state: RuntimeState) -> Issue | None:
@@ -457,12 +463,19 @@ def evaluate(
         hud_record_reader(), now=now, last_wake=last_wake, process_start_reader=process_start_time,
     )
     if identity.schema_is_newer_than_code:
-        state = RuntimeState.OUTDATED
-        issue = _state_issue(state)
+        state = RuntimeState.SCHEMA_TOO_NEW
+        rec = identity.database_schema_version
+        sup = identity.supported_schema_version
+        zh = f"数据库版本（v{rec}）高于当前 Penpal 支持的版本（v{sup}），请升级 Penpal。"
+        en = f"Database schema (v{rec}) is newer than supported by this Penpal (v{sup}); please upgrade Penpal."
+        issue = Issue("daemon", "error", zh, en, STATE_COPY[state][4], "后台服务", "Background service", code=f"daemon.{state.value}")
+        launchd = launchd_probe()
+        loaded = bool(launchd.get("loaded"))
         return _attach_hud(RuntimeStatus(
-            state, (issue,) if issue else (),
+            state, (issue,),
             pid=record.pid if record else None,
             generation=record.generation if record else None,
+            managed=loaded,
         ), hud_status, hud_issues)
     launchd = launchd_probe()
     loaded = bool(launchd.get("loaded"))
@@ -512,3 +525,40 @@ def evaluate(
     return _attach_hud(RuntimeStatus(
         state, issues, record.components, record.progress, record.pid, record.generation, loaded,
     ), hud_status, hud_issues)
+
+
+def write_schema_too_new_record(
+    db_path: Path,
+    *,
+    recorded_schema: int,
+    supported_schema: int = SCHEMA_VERSION,
+    pid: int | None = None,
+) -> None:
+    """Record schema_too_new state into the daemon runtime record."""
+    import uuid
+    from penpal import __version__
+    import os
+
+    current_pid = pid or os.getpid()
+    start_time = process_start_time(current_pid) or utc_now()
+    now_str = utc_now()
+    identity = loaded_identity()
+    record = RuntimeRecord(
+        generation=str(uuid.uuid4()),
+        pid=current_pid,
+        process_start_time=start_time,
+        version=__version__,
+        code_fingerprint=identity.code_fingerprint,
+        started_at=now_str,
+        written_at=now_str,
+        progress={},
+        components={
+            "storage": Component(
+                "storage_error",
+                f"schema_too_new: recorded={recorded_schema} supported={supported_schema}",
+            )
+        },
+        config_fingerprint=identity.config_fingerprint,
+        database_schema_version=recorded_schema,
+    )
+    write_record(record)

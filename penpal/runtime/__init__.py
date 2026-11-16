@@ -12,6 +12,7 @@ from penpal.runtime.evaluate import (
     state_message,
     state_text,
     watcher_recently_emitted,
+    write_schema_too_new_record,
 )
 from penpal.runtime.control import (
     ControlResult,
@@ -26,6 +27,6 @@ from penpal.runtime.control import (
 
 __all__ = [
     "ICON_OCCLUDED_HINT_ZH", "Issue", "HudStatus", "RuntimeState", "RuntimeStatus", "active_hud_pid", "evaluate", "launchd_label_loaded",
-    "state_message", "state_text", "watcher_recently_emitted",
+    "state_message", "state_text", "watcher_recently_emitted", "write_schema_too_new_record",
     "ControlResult", "find_legacy_hud_pids", "relaunch_hud", "restart_hud", "stop_legacy_huds", "start", "stop", "restart",
 ]
