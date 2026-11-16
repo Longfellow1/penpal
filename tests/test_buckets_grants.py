@@ -64,6 +64,23 @@ def test_source_defaults_and_unmapped_source_gets_no_bucket(db) -> None:
     assert _bucket_of(_ev("keyboard_chunk", "d")) == "Personal"  # capture stream, unknown app (D26)
 
 
+def test_unreadable_config_blocks_all_grants_until_rebucket(db, monkeypatch) -> None:
+    def unavailable():
+        raise OSError("synthetic configuration failure")
+
+    monkeypatch.setattr(Config, "load", unavailable)
+    event_id = _ev("clipboard", "synthetic privacy marker", app="sample")
+    assert _bucket_of(event_id) is None
+    cfg = Config()
+    cfg.buckets.app_defaults = {"sample": "Private"}
+    monkeypatch.setattr(Config, "load", lambda: cfg)
+    token = auth.create_grant("host", buckets=list(buckets.BUCKETS))
+    assert search(token, ["privacy marker"])["status"] == "no_results"
+    buckets.reapply_buckets(get_conn(), only_missing=True)
+    assert _bucket_of(event_id) == "Private"
+    assert search(token, ["privacy marker"])["status"] == "ok"
+
+
 def test_app_rule_routes_banking_app_to_financial_and_beats_source_default(db) -> None:
     insert_policy(Policy(scope_type="app", scope_value="Chase", mode=buckets.BUCKET_MODE,
                          config_json=json.dumps({"bucket": "Financial"}), priority=10))

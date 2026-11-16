@@ -94,6 +94,43 @@ def test_disk_full_gives_component_issue(monkeypatch):
     assert health["code"] == "running" and "disk is full" in health["message"]
 
 
+def test_storage_loss_is_reported_to_mcp(monkeypatch):
+    from penpal.foundation.runtime_record import Component
+    from penpal.runtime.evaluate import _component_issues
+
+    components = {"storage": Component("storage_error", "db_locked"),
+                  "storage_dropped_events": Component("storage_error", "3")}
+    issues = _component_issues(components)
+    monkeypatch.setattr(ch, "evaluate", lambda **_: RuntimeStatus(RuntimeState.RUNNING, issues, components))
+    monkeypatch.setattr(server, "current_capture_health", ch.current_capture_health)
+    health = server._result({"status": "ok"}).structuredContent["capture_health"]
+    assert health["code"] == "storage_error"
+    assert "3" in health["message"]
+
+
+def test_recovered_storage_reports_loss_without_claiming_current_failure(monkeypatch):
+    from penpal.foundation.runtime_record import Component
+    from penpal.runtime.evaluate import _component_issues
+
+    components = {"storage": Component("running"),
+                  "storage_dropped_events": Component("storage_error", "3")}
+    issues = _component_issues(components)
+    monkeypatch.setattr(ch, "evaluate", lambda **_: RuntimeStatus(RuntimeState.RUNNING, issues, components))
+    health = ch.compute_capture_health()
+    assert health["code"] == "storage_error"
+    assert "3" in health["message"]
+    assert "恢复" in health["message"] or "recovered" in health["message"]
+
+
+def test_server_health_adapter_exception_is_not_silent(monkeypatch):
+    def boom():
+        raise RuntimeError("synthetic error")
+
+    monkeypatch.setattr(server, "current_capture_health", boom)
+    health = server._result({"status": "ok"}).structuredContent["capture_health"]
+    assert health["code"] == "health_unknown"
+
+
 def test_missing_permission_for_enabled_source_gives_field(monkeypatch):
     from penpal.runtime.evaluate import Issue
     _runtime(monkeypatch, issues=(Issue("permission.accessibility", "warning", "ax_text 缺少系统权限。", "permission missing", "penpal doctor"),))
@@ -125,12 +162,14 @@ def test_mcp_adapter_evaluates_current_runtime_each_call(monkeypatch):
     assert len(calls) == 2
 
 
-def test_reader_failure_is_not_an_alarm(monkeypatch):
+def test_reader_failure_is_an_alarm(monkeypatch):
     def boom():
         raise RuntimeError("db gone")
 
     monkeypatch.setattr(ch, "compute_capture_health", boom)
-    assert ch.current_capture_health() is None
+    health = ch.current_capture_health()
+    assert health["code"] == "health_unknown"
+    assert "penpal doctor" in health["message"]
 
 
 def test_tool_descriptions_tell_hosts_to_relay():

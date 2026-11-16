@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import sqlite3
 import time
 import uuid
 from datetime import datetime, timezone
@@ -53,8 +54,16 @@ def set_runtime_component(manager, name: str, state: str, detail: str = "") -> N
 
 def _component_snapshot(manager) -> dict[str, Component]:
     components = dict(manager._runtime_components)
-    paused = is_capture_paused()
-    disabled = disabled_sources()
+    if manager._storage_error:
+        paused = manager._paused.is_set()
+        disabled = manager._disabled_applied
+    else:
+        try:
+            paused = is_capture_paused()
+            disabled = disabled_sources()
+        except sqlite3.Error:
+            paused = manager._paused.is_set()
+            disabled = manager._disabled_applied
     for name, watcher in manager._watchers.items():
         health = watcher.health()
         beat_at = health.get("last_beat_at")
@@ -90,10 +99,27 @@ def _component_snapshot(manager) -> dict[str, Component]:
         if manager._storage_error
         else Component("running")
     )
+    recovered = manager._storage_recovered_mono
+    if (
+        manager._storage_dropped and not manager._storage_error and recovered is not None
+        and time.monotonic() - recovered >= manager.DROPPED_NOTICE_SEC
+    ):
+        manager._storage_dropped = 0  # the loss notice has been visible long enough after recovery
+    components["storage_dropped_events"] = Component(
+        "storage_error" if manager._storage_dropped else "idle", str(manager._storage_dropped)
+    )
     components["core_loop"] = Component(
         "running" if manager._running.is_set() else "idle"
     )
     try:
+        if manager._storage_error:
+            previous = manager._runtime_record
+            if previous is not None:
+                components.update({
+                    name: component for name, component in previous.components.items()
+                    if name.startswith("permission.")
+                })
+            return components
         raw = get_state("daemon_permissions") or ""
         permission_snapshot = json.loads(raw) if raw else {}
         permission_sources = {
@@ -111,6 +137,8 @@ def _component_snapshot(manager) -> dict[str, Component]:
         pass
     except DatabaseSchemaTooNewError:
         logging.getLogger(__name__).warning("runtime permission snapshot skipped for a newer database schema")
+    except sqlite3.Error as exc:
+        logging.getLogger(__name__).warning("runtime permission snapshot unavailable: %s", type(exc).__name__)
     return components
 
 

@@ -5,7 +5,7 @@ category: decision
 status: active
 tags: [retention, data-lifecycle, storage, doctor]
 created: "2026-10-16T17:27:17"
-updated: "2026-10-16T17:27:17"
+updated: "2026-11-16T09:48:48"
 ---
 
 <!-- compiled_truth -->
@@ -49,4 +49,10 @@ Sequencing: independent of the Penpal rename (branch `rename/penpal`); whichever
   kind: decision
   summary: "Record D34 scope, evidence and acceptance"
   source: "user 2026-10-16; du on ~/.keypulse 2026-10-16"
+  affects: [data-footprint-limits]
+
+- time: 2026-11-16T09:48:48
+  kind: decision
+  summary: "2026-11-16 review P0-4: purge also deletes every pre-migration backup (backups are whole-DB snapshots, so purged data would survive in them); data dir 0700 and its files 0600; backup keep-count stays 2 by default"
+  source: architecture review 2026-11-16
   affects: [data-footprint-limits]

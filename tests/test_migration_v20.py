@@ -175,3 +175,51 @@ def test_v20_failure_rolls_back_to_v19_with_data_intact(tmp_path: Path, monkeypa
     run_migrations(conn)
     assert _version(conn) == SCHEMA_VERSION
     conn.close()
+
+
+def _stale_backups(tmp_path: Path) -> list[Path]:
+    old = []
+    for stamp in ("20250101T000000000000Z", "20250201T000000000000Z", "20250301T000000000000Z"):
+        p = tmp_path / f"penpal.db.v18-{stamp}.bak"
+        p.write_bytes(b"old snapshot")
+        old.append(p)
+    return old
+
+
+def test_successful_migration_keeps_only_the_newest_backups(tmp_path: Path) -> None:
+    from penpal.store.migrations import MIGRATION_BACKUPS_KEEP
+
+    db = tmp_path / "penpal.db"
+    _build_v19_db(db)
+    _stale_backups(tmp_path)
+    unrelated = tmp_path / "notes.bak"
+    unrelated.write_bytes(b"not ours")
+
+    conn = sqlite3.connect(db)
+    run_migrations(conn)
+    conn.close()
+
+    kept = sorted(tmp_path.glob("penpal.db.v*.bak"))
+    assert len(kept) == MIGRATION_BACKUPS_KEEP
+    assert any(p.name.startswith("penpal.db.v19-") for p in kept), "this run's backup is never pruned"
+    assert (tmp_path / "penpal.db.v18-20250301T000000000000Z.bak") in kept
+    assert unrelated.exists()
+    assert all((p.stat().st_mode & 0o777) == 0o600 for p in kept if p.name.startswith("penpal.db.v19-"))
+
+
+def test_failed_migration_prunes_nothing(tmp_path: Path, monkeypatch) -> None:
+    db = tmp_path / "penpal.db"
+    _build_v19_db(db)
+    old = _stale_backups(tmp_path)
+
+    def boom(_conn):
+        raise RuntimeError("synthetic failure")
+
+    monkeypatch.setattr("penpal.store.migrations.MIGRATIONS", [*MIGRATIONS[:19], boom, *MIGRATIONS[20:]])
+    conn = sqlite3.connect(db)
+    with pytest.raises(RuntimeError):
+        run_migrations(conn)
+    conn.close()
+
+    assert all(p.exists() for p in old)
+    assert len(list(tmp_path.glob("penpal.db.v19-*.bak"))) == 1

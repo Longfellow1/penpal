@@ -18,6 +18,7 @@ from penpal.capture.normalizer import (
     normalize_manual_event,
 )
 from penpal.config import Config
+from penpal.i18n import T
 from penpal.mcp import auth, tools
 from penpal.store import buckets
 from penpal.store.db import close, get_conn, init_db
@@ -341,3 +342,84 @@ def test_partially_emptied_session_is_rebuilt_without_deleted_text(seeded):
     purge_raw_events(app_name="Notes")
     row = get_conn().execute("SELECT event_count, primary_window_title, summary FROM sessions WHERE id = 'sess-mixed'").fetchone()
     assert tuple(row) == (1, "cursor editor", None)
+
+
+# ── upgrade backups go away with deleted data ───────────────────────────────────────────────
+def _backup_reason() -> str:
+    return T(
+        "备份是删除前的整库快照，仍含已删数据，已一并清除。",
+        "Backups are full-DB snapshots that can still hold deleted data; removed too.",
+    )
+
+
+def _backup_notice(count: int) -> str:
+    return T("已删除 {count} 份升级备份。", "Deleted {count} pre-migration backup(s).").format(count=count)
+
+
+@pytest.fixture
+def backups(seeded, tmp_path):
+    snapshots = []
+    for version, day, micros in ((18, "01", "000001"), (19, "02", "000002")):
+        path = tmp_path / f"kp.db.v{version}-202603{day}T000000{micros}Z.bak"
+        path.write_bytes(b"synthetic backup")
+        snapshots.append(path)
+    decoy = tmp_path / "kp.db.keep.bak"
+    decoy.write_bytes(b"synthetic backup")
+    return snapshots, decoy
+
+
+def test_cli_purge_deletes_all_backups_and_reports_count(cli_db, backups):
+    snapshots, decoy = backups
+
+    result = CliRunner().invoke(cli_module.main, ["purge", "--app", "Notes", "--confirm"])
+
+    assert result.exit_code == 0, result.output
+    assert _backup_notice(2) in result.output
+    assert _backup_reason() in result.output
+    assert all(not path.exists() for path in snapshots)
+    assert decoy.exists()
+
+
+def test_cli_source_purge_also_deletes_all_backups(cli_db, backups):
+    snapshots, decoy = backups
+
+    result = CliRunner().invoke(cli_module.main, ["purge", "--source", "clipboard", "--confirm"])
+
+    assert result.exit_code == 0, result.output
+    assert _backup_notice(2) in result.output
+    assert _backup_reason() in result.output
+    assert all(not path.exists() for path in snapshots)
+    assert decoy.exists()
+
+
+def test_cli_dry_run_declined_and_no_match_keep_backups(cli_db, backups):
+    snapshots, decoy = backups
+    calls = (
+        (["purge", "--app", "Notes", "--dry-run"], None),
+        (["purge", "--app", "Notes"], "n\n"),
+        (["purge", "--app", "Missing", "--confirm"], None),
+    )
+    for args, answer in calls:
+        result = CliRunner().invoke(cli_module.main, args, input=answer)
+        assert result.exit_code == 0, result.output
+        assert all(path.exists() for path in snapshots)
+        assert decoy.exists()
+
+
+def test_run_purge_deletes_backups_for_non_cli_callers(seeded, backups):
+    from penpal.services.purge import run_purge
+
+    snapshots, decoy = backups
+
+    run_purge({"app_name": "Notes"})
+
+    assert all(not path.exists() for path in snapshots)
+    assert decoy.exists()
+
+
+def test_cli_prompt_warns_that_backups_go_too(cli_db, backups):
+    result = CliRunner().invoke(cli_module.main, ["purge", "--app", "Notes"], input="n\n")
+    assert result.exit_code == 0, result.output
+    assert any(word in result.output for word in ("升级备份", "pre-migration backup")), result.output
+    snapshots, _decoy = backups
+    assert all(p.exists() for p in snapshots)

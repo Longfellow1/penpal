@@ -4,10 +4,12 @@ from __future__ import annotations
 
 import threading
 import time
+import sqlite3
 from datetime import datetime, timezone
 from typing import Callable, Optional
 
 from penpal.capture import manager_runtime
+from penpal.capture.manager_storage import _storage_error_code
 from penpal.capture.camera_monitor import CameraMonitor
 from penpal.capture.capture_control import disabled_sources, is_capture_paused
 from penpal.capture.wake import LAST_WAKE_STATE_KEY, detect_wake
@@ -281,8 +283,14 @@ def _restart_watchers_after_wake(manager) -> None:
 
 def _flush_loop(manager):
     while manager._running.is_set():
-        manager._sync_control_state()
-        manager._sync_source_switches()
+        try:
+            manager._sync_control_state()
+            manager._sync_source_switches()
+        except sqlite3.Error as exc:
+            manager._enter_storage_error(_storage_error_code(exc))
+            manager._storage_next_probe_mono = 0.0
+            time.sleep(manager.config.app.flush_interval_sec)
+            continue
         # Always drain: while paused or source-disabled, _process_event drops events at write time,
         # so nothing queued during a pause is replayed after resume.
         manager._drain_queue()

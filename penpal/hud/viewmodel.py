@@ -268,6 +268,7 @@ def alerts(snap: Snapshot) -> list[tuple[str, dict]]:
         out.append(("red", row(T("无法读取数据库", "Cannot read database"), dot="red", sub=T("运行 penpal doctor 查看详情", "Run penpal doctor for details"), sub_tone="red")))
     if status is not None and status.state in {
         RuntimeState.NOT_INSTALLED, RuntimeState.NOT_RUNNING, RuntimeState.HUNG, RuntimeState.OUTDATED,
+        RuntimeState.SCHEMA_TOO_NEW,
     }:
         code = f"daemon.{status.state.value}"
         fixable = is_fixable_in_hud(code)
@@ -285,6 +286,11 @@ def alerts(snap: Snapshot) -> list[tuple[str, dict]]:
             tone = "red" if issue.severity == "error" else "amber"
             message = issue.message_zh if current_lang() == "zh" else (issue.message_en or issue.message_zh)
             label = (issue.label_zh if current_lang() == "zh" else (issue.label_en or issue.label_zh)) or issue.component
+            if issue.component == "storage_dropped_events":
+                dropped = status.components.get("storage_dropped_events")
+                count = int(dropped.detail) if dropped and dropped.detail.isdecimal() else 0
+                message = T("有 {n} 条记录未保存。", "{n} events were not saved.").format(n=count)
+                label = T("采集记录丢失", "Capture events lost")
             fixable = is_fixable_in_hud(issue)
             code = getattr(issue, "code", "") or issue.component
             out.append((tone, row(
@@ -318,13 +324,15 @@ def status_bar(snap: Snapshot, ui: Optional[UiState] = None) -> dict:
     found = alerts(snap)
     reds = [t for t in found if t[0] == "red"]
     last = rel_time(snap.now, snap.last_write_ts)
-    label = state_text(status.state, language=current_lang()) if status is not None else T("未知", "Unknown")
+    label = state_text(status.state, language=current_lang()) if status is not None else T("状态未知", "Status unknown")
     if ui and ui.rechecked_at:
         if found:
             sub = T("已重新检测 {time} · {n} 个问题", "Rechecked {time} · {n} issue(s)").format(time=ui.rechecked_at, n=len(found))
-        else:
+        elif status is not None:
             sub = T("已重新检测 {time} · 正常", "Rechecked {time} · OK").format(time=ui.rechecked_at)
-        return {"code": status.code if status else "unknown", "tone": "red" if reds else "amber" if found else "ok", "text": label, "sub": sub}
+        else:
+            sub = T("无法确认采集状态", "Capture status could not be checked")
+        return {"code": status.code if status else "unknown", "tone": "red" if reds else "amber" if found or status is None else "ok", "text": label, "sub": sub}
     if reds:
         tail = T(" · {last}最后写入", " · Last wrote {last}").format(last=last) if last else ""
         sub = T("{n} 个问题", "{n} issue(s)").format(n=len(found)) + tail
@@ -332,6 +340,9 @@ def status_bar(snap: Snapshot, ui: Optional[UiState] = None) -> dict:
     if found:
         return {"code": status.code if status else "unknown", "tone": "amber", "text": label,
                 "sub": T("{n} 个问题需要处理", "{n} issue(s) need attention").format(n=len(found))}
+    if status is None:
+        return {"code": "unknown", "tone": "amber", "text": label,
+                "sub": T("无法确认采集状态", "Capture status could not be checked")}
     return {"code": status.code if status else "unknown", "tone": "ok", "text": label,
             "sub": T("一切正常 · {last}写入", "All normal · Wrote {last}").format(last=last) if last else T("一切正常 · 还没有记录", "All good · Nothing recorded yet")}
 

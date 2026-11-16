@@ -13,9 +13,23 @@ logger = get_logger("manager")
 
 
 def _is_disk_full(exc: BaseException) -> bool:
-    return isinstance(
-        exc, sqlite3.OperationalError
-    ) and "database or disk is full" in str(exc)
+    code = getattr(exc, "sqlite_errorcode", None)
+    return isinstance(exc, sqlite3.Error) and (
+        (isinstance(code, int) and code & 0xFF == sqlite3.SQLITE_FULL)
+        or "database or disk is full" in str(exc).lower()
+    )
+
+
+def _storage_error_code(exc: BaseException) -> str:
+    if _is_disk_full(exc):
+        return "disk_full"
+    code = getattr(exc, "sqlite_errorcode", None)
+    if isinstance(exc, sqlite3.OperationalError) and (
+        (isinstance(code, int) and code & 0xFF in (sqlite3.SQLITE_LOCKED, sqlite3.SQLITE_BUSY))
+        or "locked" in str(exc).lower() or "busy" in str(exc).lower()
+    ):
+        return "db_locked"
+    return "write_failed"
 
 
 def _storage_write_blocked(manager) -> bool:
@@ -25,39 +39,39 @@ def _storage_write_blocked(manager) -> bool:
     )
 
 
-def _enter_disk_full(manager) -> None:
+def _enter_storage_error(manager, reason: str) -> None:
     # Roll back the failed statement so the shared connection is not left mid-transaction.
     try:
         get_conn().rollback()
     except Exception as exc:
-        logger.debug("enter disk full failed: %s", type(exc).__name__)
+        logger.debug("storage rollback failed: %s", type(exc).__name__)
         pass
     if manager._storage_error is None:
         manager._storage_error_since = datetime.now(timezone.utc).isoformat()
-        logger.error(
-            "capture paused: database or disk is full; will probe again in %.0fs",
-            manager.DISK_FULL_PROBE_SEC,
-        )
-    manager._storage_error = "disk_full"
+        logger.error("capture storage error: %s", reason)
+    manager._storage_error = reason
     manager._storage_next_probe_mono = time.monotonic() + manager.DISK_FULL_PROBE_SEC
     manager._persist_storage_state()
 
 
-def _leave_disk_full(manager) -> None:
+def _leave_storage_error(manager) -> None:
     if manager._storage_error is None:
         return
     logger.info(
-        "capture storage writes recovered after disk_full (dropped %d events)",
+        "capture storage writes recovered (dropped %d events)",
         manager._storage_dropped,
     )
     manager._storage_error = None
     manager._storage_error_since = None
+    manager._storage_recovered_mono = time.monotonic()
     manager._persist_storage_state()
 
 
 def _persist_storage_state(manager) -> None:
-    # The flush loop publishes this state; a full database may not accept another write.
-    return
+    try:
+        manager._write_runtime_record(force=True)
+    except Exception as exc:
+        logger.error("capture runtime state not persisted: %s", type(exc).__name__)
 
 
 def _storage_status(manager) -> dict:

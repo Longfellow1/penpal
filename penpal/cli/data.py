@@ -49,7 +49,7 @@ def purge(today, last_hours, app, source, dry_run, confirm):
     cfg = get_config()
     require_db(cfg)
 
-    from penpal.services.purge import purge_selector, run_purge
+    from penpal.services.purge import pending_backup_count, purge_selector, run_purge
 
     selector = purge_selector(today=today, last_hours=last_hours, app=app, source=source)
     if selector is None:
@@ -74,14 +74,32 @@ def purge(today, last_hours, app, source, dry_run, confirm):
         if source:
             msg += f" from source {source}"
         msg += " and their derived data?"
+        backups = pending_backup_count()
+        if backups:
+            msg += " " + T(
+                "（同时会删除全部 {count} 份升级备份：备份是整库快照，含这些数据。）",
+                "(All {count} pre-migration backup(s) are deleted too: they are full-DB snapshots holding this data.)",
+            ).format(count=backups)
         if not click.confirm(msg):
             console.print("[yellow]Cancelled.[/yellow]")
             return
 
+    removed_backups = pending_backup_count()
     counts = run_purge(selector)
     console.print("[green]Deleted:[/green]")
     for name, n in counts.items():
         console.print(f"  {name}: {n}")
+    console.print(
+        T("已删除 {count} 份升级备份。", "Deleted {count} pre-migration backup(s).").format(
+            count=removed_backups
+        ),
+        soft_wrap=True,
+    )
+    console.print(
+        T("备份是删除前的整库快照，仍含已删数据，已一并清除。",
+          "Backups are full-DB snapshots that can still hold deleted data; removed too."),
+        soft_wrap=True,
+    )
     if source:
         console.print(T("提示：这只删除 Penpal 里的副本，原始文件不受影响；若不想再导入，请用 `penpal source disable` 停用该来源。",
                         "Note: only Penpal's copy is deleted, the original file is untouched; to stop re-importing it, disable the source."))
