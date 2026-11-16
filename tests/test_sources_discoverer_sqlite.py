@@ -3,6 +3,8 @@ from __future__ import annotations
 import sqlite3
 from pathlib import Path
 
+import pytest
+
 from penpal.sources.discoverers.sqlite import discover_sqlite_candidates
 
 
@@ -141,3 +143,29 @@ def test_discover_sqlite_candidates_honors_depth_limit(monkeypatch, tmp_path: Pa
     candidates = discover_sqlite_candidates(exclude_paths=set())
 
     assert candidates == []
+
+
+def test_schema_probes_open_third_party_databases_read_only(tmp_path: Path) -> None:
+    from penpal.sources.discoverers import sqlite as discoverer
+
+    db = tmp_path / "app.sqlite"
+    _make_db(db, ["messages"])
+    before = sorted(p.name for p in tmp_path.iterdir()), db.stat().st_mtime_ns, db.read_bytes()
+
+    assert discoverer._read_table_names(db) == ["messages"]
+    assert discoverer._read_table_columns(db, ["messages"]) == {"id"}
+    assert discoverer._read_table_defs(db, ["messages"])
+
+    after = sorted(p.name for p in tmp_path.iterdir()), db.stat().st_mtime_ns, db.read_bytes()
+    assert after == before, "probing must not write, journal or touch the third-party file"
+
+    conn = discoverer._connect_read_only(db)
+    try:
+        with pytest.raises(sqlite3.OperationalError):
+            conn.execute("CREATE TABLE intruder(x)")
+    finally:
+        conn.close()
+
+    missing = tmp_path / "missing.sqlite"
+    assert discoverer._read_table_names(missing) == []
+    assert not missing.exists(), "a read-only probe must never create a database"

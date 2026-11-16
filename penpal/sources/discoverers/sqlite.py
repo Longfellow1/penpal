@@ -155,11 +155,17 @@ def _is_sqlite_file(path: Path) -> bool:
     return header == _SQLITE_MAGIC
 
 
+def _connect_read_only(path: Path) -> sqlite3.Connection:
+    """Open a third-party database read-only: never create it, never write journals or recover it."""
+    conn = sqlite3.connect(f"{path.resolve().as_uri()}?mode=ro", uri=True, timeout=0.2)
+    conn.execute("PRAGMA query_only=ON")
+    return conn
+
+
 def _read_table_names(path: Path) -> list[str]:
     conn: sqlite3.Connection | None = None
     try:
-        conn = sqlite3.connect(str(path), uri=False)
-        conn.execute("PRAGMA query_only=ON")
+        conn = _connect_read_only(path)
         rows = conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()
     except Exception:
         return []
@@ -181,8 +187,7 @@ def _read_table_columns(path: Path, tables: list[str]) -> set[str]:
     conn: sqlite3.Connection | None = None
     columns: set[str] = set()
     try:
-        conn = sqlite3.connect(str(path), uri=False)
-        conn.execute("PRAGMA query_only=ON")
+        conn = _connect_read_only(path)
         for table in tables:
             try:
                 rows = conn.execute(f'PRAGMA table_info("{table}")').fetchall()
@@ -207,8 +212,7 @@ def _read_table_defs(path: Path, tables: list[str]) -> dict[str, list[tuple[str,
     conn: sqlite3.Connection | None = None
     result: dict[str, list[tuple[str, str]]] = {}
     try:
-        conn = sqlite3.connect(str(path), uri=False)
-        conn.execute("PRAGMA query_only=ON")
+        conn = _connect_read_only(path)
         for table in tables:
             rows = conn.execute(f'PRAGMA table_info("{table}")').fetchall()
             pairs: list[tuple[str, str]] = []
