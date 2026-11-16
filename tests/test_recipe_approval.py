@@ -189,3 +189,10 @@ def test_recipes_lists_pending_proposals_after_existing(tmp_path: Path, monkeypa
         ]
     finally:
         close()
+
+
+def test_recipe_id_with_trailing_newline_is_rejected():
+    from penpal.sources.recipes.catalog import parse_recipe_dict
+
+    with pytest.raises(ValueError):
+        parse_recipe_dict({"id": "orbit\n"}, origin="<test>")
