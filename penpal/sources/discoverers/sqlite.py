@@ -157,7 +157,18 @@ def _is_sqlite_file(path: Path) -> bool:
 
 def _connect_read_only(path: Path) -> sqlite3.Connection:
     """Open a third-party database read-only: never create it, never write journals or recover it."""
-    conn = sqlite3.connect(f"{path.resolve().as_uri()}?mode=ro", uri=True, timeout=0.2)
+    uri = f"{path.resolve().as_uri()}?mode=ro"
+    conn: sqlite3.Connection | None = None
+    try:
+        conn = sqlite3.connect(uri, uri=True, timeout=0.2)
+        conn.execute("SELECT 1 FROM sqlite_master LIMIT 1")
+    except sqlite3.OperationalError:
+        # A WAL database whose -shm cannot be created (closed app, protected folder): read the file as-is.
+        if conn is not None:
+            conn.close()
+        if not path.is_file():
+            raise
+        conn = sqlite3.connect(uri + "&immutable=1", uri=True, timeout=0.2)
     conn.execute("PRAGMA query_only=ON")
     return conn
 

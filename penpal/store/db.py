@@ -113,6 +113,18 @@ def read_app_state(db_path: Path, key: str) -> str | None:
             conn.close()
 
 
+def _raise_if_schema_too_new(conn: sqlite3.Connection) -> None:
+    exists = conn.execute(
+        "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = '_schema_version'"
+    ).fetchone()
+    if exists is None:
+        return
+    row = conn.execute("SELECT MAX(version) FROM _schema_version").fetchone()
+    recorded = int(row[0] or 0) if row else 0
+    if recorded > SCHEMA_VERSION:
+        raise DatabaseSchemaTooNewError(recorded)
+
+
 def init_db(db_path: Path):
     global _db_path
     target = Path(db_path)
@@ -126,7 +138,11 @@ def init_db(db_path: Path):
             _local.conn.close()
             _local.conn = None
         _db_path = target
-        run_migrations(_get_conn())
+        conn = _get_conn()
+        if recorded_schema is None:
+            # The read-only probe failed (e.g. no -shm yet); re-check on the write connection before migrating.
+            _raise_if_schema_too_new(conn)
+        run_migrations(conn)
 
 
 def is_initialized() -> bool:

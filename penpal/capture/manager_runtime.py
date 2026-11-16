@@ -99,6 +99,12 @@ def _component_snapshot(manager) -> dict[str, Component]:
         if manager._storage_error
         else Component("running")
     )
+    recovered = manager._storage_recovered_mono
+    if (
+        manager._storage_dropped and not manager._storage_error and recovered is not None
+        and time.monotonic() - recovered >= manager.DROPPED_NOTICE_SEC
+    ):
+        manager._storage_dropped = 0  # the loss notice has been visible long enough after recovery
     components["storage_dropped_events"] = Component(
         "storage_error" if manager._storage_dropped else "idle", str(manager._storage_dropped)
     )

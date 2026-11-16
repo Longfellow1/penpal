@@ -63,6 +63,7 @@ def _leave_storage_error(manager) -> None:
     )
     manager._storage_error = None
     manager._storage_error_since = None
+    manager._storage_recovered_mono = time.monotonic()
     manager._persist_storage_state()
 
 

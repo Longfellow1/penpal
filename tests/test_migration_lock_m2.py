@@ -304,3 +304,17 @@ def test_mcp_new_schema_exits_one_with_bilingual_upgrade_message(monkeypatch, la
     result = CliRunner().invoke(cli.mcp_group, ["serve"])
     assert result.exit_code == 1
     assert expected in result.output
+
+
+def test_unreadable_version_probe_does_not_bypass_the_too_new_check(tmp_path, monkeypatch):
+    path = tmp_path / "penpal.db"
+    conn = sqlite3.connect(path)
+    conn.execute("CREATE TABLE _schema_version (version INTEGER NOT NULL, applied_at TEXT NOT NULL)")
+    conn.execute("INSERT INTO _schema_version VALUES (?, 'future')", (migrations.SCHEMA_VERSION + 1,))
+    conn.commit()
+    conn.close()
+    monkeypatch.setattr(db, "read_schema_version", lambda _p: None)  # e.g. the read-only open failed
+    db.close()
+    with pytest.raises(db.DatabaseSchemaTooNewError):
+        db.init_db(path)
+    db.close()

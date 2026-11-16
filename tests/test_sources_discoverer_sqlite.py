@@ -169,3 +169,23 @@ def test_schema_probes_open_third_party_databases_read_only(tmp_path: Path) -> N
     missing = tmp_path / "missing.sqlite"
     assert discoverer._read_table_names(missing) == []
     assert not missing.exists(), "a read-only probe must never create a database"
+
+
+def test_read_only_probe_falls_back_when_the_plain_open_fails(tmp_path: Path, monkeypatch) -> None:
+    from penpal.sources.discoverers import sqlite as discoverer
+
+    db = tmp_path / "app.sqlite"
+    _make_db(db, ["messages"])
+    real_connect = sqlite3.connect
+    seen = []
+
+    def connect(target, *args, **kwargs):
+        seen.append(target)
+        if "immutable=1" in target:
+            return real_connect(target, *args, **kwargs)
+        # Simulate the plain read-only open failing (as it does when the -shm cannot be created).
+        return real_connect(f"{(tmp_path / 'missing.sqlite').resolve().as_uri()}?mode=ro", *args, **kwargs)
+
+    monkeypatch.setattr(discoverer.sqlite3, "connect", connect)
+    assert discoverer._read_table_names(db) == ["messages"]
+    assert any("immutable=1" in uri for uri in seen)

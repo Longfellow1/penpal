@@ -78,3 +78,28 @@ def test_list_backups_returns_empty_for_missing_parent_and_negative_keep_is_refu
     assert list_backups(tmp_path / "missing" / "penpal.db") == []
     with pytest.raises(ValueError):
         prune_backups(tmp_path / "penpal.db", keep=-1)
+
+
+def test_failed_backup_leaves_no_partial_file(tmp_path):
+    import sqlite3 as _sqlite3
+
+    import pytest as _pytest
+
+    from penpal.store.backups import list_backups, write_pre_migration_backup
+
+    db = tmp_path / "penpal.db"
+    real = _sqlite3.connect(db)
+    real.execute("CREATE TABLE t(x)")
+    real.commit()
+
+    class FailingConn:
+        def execute(self, *args):
+            return real.execute(*args)
+
+        def backup(self, _dst):
+            raise _sqlite3.OperationalError("database or disk is full")
+
+    with _pytest.raises(_sqlite3.OperationalError):
+        write_pre_migration_backup(FailingConn(), 19)
+    real.close()
+    assert list_backups(db) == []

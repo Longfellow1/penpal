@@ -283,3 +283,41 @@ def test_state_write_failure_during_disk_full_does_not_raise(mgr, monkeypatch) -
 
     mgr._process_event(_event(1))  # insert fails, state write fails too: still no exception
     assert mgr._storage_error == "disk_full"
+
+
+def test_lock_error_after_a_full_busy_wait_is_not_retried(mgr, monkeypatch) -> None:
+    attempts = []
+
+    def locked(event):
+        attempts.append(1)
+        raise sqlite3.OperationalError("database is locked")
+
+    monkeypatch.setattr(event_module, "insert_raw_event", locked)
+    monkeypatch.setattr(event_module.time, "sleep", lambda _: None)
+    mgr.STORAGE_RETRY_MAX_WAITED_SEC = 0.0  # every attempt counts as having waited out the busy timeout
+    mgr._process_event(_event(1))
+    assert len(attempts) == 1, "retrying after a full busy wait would multiply the stall"
+    assert mgr._storage_dropped == 1
+
+
+def test_lost_events_notice_clears_some_time_after_recovery(mgr, monkeypatch) -> None:
+    real_insert = event_module.insert_raw_event
+    full = {"on": True}
+
+    def flaky(event):
+        if full["on"]:
+            raise FULL
+        return real_insert(event)
+
+    monkeypatch.setattr(event_module, "insert_raw_event", flaky)
+    mgr.DISK_FULL_PROBE_SEC = 0.0
+    mgr._process_event(_event(1))
+    full["on"] = False
+    mgr._process_event(_event(2))
+    mgr._write_runtime_record(force=True)
+    assert read_record().components["storage_dropped_events"].detail == "1"  # visible right after recovery
+
+    mgr.DROPPED_NOTICE_SEC = 0.0
+    mgr._write_runtime_record(force=True)
+    assert read_record().components["storage_dropped_events"].detail == "0"
+    assert CaptureStorageCapability().monitor().ok

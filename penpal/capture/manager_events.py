@@ -193,15 +193,26 @@ def _handle_event_failure(manager, event: RawEvent, exc: Exception) -> None:
 
 
 def _retry_storage_call(manager, operation, *args):
+    """Retry a lock error SQLite returned at once (e.g. a deadlock-avoidance BUSY).
+
+    A lock error that arrives after the connection's own busy timeout already waited is not retried:
+    retrying would multiply that wait and stall the capture loop.
+    """
     retrying = False
     for attempt in range(len(manager.STORAGE_RETRY_DELAYS) + 1):
+        started = time.monotonic()
         try:
             result = operation(*args)
             if retrying:
-                manager._storage_next_probe_mono = 0.0
+                manager._leave_storage_error()
             return result
         except Exception as exc:
-            if _storage_error_code(exc) != "db_locked" or attempt == len(manager.STORAGE_RETRY_DELAYS):
+            waited = time.monotonic() - started
+            if (
+                _storage_error_code(exc) != "db_locked"
+                or attempt == len(manager.STORAGE_RETRY_DELAYS)
+                or waited >= manager.STORAGE_RETRY_MAX_WAITED_SEC
+            ):
                 raise
             retrying = True
             manager._enter_storage_error("db_locked")

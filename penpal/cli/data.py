@@ -74,6 +74,12 @@ def purge(today, last_hours, app, source, dry_run, confirm):
         if source:
             msg += f" from source {source}"
         msg += " and their derived data?"
+        backups = pending_backup_count()
+        if backups:
+            msg += " " + T(
+                "（同时会删除全部 {count} 份升级备份：备份是整库快照，含这些数据。）",
+                "(All {count} pre-migration backup(s) are deleted too: they are full-DB snapshots holding this data.)",
+            ).format(count=backups)
         if not click.confirm(msg):
             console.print("[yellow]Cancelled.[/yellow]")
             return

@@ -414,3 +414,11 @@ def test_run_purge_deletes_backups_for_non_cli_callers(seeded, backups):
 
     assert all(not path.exists() for path in snapshots)
     assert decoy.exists()
+
+
+def test_cli_prompt_warns_that_backups_go_too(cli_db, backups):
+    result = CliRunner().invoke(cli_module.main, ["purge", "--app", "Notes"], input="n\n")
+    assert result.exit_code == 0, result.output
+    assert any(word in result.output for word in ("升级备份", "pre-migration backup")), result.output
+    snapshots, _decoy = backups
+    assert all(p.exists() for p in snapshots)

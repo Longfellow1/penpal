@@ -34,12 +34,17 @@ def write_pre_migration_backup(conn: sqlite3.Connection, current_version: int) -
     target = path.with_name(f"{path.name}.v{current_version}-{stamp}.bak")
     # Create the file owner-only first so the snapshot is never readable by others, even briefly.
     os.close(os.open(target, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600))
-    dst = sqlite3.connect(str(target))
     try:
-        # sqlite3 online backup API: consistent even with WAL contents pending.
-        conn.backup(dst)
-    finally:
-        dst.close()
+        dst = sqlite3.connect(str(target))
+        try:
+            # sqlite3 online backup API: consistent even with WAL contents pending.
+            conn.backup(dst)
+        finally:
+            dst.close()
+    except BaseException:
+        # A half-written backup must not count toward the kept backups and push out a good one.
+        target.unlink(missing_ok=True)
+        raise
     LOGGER.info("db backup written before migration: %s", target.name)
     return target
 
