@@ -266,21 +266,15 @@ def _db_file(conn: sqlite3.Connection) -> Path | None:
     return None
 
 
+# D34: keep the newest pre-migration backups only; the one taken for this run is always the newest.
+MIGRATION_BACKUPS_KEEP = 2
+
+
 def _backup_before_migration(conn: sqlite3.Connection, current: int) -> Path | None:
     """Copy an existing non-empty DB next to itself before schema changes."""
-    path = _db_file(conn)
-    if path is None or not path.exists() or path.stat().st_size == 0:
-        return None
-    stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
-    target = path.with_name(f"{path.name}.v{current}-{stamp}.bak")
-    # sqlite3 online backup API: consistent even with WAL contents pending.
-    dst = sqlite3.connect(str(target))
-    try:
-        conn.backup(dst)
-    finally:
-        dst.close()
-    LOGGER.info("db backup written before migration: %s", target.name)
-    return target
+    from penpal.store.backups import write_pre_migration_backup
+
+    return write_pre_migration_backup(conn, current)
 
 
 def run_migrations(conn: sqlite3.Connection):
@@ -295,8 +289,7 @@ def run_migrations(conn: sqlite3.Connection):
     conn.commit()
     row = conn.execute("SELECT MAX(version) FROM _schema_version").fetchone()
     current = row[0] if row[0] is not None else 0
-    if 0 < current < len(MIGRATIONS):
-        _backup_before_migration(conn, current)
+    backup = _backup_before_migration(conn, current) if 0 < current < len(MIGRATIONS) else None
     for i, step in enumerate(MIGRATIONS, start=1):
         if i <= current:
             continue
@@ -309,6 +302,17 @@ def run_migrations(conn: sqlite3.Connection):
             (i, datetime.now(timezone.utc).isoformat())
         )
         conn.commit()
+
+    if backup is not None:
+        # Only after every step committed: a failed migration keeps all backups for recovery.
+        from penpal.store.backups import prune_backups
+
+        try:
+            db_file = _db_file(conn)
+            if db_file is not None:
+                prune_backups(db_file, keep=MIGRATION_BACKUPS_KEEP)
+        except OSError as exc:
+            LOGGER.warning("pruning old migration backups failed: %s", type(exc).__name__)
 
 
 def _apply_transactional(conn: sqlite3.Connection, version: int, step) -> None:

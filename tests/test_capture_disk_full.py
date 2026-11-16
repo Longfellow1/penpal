@@ -106,7 +106,7 @@ def test_disk_full_stops_writes_and_reports_error(mgr, monkeypatch) -> None:
     assert not state.ok and state.code == DISK_FULL_CODE
     signal = cap.diagnose(state)
     assert signal.level == "err"
-    assert "磁盘已满" in (signal.hint or "")
+    assert any(word in (signal.hint or "") for word in ("磁盘已满", "Disk is full"))  # hint follows the UI language
     assert "kubectl" not in storage.detail
 
 
@@ -137,17 +137,138 @@ def test_capture_resumes_after_space_is_back(mgr, monkeypatch) -> None:
     mgr.report_progress("core_loop")
     mgr._write_runtime_record(force=True)
     assert _runtime_storage().state == "running"
-    assert CaptureStorageCapability().monitor().ok
+    recovered = CaptureStorageCapability().monitor()
+    assert not recovered.ok
+    assert "2" in recovered.detail
 
 
-def test_other_operational_errors_still_raise(mgr, monkeypatch) -> None:
+def test_locked_capture_gate_retries_without_losing_event(mgr, monkeypatch):
+    real_gate = event_module.source_writes_allowed
+    attempts = []
+
+    def locked_then_gate(source):
+        attempts.append(1)
+        if len(attempts) == 1:
+            raise sqlite3.OperationalError("database is locked")
+        return real_gate(source)
+
+    monkeypatch.setattr(event_module, "source_writes_allowed", locked_then_gate)
+    monkeypatch.setattr(event_module.time, "sleep", lambda _: None)
+    mgr._queue.put(_event(1))
+    mgr._drain_queue()
+    assert len(attempts) == 2
+    assert _row_count() == 1
+    assert mgr._storage_dropped == 0
+
+
+def test_locked_write_recovers_without_losing_event(mgr, monkeypatch) -> None:
+    real_insert = event_module.insert_raw_event
+    attempts = []
+
+    def locked_then_write(event):
+        attempts.append(1)
+        if len(attempts) < 3:
+            raise sqlite3.OperationalError("database is locked")
+        return real_insert(event)
+
+    monkeypatch.setattr(event_module, "insert_raw_event", locked_then_write)
+    monkeypatch.setattr(event_module.time, "sleep", lambda _: None)
+    mgr._queue.put(_event(1))
+    mgr._drain_queue()
+    assert len(attempts) == 3
+    assert _row_count() == 1
+    assert mgr._storage_error is None
+    assert mgr._storage_dropped == 0
+
+
+def test_locked_retry_exhausted_counts_drops(mgr, monkeypatch) -> None:
     def locked(event):
         raise sqlite3.OperationalError("database is locked")
 
     monkeypatch.setattr(event_module, "insert_raw_event", locked)
-    with pytest.raises(sqlite3.OperationalError, match="locked"):
-        mgr._process_event(_event(1))
-    assert mgr._storage_error is None
+    monkeypatch.setattr(event_module.time, "sleep", lambda _: None)
+    mgr._queue.put(_event(1))
+    mgr._queue.put(_event(2))
+    mgr._drain_queue()
+    assert _row_count() == 0
+    assert mgr._storage_error == "db_locked"
+    assert mgr._storage_dropped == 2
+    mgr._write_runtime_record(force=True)
+    record = read_record()
+    assert record.components["storage"].state == "storage_error"
+    assert record.components["storage_dropped_events"].detail == "2"
+
+
+def test_non_lock_write_error_is_counted_without_leaking_message(mgr, monkeypatch, caplog):
+    def broken(event):
+        raise sqlite3.OperationalError("synthetic sensitive text")
+
+    monkeypatch.setattr(event_module, "insert_raw_event", broken)
+    mgr._queue.put(_event(1))
+    mgr._drain_queue()
+    assert mgr._storage_error == "write_failed"
+    assert mgr._storage_dropped == 1
+    assert "synthetic sensitive text" not in caplog.text
+
+
+def test_index_failure_does_not_count_saved_raw_event_as_lost(mgr, monkeypatch):
+    def broken(*args):
+        raise sqlite3.OperationalError("synthetic failure")
+
+    monkeypatch.setattr(event_module, "insert_search_doc", broken)
+    mgr._queue.put(_event(1))
+    mgr._drain_queue()
+    assert _row_count() == 1
+    assert mgr._storage_error == "write_failed"
+    assert mgr._storage_dropped == 0
+
+
+def test_runtime_record_stays_writable_when_database_reads_fail(mgr, monkeypatch):
+    from penpal.capture import manager_runtime
+
+    def locked(*args):
+        raise sqlite3.OperationalError("database is locked")
+
+    monkeypatch.setattr(manager_runtime, "is_capture_paused", locked)
+    monkeypatch.setattr(manager_runtime, "get_state", locked)
+    mgr._storage_error = "db_locked"
+    mgr._storage_dropped = 3
+    mgr._write_runtime_record(force=True)
+    assert read_record().components["storage_dropped_events"].detail == "3"
+
+
+def test_locked_control_read_keeps_queue_for_next_loop(mgr, monkeypatch):
+    from penpal.capture import manager_lifecycle
+
+    def locked():
+        raise sqlite3.OperationalError("database is locked")
+
+    mgr._queue.put(_event(1))
+    mgr._running.set()
+    monkeypatch.setattr(mgr, "_sync_control_state", locked)
+    monkeypatch.setattr(manager_lifecycle.time, "sleep", lambda _: mgr._running.clear())
+    before = mgr._runtime_progress["core_loop"].seq
+    mgr._flush_loop()
+    assert mgr._queue.qsize() == 1
+    assert mgr._runtime_progress["core_loop"].seq == before
+    assert mgr._storage_error == "db_locked"
+    assert mgr._storage_dropped == 0
+
+
+def test_window_session_processing_failure_is_counted(mgr, monkeypatch):
+    class Watcher:
+        def flush_current_session(self, **kwargs):
+            return _event(1)
+
+    def fail(_event):
+        raise sqlite3.OperationalError("synthetic failure")
+
+    monkeypatch.setitem(mgr._watchers, "window", Watcher())
+    monkeypatch.setattr(mgr, "_process_event", fail)
+    monkeypatch.setattr(mgr, "_persist_storage_state", lambda: None)
+    mgr._flush_window_session(reason="watcher_stop")
+    assert mgr._storage_error == "write_failed"
+    assert mgr._storage_dropped == 1
 
 
 def test_state_write_failure_during_disk_full_does_not_raise(mgr, monkeypatch) -> None:
@@ -162,3 +283,41 @@ def test_state_write_failure_during_disk_full_does_not_raise(mgr, monkeypatch) -
 
     mgr._process_event(_event(1))  # insert fails, state write fails too: still no exception
     assert mgr._storage_error == "disk_full"
+
+
+def test_lock_error_after_a_full_busy_wait_is_not_retried(mgr, monkeypatch) -> None:
+    attempts = []
+
+    def locked(event):
+        attempts.append(1)
+        raise sqlite3.OperationalError("database is locked")
+
+    monkeypatch.setattr(event_module, "insert_raw_event", locked)
+    monkeypatch.setattr(event_module.time, "sleep", lambda _: None)
+    mgr.STORAGE_RETRY_MAX_WAITED_SEC = 0.0  # every attempt counts as having waited out the busy timeout
+    mgr._process_event(_event(1))
+    assert len(attempts) == 1, "retrying after a full busy wait would multiply the stall"
+    assert mgr._storage_dropped == 1
+
+
+def test_lost_events_notice_clears_some_time_after_recovery(mgr, monkeypatch) -> None:
+    real_insert = event_module.insert_raw_event
+    full = {"on": True}
+
+    def flaky(event):
+        if full["on"]:
+            raise FULL
+        return real_insert(event)
+
+    monkeypatch.setattr(event_module, "insert_raw_event", flaky)
+    mgr.DISK_FULL_PROBE_SEC = 0.0
+    mgr._process_event(_event(1))
+    full["on"] = False
+    mgr._process_event(_event(2))
+    mgr._write_runtime_record(force=True)
+    assert read_record().components["storage_dropped_events"].detail == "1"  # visible right after recovery
+
+    mgr.DROPPED_NOTICE_SEC = 0.0
+    mgr._write_runtime_record(force=True)
+    assert read_record().components["storage_dropped_events"].detail == "0"
+    assert CaptureStorageCapability().monitor().ok

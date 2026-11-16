@@ -109,6 +109,27 @@ def test_overview_normal():
     assert not any(s.get("header") == "需要处理" for s in m["sections"])
 
 
+def test_unknown_runtime_status_is_not_green():
+    from penpal.hud.viewmodel import status_bar
+
+    status = status_bar(snap(runtime_status=None), UiState(rechecked_at="12:00"))
+    assert status["tone"] == "amber"
+    assert status["text"] == T("状态未知", "Status unknown")
+    assert status["sub"] == T("无法确认采集状态", "Capture status could not be checked")
+
+
+def test_storage_loss_is_visible_and_not_green():
+    from penpal.hud.viewmodel import alerts, status_bar
+    from penpal.runtime.evaluate import _component_issues
+
+    components = {"storage": Component("storage_error", "db_locked"),
+                  "storage_dropped_events": Component("storage_error", "3")}
+    issues = _component_issues(components)
+    snapshot = snap(runtime_status=RuntimeStatus(RuntimeState.RUNNING, issues, components))
+    assert status_bar(snapshot)["tone"] == "red"
+    assert any("3" in item["sub"] for _, item in alerts(snapshot))
+
+
 def test_overview_source_needs_attention():
     srcs = _sources(safari_history={"unavailable_reason": "permission_denied", "last_ts": _ago(days=2)})
     m = build_model(snap(sources=srcs), UiState())
@@ -473,3 +494,17 @@ def test_all_pages_follow_the_v3_component_rules():
                 assert r["sub_tone"] in {None, "amber", "red"} and r["title_tone"] in {None, "red"}
         # at most two levels: a page is either a tab home or one step below it
         assert ":" not in m["view"]["page"].split(":", 1)[-1] or m["view"]["page"].startswith(("group:", "host:", "perm:"))
+
+
+def test_schema_too_new_is_red_and_asks_to_upgrade_without_a_restart_button():
+    from penpal.hud.viewmodel import alerts, status_bar
+
+    status = RuntimeStatus(RuntimeState.SCHEMA_TOO_NEW)
+
+    found = alerts(snap(runtime_status=status))
+    assert found and found[0][0] == "red"
+    row = found[0][1]
+    text = json.dumps(row, ensure_ascii=False)
+    assert "升级" in text or "upgrade" in text.lower()
+    assert row.get("action") != "daemon.restart"
+    assert status_bar(snap(runtime_status=status))["tone"] == "red"

@@ -95,7 +95,7 @@ def test_r1_state_matrix(monkeypatch, record_kind, launchd_state, progress, fing
     )
 
     if schema_state == "newer":
-        expected = RuntimeState.OUTDATED
+        expected = RuntimeState.SCHEMA_TOO_NEW
     elif record is None:
         expected = RuntimeState.HUNG if loaded else RuntimeState.NOT_RUNNING
     elif launchd_state == "pid_mismatch":
