@@ -19,9 +19,12 @@ main.add_command(sources_group, name="source")  # issue #28 spelling: `penpal so
 _RECIPE_ID_RE = re.compile(r"[a-z0-9_-]+")
 
 
-def _validate_recipe_id(recipe_id: str) -> None:
+def _proposal_path(recipe_id: str) -> Path | None:
+    """The pending proposal for a recipe id, or None (candidate ids of `sources discover` use other shapes)."""
     if not _RECIPE_ID_RE.fullmatch(recipe_id):
-        raise click.ClickException(T(f"无效的配方 ID：{recipe_id}", f"Invalid recipe id: {recipe_id}"))
+        return None
+    path = get_data_dir() / "catalog" / f"{recipe_id}.proposed"
+    return path if path.is_file() else None
 
 
 @sources_group.command("propose")
@@ -65,11 +68,9 @@ _previous_reject = sources_group.commands["reject"]
 @click.pass_context
 def approve_command(ctx: click.Context, id: str, yes: bool, note: str) -> None:
     """Approve and enable a pending recipe proposal or discovered source."""
-    _validate_recipe_id(id)
-    proposed = get_data_dir() / "catalog" / f"{id}.proposed"
-    if not proposed.is_file():
-        if yes:
-            raise click.ClickException(T(f"未找到待批准的配方：{id}", f"No pending proposal for recipe: {id}"))
+    proposed = _proposal_path(id)
+    if proposed is None:
+        # Not a pending recipe: fall back to approving a discovered source candidate.
         ctx.invoke(_previous_approve, candidate_id=id, note=note)
         return
     try:
@@ -101,9 +102,8 @@ def approve_command(ctx: click.Context, id: str, yes: bool, note: str) -> None:
 @click.pass_context
 def reject_command(ctx: click.Context, id: str, reason: str) -> None:
     """Reject and delete a pending recipe proposal or discovered source."""
-    _validate_recipe_id(id)
-    proposed = get_data_dir() / "catalog" / f"{id}.proposed"
-    if not proposed.is_file():
+    proposed = _proposal_path(id)
+    if proposed is None:
         ctx.invoke(_previous_reject, candidate_id=id, reason=reason)
         return
     try:
