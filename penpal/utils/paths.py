@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import errno
+import logging
 import os
 import pwd
 import subprocess
@@ -8,9 +9,15 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
+LOGGER = logging.getLogger(__name__)
+_SECURED_DIRS: set[str] = set()
+
 MIGRATION_MARKER = "MIGRATED_TO_PENPAL"
 LEGACY_DATA_DIRNAME = ".keypulse"
 CONFIG_BACKUP_NAME = "config.toml.bak-pre-penpal"
+_SENSITIVE_SUFFIXES = (
+    ".db", ".db-wal", ".db-shm", ".sqlite", ".sqlite-wal", ".sqlite-shm", ".bak", ".json",
+)
 
 
 class DataDirMigrationError(RuntimeError):
@@ -211,10 +218,60 @@ def resolve_legacy_data_path(value: str, home: Path | None = None) -> str:
     return value
 
 
+def _secure_file(path: Path) -> None:
+    if path.is_symlink() or not path.is_file():
+        return
+    try:
+        mode = path.stat().st_mode & 0o777
+    except OSError as exc:
+        LOGGER.warning("sensitive file stat failed: %s", type(exc).__name__)
+        return
+    if mode != 0o600:
+        try:
+            path.chmod(0o600)
+        except OSError as exc:
+            LOGGER.warning("sensitive file chmod failed: %s", type(exc).__name__)
+
+
+def _secure_dir(directory: Path) -> None:
+    if directory.is_symlink() or not directory.is_dir():
+        return
+    try:
+        mode = directory.stat().st_mode & 0o777
+    except OSError as exc:
+        LOGGER.warning("data directory stat failed: %s", type(exc).__name__)
+        return
+    if mode & 0o077:
+        try:
+            directory.chmod(0o700)
+        except OSError as exc:
+            LOGGER.warning("data directory chmod failed: %s", type(exc).__name__)
+    try:
+        children = list(directory.iterdir())
+    except OSError as exc:
+        LOGGER.warning("data directory listing failed: %s", type(exc).__name__)
+        return
+    for child in children:
+        if child.is_symlink():
+            continue
+        if child.is_dir():
+            if child.name == "run":
+                _secure_dir(child)
+        elif child.name.endswith(_SENSITIVE_SUFFIXES):
+            _secure_file(child)
+
+
+def secure_data_dir(directory: Path | None = None) -> Path:
+    """Tighten Penpal's own data directory and its sensitive files to owner-only access."""
+    target = _guard_penpal_path(directory) if directory is not None else get_data_dir()
+    _secure_dir(target)
+    return target
+
+
 def get_data_dir() -> Path:
     d = _guard_penpal_path(Path.home() / ".penpal")
     moved = migrate_legacy_data_dir()
-    d.mkdir(parents=True, exist_ok=True)
+    d.mkdir(parents=True, exist_ok=True, mode=0o700)
     if moved:
         print(
             "Penpal moved ~/.keypulse to ~/.penpal. The moved developer venv contains scripts "
@@ -227,6 +284,9 @@ def get_data_dir() -> Path:
         rewrite_legacy_config_paths(d)
     except Exception as exc:
         print(f"Warning: could not update legacy paths in {d / 'config.toml'} ({exc}); continuing.", file=sys.stderr)
+    if str(d) not in _SECURED_DIRS:  # once per process: callers resolve the data dir often
+        _secure_dir(d)
+        _SECURED_DIRS.add(str(d))
     return _guard_penpal_path(d)
 
 
