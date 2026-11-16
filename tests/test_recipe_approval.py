@@ -196,3 +196,18 @@ def test_recipe_id_with_trailing_newline_is_rejected():
 
     with pytest.raises(ValueError):
         parse_recipe_dict({"id": "orbit\n"}, origin="<test>")
+
+
+def test_enable_turns_a_disabled_user_recipe_back_on(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    data_dir = _setup_env(tmp_path, monkeypatch)
+    try:
+        save_recipe(_recipe(), data_dir=data_dir)
+        runner = CliRunner()
+        assert runner.invoke(sources_group, ["disable", "orbit"]).exit_code == 0
+        assert (data_dir / "catalog" / "orbit.disabled").exists()
+        res = runner.invoke(sources_group, ["enable", "orbit"])
+        assert res.exit_code == 0, res.output
+        assert "orbit\tenabled" in res.output
+        assert not (data_dir / "catalog" / "orbit.disabled").exists()
+    finally:
+        close()

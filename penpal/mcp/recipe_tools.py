@@ -38,5 +38,5 @@ def propose_source_recipe(token: str | None, recipe_toml: Any, *, client: str | 
     return {
         "status": "pending_approval",
         **summary,
-        "message": "Saved for the user's approval. Ask them to run `penpal sources approve` with this id; Penpal reads nothing from it before that.",
+        "message": "Saved for the user's approval. Ask them to run `penpal sources approve` with this id; Penpal syncs nothing from it before that.",
     }

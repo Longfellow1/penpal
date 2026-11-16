@@ -69,9 +69,21 @@ def _target(conn, raw, grant):
     return row
 
 
-def require_owner(row, grant):
-    if row["source"] != "host" or row["source_tool"] != grant.client_id:
+def _owned(row, grant) -> bool:
+    return row["source"] == "host" and row["source_tool"] == grant.client_id
+
+
+def writable_target(conn, raw, grant):
+    """The memory a tool may revoke, invalidate, correct or supersede: active and written by this tool."""
+    row = _target(conn, raw, grant)
+    active = row["status"] == "active" and row["superseded_by"] is None
+    if not _owned(row, grant):
+        if not active:
+            raise Denied()  # another tool's retired memory answers like a missing one
         raise ValueError("memory was written by another tool or imported; save a new memory instead")
+    if not active:
+        raise ValueError("memory is not active")
+    return row
 
 
 def commit_one(conn, item, grant):
@@ -111,33 +123,30 @@ def commit_one(conn, item, grant):
         if bucket not in grant.buckets:
             raise Denied()
         buckets = {bucket}
-    old = _target(conn, item["supersedes"], grant) if item.get("supersedes") is not None else None
-    if old is not None:
-        require_owner(old, grant)
-    if old is not None and (old["status"] != "active" or old["superseded_by"] is not None):
-        raise ValueError("memory is not active")
+    old = writable_target(conn, item["supersedes"], grant) if item.get("supersedes") is not None else None
     normalized = " ".join(content.casefold().split())
     digest = hashlib.sha256(json.dumps([kind, scope, project, normalized], ensure_ascii=False).encode()).hexdigest()
     candidates = conn.execute("SELECT * FROM memories WHERE content_hash = ? AND status = 'active' AND superseded_by IS NULL", (digest,)).fetchall()
-    matching = [r for r in candidates if visible(r, grant) and (r["confirmed_at"] is not None
-                or (r["source"] == "host" and r["source_tool"] == grant.client_id))]
+    matching = [r for r in candidates if visible(r, grant) and (r["confirmed_at"] is not None or _owned(r, grant))]
     duplicate = matching[0] if matching else None
     if old is not None and any(row["id"] == old["id"] for row in matching):
         raise ValueError("memory cannot supersede itself")
     if old is not None:
         duplicate = None
     if duplicate is not None:
-        merged_ids = sorted(set(json.loads(duplicate["evidence_ids"])) | set(ids))
-        merged_buckets = sorted(set(json.loads(duplicate["buckets"])) | buckets)
+        dup_ids = set(json.loads(duplicate["evidence_ids"]))
         # An unbacked memory is a distinct security provenance; never merge it with evidence-backed content.
         # A reader must cover every bucket of a memory, so merging in a new bucket would hide the memory
         # from readers who could see it before; such a duplicate becomes its own row instead.
-        if bool(merged_ids) != bool(ids) or bool(ids) != bool(json.loads(duplicate["evidence_ids"])):
+        if bool(ids) != bool(dup_ids) or not buckets <= set(json.loads(duplicate["buckets"])):
             duplicate = None
-        elif not buckets <= set(json.loads(duplicate["buckets"])):
-            duplicate = None
-        else:
-            conn.execute("UPDATE memories SET evidence_ids = ?, buckets = ? WHERE id = ?", (json.dumps(merged_ids), json.dumps(merged_buckets), duplicate["id"]))
+        elif not set(ids) <= dup_ids:
+            if _owned(duplicate, grant):
+                conn.execute("UPDATE memories SET evidence_ids = ? WHERE id = ?", (json.dumps(sorted(dup_ids | set(ids))), duplicate["id"]))
+            else:
+                # New evidence on another tool's memory would hide it from readers that cannot open that
+                # evidence, including its author; keep this tool's copy as its own row.
+                duplicate = None
     if duplicate is None:
         now = datetime.now(timezone.utc).isoformat()
         cur = conn.execute("INSERT INTO memories(type,content,scope,project,source_tool,evidence_ids,buckets,content_hash,valid_from,status,created_at,confidence,source) VALUES (?,?,?,?,?,?,?,?,?,'active',?,?, 'host')", (kind, content, scope, project, grant.client_id, json.dumps(ids), json.dumps(sorted(buckets)), digest, now, now, confidence))

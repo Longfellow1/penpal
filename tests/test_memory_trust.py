@@ -113,3 +113,42 @@ def test_cli_pending_and_confirm(db, monkeypatch, language, pending, confirmed):
     assert ("confirmed" if language == "en" else "已确认") in runner.invoke(main, ["memory", "list"]).output
     assert memory_id not in runner.invoke(main, ["memory", "list", "--pending", "--status", "all"]).output
     assert runner.invoke(main, ["memory", "confirm", "invalid"]).exit_code != 0
+
+
+def _evidence(source):
+    from penpal.store.models import RawEvent
+    from penpal.store.repository import insert_raw_event
+
+    event = insert_raw_event(RawEvent(source=source, event_type="semantic_event", ts_start="2026-01-01",
+                                      content_text="synthetic evidence", content_hash=f"trust-{source}", bucket="Work"))
+    conn = get_conn()
+    conn.execute("INSERT INTO evidence(event_id, locator, created_at) VALUES (?, 'synthetic', '2026-01-01')", (event,))
+    conn.commit()
+    return f"evd_{conn.execute('SELECT max(id) FROM evidence').fetchone()[0]}"
+
+
+def test_new_evidence_never_lands_on_another_tools_memory(db):
+    alpha = auth.create_grant("alpha", buckets=["Work"], sources=("claude_code",), operations=("read", "write"))
+    beta = auth.create_grant("beta", buckets=["Work"], operations=("read", "write"))
+    mine, other = _evidence("claude_code"), _evidence("cursor")
+    original = commit(alpha, "alpha", item("synthetic merge marker", evidence_ids=[mine]))["items"][0]["id"]
+    assert CliRunner().invoke(main, ["memory", "confirm", original]).exit_code == 0
+
+    copy = commit(beta, "beta", item("synthetic merge marker", evidence_ids=[mine, other]))["items"][0]
+    assert copy["id"] != original and copy["merged"] is False
+    assert db.execute("SELECT evidence_ids FROM memories WHERE id = ?", (int(original[4:]),)).fetchone()[0] == f'["{mine}"]'
+    assert [hit["id"] for hit in memory_hits(alpha, "alpha", "merge")] == [original]
+    # Nothing new to add: the confirmed memory is reused as before.
+    assert commit(beta, "beta", item("synthetic merge marker", evidence_ids=[mine]))["items"][0] == {"id": original, "merged": True}
+
+
+def test_another_tools_retired_memory_answers_like_a_missing_one(db):
+    alpha = auth.create_grant("alpha", buckets=["Work"], operations=("read", "write"))
+    beta = auth.create_grant("beta", buckets=["Work"], operations=("read", "write"))
+    retired = commit(alpha, "alpha", item("synthetic retired marker"))["items"][0]["id"]
+    assert memory_tools.update_memory(alpha, retired, "revoke", client="alpha")["status"] == "ok"
+
+    missing = memory_tools.update_memory(beta, "mem_999999", "revoke", client="beta")
+    assert memory_tools.update_memory(beta, retired, "revoke", client="beta") == missing
+    assert commit(beta, "beta", item("synthetic other", supersedes=retired)) == missing
+    assert memory_tools.update_memory(alpha, retired, "revoke", client="alpha")["message"] == "memory is not active"

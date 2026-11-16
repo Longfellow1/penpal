@@ -139,3 +139,19 @@ def disable_command(ctx: click.Context, name: str) -> None:
     directory = get_data_dir() / "catalog"
     (directory / (tool.id + ".disabled")).touch(mode=0o600)
     click.echo(f"{tool.id}\tdisabled")
+
+
+_previous_enable = sources_group.commands["enable"]
+
+
+@sources_group.command("enable")
+@click.argument("name")
+@click.pass_context
+def enable_command(ctx: click.Context, name: str) -> None:
+    """Re-enable a user recipe or resume an existing source."""
+    tool = next((t for t in load_combined_catalog() if t.user_recipe and t.id == name), None)
+    if tool is None:
+        ctx.invoke(_previous_enable, name=name)
+        return
+    (get_data_dir() / "catalog" / (tool.id + ".disabled")).unlink(missing_ok=True)
+    click.echo(f"{tool.id}\tenabled")
