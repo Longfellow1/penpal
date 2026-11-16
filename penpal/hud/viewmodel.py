@@ -15,6 +15,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any, Optional
 
+from penpal.i18n import T
 from penpal.runtime import RuntimeState, state_message, state_text
 from penpal.hud.snapshot import (
     BUCKET_LABELS,
@@ -221,6 +222,11 @@ def alerts(snap: Snapshot) -> list[tuple[str, dict]]:
             tone = "red" if issue.severity == "error" else "amber"
             message = issue.message_zh
             label = issue.label_zh or issue.component
+            if issue.component == "storage_dropped_events":
+                dropped = status.components.get("storage_dropped_events")
+                count = int(dropped.detail) if dropped and dropped.detail.isdecimal() else 0
+                message = T(f"有 {count} 条记录未保存。", f"{count} events were not saved.")
+                label = T("采集记录丢失", "Capture events lost")
             fixable = is_fixable_in_hud(issue)
             code = getattr(issue, "code", "") or issue.component
             out.append((tone, row(
@@ -250,19 +256,24 @@ def status_bar(snap: Snapshot, ui: Optional[UiState] = None) -> dict:
     found = alerts(snap)
     reds = [t for t in found if t[0] == "red"]
     last = rel_time(snap.now, snap.last_write_ts)
-    label = state_text(status.state, language="zh") if status is not None else "未知"
+    label = state_text(status.state, language="zh") if status is not None else T("状态未知", "Status unknown")
     if ui and ui.rechecked_at:
         if found:
             sub = f"已重新检测 {ui.rechecked_at} · {len(found)} 个问题"
-        else:
+        elif status is not None:
             sub = f"已重新检测 {ui.rechecked_at} · 正常"
-        return {"code": status.code if status else "unknown", "tone": "red" if reds else "amber" if found else "ok", "text": label, "sub": sub}
+        else:
+            sub = T("无法确认采集状态", "Capture status could not be checked")
+        return {"code": status.code if status else "unknown", "tone": "red" if reds else "amber" if found or status is None else "ok", "text": label, "sub": sub}
     if reds:
         sub = f"{len(found)} 个问题" + (f" · {last}最后写入" if last else "")
         return {"code": status.code if status else "unknown", "tone": "red", "text": label, "sub": sub}
     if found:
         return {"code": status.code if status else "unknown", "tone": "amber", "text": label,
                 "sub": f"{len(found)} 个问题需要处理"}
+    if status is None:
+        return {"code": "unknown", "tone": "amber", "text": label,
+                "sub": T("无法确认采集状态", "Capture status could not be checked")}
     return {"code": status.code if status else "unknown", "tone": "ok", "text": label,
             "sub": f"一切正常 · {last}写入" if last else "一切正常 · 还没有记录"}
 

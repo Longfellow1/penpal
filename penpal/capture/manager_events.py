@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 import queue
-import sqlite3
 import time
 from datetime import datetime, timezone
 from typing import Literal
@@ -22,7 +21,7 @@ from penpal.foundation.capture_hygiene import (
     host_matches_denylist as _host_matches_denylist,
     strip_url_query,
 )
-from penpal.capture.manager_storage import _is_disk_full
+from penpal.capture.manager_storage import _storage_error_code
 from penpal.capture.normalizer import WINDOW_FOCUS_EVENT, WINDOW_TITLE_CHANGED_EVENT
 from penpal.capture.user_presence import is_user_present
 from penpal.foundation.desensitizer import desensitize, desensitize_json_value, truncate
@@ -182,8 +181,31 @@ def _drain_queue(manager):
     for event in events:
         try:
             manager._process_event(event)
-        except Exception as e:
-            logger.error(f"Error processing event: {e}")
+        except Exception as exc:
+            _handle_event_failure(manager, event, exc)
+
+
+def _handle_event_failure(manager, event: RawEvent, exc: Exception) -> None:
+    logger.error("event processing failed: %s", type(exc).__name__)
+    if event.id is None:
+        manager._storage_dropped += 1
+    manager._enter_storage_error(_storage_error_code(exc))
+
+
+def _retry_storage_call(manager, operation, *args):
+    retrying = False
+    for attempt in range(len(manager.STORAGE_RETRY_DELAYS) + 1):
+        try:
+            result = operation(*args)
+            if retrying:
+                manager._storage_next_probe_mono = 0.0
+            return result
+        except Exception as exc:
+            if _storage_error_code(exc) != "db_locked" or attempt == len(manager.STORAGE_RETRY_DELAYS):
+                raise
+            retrying = True
+            manager._enter_storage_error("db_locked")
+            time.sleep(manager.STORAGE_RETRY_DELAYS[attempt])
 
 
 def _is_blacklisted(manager, event: RawEvent) -> bool:
@@ -231,26 +253,24 @@ def _count_gate_hit(manager, event: RawEvent, reason: str) -> None:
 
 def _process_event(manager, event: RawEvent):
     # Write gate (#28): global pause or a switched-off source writes nothing new.
-    if not source_writes_allowed(event.source):
+    if not _retry_storage_call(manager, source_writes_allowed, event.source):
         manager._count_gate_hit(event, "paused_or_disabled")
         return
 
     if manager._storage_write_blocked():
         manager._storage_dropped += 1
+        manager._write_runtime_record()  # throttled: one record write per interval, not one per dropped event
         return
     event.speaker = _derive_speaker(event)
 
     manager._note_browser_page(event)
     if manager._is_blacklisted(event):
-        logger.debug(
-            f"Event blacklisted: {event.process_name or event.app_name} ({event.source}/{event.event_type})"
-        )
+        logger.debug("Event blacklisted: %s/%s", event.source, event.event_type)
         return
 
     if _should_drop_browser_event(event, manager.config.privacy.url_deny_hosts):
         logger.debug(
-            "Event dropped by browser URL denylist: %s (%s/%s)",
-            event.process_name or event.app_name,
+            "Event dropped by browser URL denylist: %s/%s",
             event.source,
             event.event_type,
         )
@@ -388,7 +408,7 @@ def _process_event(manager, event: RawEvent):
             result.session_id = session_id
 
     # 3. Session tracking
-    session = manager._aggregator.process(result)
+    session = _retry_storage_call(manager, manager._aggregator.process, result)
     if session and result.session_id is None:
         result.session_id = session.id
 
@@ -397,14 +417,14 @@ def _process_event(manager, event: RawEvent):
 
     # 5. Persist raw event
     try:
-        row_id = insert_raw_event(result)
-    except sqlite3.OperationalError as exc:
-        if not _is_disk_full(exc):
-            raise
-        manager._enter_disk_full()
+        row_id = _retry_storage_call(manager, insert_raw_event, result)
+    except Exception as exc:
+        manager._storage_dropped += 1
+        manager._enter_storage_error(_storage_error_code(exc))
         return
-    manager._leave_disk_full()
+    manager._leave_storage_error()
     result.id = row_id
+    event.id = row_id
     manager._record_runtime_event(result)
 
     # 5. Index searchable content
@@ -424,9 +444,10 @@ def _process_event(manager, event: RawEvent):
             tags=tags,
             app_name=result.app_name,
         )
-        insert_search_doc(doc)
+        _retry_storage_call(manager, insert_search_doc, doc)
 
-    set_state("last_flush", datetime.now(timezone.utc).isoformat())
+    _retry_storage_call(manager, set_state, "last_flush", datetime.now(timezone.utc).isoformat())
+    manager._leave_storage_error()
 
 
 def _current_window_session_id(manager) -> str | None:
@@ -447,7 +468,10 @@ def _flush_window_session(manager, reason: str) -> None:
         reason=reason,
     )
     if event is not None:
-        manager._process_event(event)
+        try:
+            manager._process_event(event)
+        except Exception as exc:
+            _handle_event_failure(manager, event, exc)
 
 
 def _sync_window_idle_state(manager, event: RawEvent) -> None:
