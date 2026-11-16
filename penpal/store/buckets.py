@@ -83,7 +83,7 @@ def reset_cache() -> None:
     _chat_opt_ins = None
 
 
-def _config_app_overrides() -> dict[str, str]:
+def _config_app_overrides() -> Optional[dict[str, str]]:
     global _app_overrides
     if _app_overrides is None:
         found: dict[str, str] = {}
@@ -96,12 +96,12 @@ def _config_app_overrides() -> dict[str, str]:
                 except ValueError:
                     continue
         except Exception:
-            found = {}
+            return None
         _app_overrides = found
     return _app_overrides
 
 
-def _config_site_overrides() -> dict[str, str]:
+def _config_site_overrides() -> Optional[dict[str, str]]:
     global _site_overrides
     if _site_overrides is None:
         from penpal.store.site_categories import normalize_site_key
@@ -118,7 +118,7 @@ def _config_site_overrides() -> dict[str, str]:
                 except ValueError:
                     continue
         except Exception:
-            found = {}
+            return None
         _site_overrides = found
     return _site_overrides
 
@@ -259,7 +259,7 @@ class BrowserUrlTimeline:
         return None
 
 
-def _config_chat_opt_ins() -> frozenset[str]:
+def _config_chat_opt_ins() -> Optional[frozenset[str]]:
     global _chat_opt_ins
     if _chat_opt_ins is None:
         try:
@@ -267,7 +267,7 @@ def _config_chat_opt_ins() -> frozenset[str]:
 
             found = frozenset(Config.load().privacy.chat_apps_opt_in)
         except Exception:
-            found = frozenset()  # fail closed: no opt-in when the config cannot be read
+            return None
         _chat_opt_ins = found
     return _chat_opt_ins
 
@@ -277,18 +277,22 @@ def classify_capture_app(
     process_name: Optional[str] = None,
     app_overrides: Optional[dict[str, str]] = None,
     chat_opt_ins: Optional[frozenset[str]] = None,
-) -> str:
+) -> Optional[str]:
     """Capture-stream bucket from the app alone: config overrides > opted-in chat app (Private) > preset
     table > Personal."""
     from penpal.foundation.chat_apps import PRIVATE_BUCKET, chat_app_key
     from penpal.store.app_categories import DEFAULT_APP_BUCKET, classify_app
 
     merged = _config_app_overrides() if app_overrides is None else app_overrides
+    if merged is None:
+        return None
     names = [(n or "").lower() for n in (app_name, process_name)]
     for key, bucket in merged.items():
         if key and any(key in n for n in names):
             return bucket
     opted = _config_chat_opt_ins() if chat_opt_ins is None else chat_opt_ins
+    if opted is None:
+        return None
     chat = chat_app_key(app_name, process_name)
     if chat is not None and chat in opted:
         return PRIVATE_BUCKET
@@ -302,10 +306,12 @@ def _site_bucket(url: Optional[str], site_overrides: Optional[dict[str, str]] = 
     from penpal.store.site_categories import classify_url
 
     merged = _config_site_overrides() if site_overrides is None else site_overrides
+    if merged is None:
+        return None
     return classify_url(url, merged)
 
 
-def _config_overrides() -> dict[str, str]:
+def _config_overrides() -> Optional[dict[str, str]]:
     global _overrides
     if _overrides is None:
         found: dict[str, str] = {}
@@ -316,9 +322,9 @@ def _config_overrides() -> dict[str, str]:
                 try:
                     found[src] = normalize_bucket(bucket)
                 except ValueError:
-                    continue  # ignore invalid config entries rather than failing ingest
+                    continue
         except Exception:
-            found = {}
+            return None
         _overrides = found
     return _overrides
 
@@ -327,6 +333,8 @@ def default_bucket_for_source(source: Optional[str], overrides: Optional[dict[st
     if not source:
         return None
     merged = _config_overrides() if overrides is None else overrides
+    if merged is None:
+        return None
     return merged.get(source) or DEFAULT_SOURCE_BUCKETS.get(source)
 
 
@@ -380,7 +388,16 @@ def resolve_bucket(
                 return rule["bucket"]
         elif rule["scope_type"] == "source" and source == rule["scope_value"]:
             return rule["bucket"]
+    if overrides is None:
+        overrides = _config_overrides()
+        if overrides is None:
+            return None
     default = default_bucket_for_source(source, overrides)
+    if default is None and (source in SITE_HISTORY_SOURCES or wants_site_url(source, app_name, process_name)):
+        if site_overrides is None:
+            site_overrides = _config_site_overrides()
+            if site_overrides is None:
+                return None
     if default is None and source in SITE_HISTORY_SOURCES:
         from penpal.store.site_categories import DEFAULT_SITE_BUCKET
 

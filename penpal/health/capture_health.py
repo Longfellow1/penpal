@@ -247,7 +247,25 @@ def compute_capture_health(cfg: Any = None, *, now: Optional[datetime] = None) -
     status = evaluate(now=now)
     if status.state == RuntimeState.RUNNING and not status.issues:
         return None
-    return {"code": status.code, "message": state_message(status, language="en")}
+    storage = status.components.get("storage")
+    dropped = status.components.get("storage_dropped_events")
+    count = int(dropped.detail) if dropped and dropped.detail.isdecimal() else 0
+    code = status.code
+    if storage and storage.state == "storage_error":
+        code = "disk_full" if storage.detail == "disk_full" else "storage_error"
+    elif count:
+        code = "storage_error"
+    message = state_message(status, language="en")
+    if count:
+        # MCP messages are read by the AI host, so they stay in English like state_message(language="en").
+        if status.state == RuntimeState.RUNNING and storage and storage.state != "storage_error":
+            message = f"Capture storage recovered, but {count} events were not saved; run `penpal doctor`."
+        else:
+            message += f" {count} events were not saved."
+    return {"code": code, "message": message}
+
+
+HEALTH_UNKNOWN = {"code": "health_unknown", "message": "Capture health is unknown; run `penpal doctor` to investigate."}
 
 
 def current_capture_health() -> Optional[dict[str, str]]:
@@ -255,4 +273,4 @@ def current_capture_health() -> Optional[dict[str, str]]:
     try:
         return compute_capture_health()
     except Exception:
-        return None
+        return dict(HEALTH_UNKNOWN)
