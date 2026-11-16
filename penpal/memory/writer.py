@@ -45,6 +45,8 @@ def _evidence(raw, grant):
 
 def visible(row, grant):
     try:
+        if row["type"] == "procedure" and row["confirmed_at"] is None and row["source_tool"] != grant.client_id:
+            return False
         ids = json.loads(row["evidence_ids"])
         buckets = set(json.loads(row["buckets"]))
         if not buckets or not buckets.issubset(grant.buckets):
@@ -65,6 +67,11 @@ def _target(conn, raw, grant):
     if row is None or not visible(row, grant):
         raise Denied()
     return row
+
+
+def require_owner(row, grant):
+    if row["source"] != "host" or row["source_tool"] != grant.client_id:
+        raise ValueError("memory was written by another tool or imported; save a new memory instead")
 
 
 def commit_one(conn, item, grant):
@@ -105,16 +112,21 @@ def commit_one(conn, item, grant):
             raise Denied()
         buckets = {bucket}
     old = _target(conn, item["supersedes"], grant) if item.get("supersedes") is not None else None
+    if old is not None:
+        require_owner(old, grant)
     if old is not None and (old["status"] != "active" or old["superseded_by"] is not None):
         raise ValueError("memory is not active")
     normalized = " ".join(content.casefold().split())
     digest = hashlib.sha256(json.dumps([kind, scope, project, normalized], ensure_ascii=False).encode()).hexdigest()
     candidates = conn.execute("SELECT * FROM memories WHERE content_hash = ? AND status = 'active' AND superseded_by IS NULL", (digest,)).fetchall()
-    matching = [r for r in candidates if visible(r, grant)]
+    matching = [r for r in candidates if visible(r, grant) and (r["confirmed_at"] is not None
+                or (r["source"] == "host" and r["source_tool"] == grant.client_id))]
     duplicate = matching[0] if matching else None
+    if old is not None and any(row["id"] == old["id"] for row in matching):
+        raise ValueError("memory cannot supersede itself")
+    if old is not None:
+        duplicate = None
     if duplicate is not None:
-        if old is not None and old["id"] == duplicate["id"]:
-            raise ValueError("memory cannot supersede itself")
         merged_ids = sorted(set(json.loads(duplicate["evidence_ids"])) | set(ids))
         merged_buckets = sorted(set(json.loads(duplicate["buckets"])) | buckets)
         # An unbacked memory is a distinct security provenance; never merge it with evidence-backed content.

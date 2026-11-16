@@ -47,6 +47,7 @@ def test_import_repeat_dry_run_and_index(databases):
     assert "kp_" not in rows[0]["detail"] and "[REDACTED]" in rows[0]["detail"]
     assert (rows[1]["type"], rows[1]["content"], rows[1]["source_tool"]) == ("procedure", "banana title", "memmy")
     assert rows[0]["created_at"] == rows[0]["valid_from"] == "2026-01-01"
+    assert all(row["confirmed_at"] == row["created_at"] for row in rows)
     assert conn.execute("SELECT count(*) FROM memories_fts WHERE memories_fts MATCH 'detail'").fetchone()[0] == 2
     migrate_v36(conn)
     assert conn.execute("SELECT count(*) FROM memories_fts WHERE memories_fts MATCH 'detail'").fetchone()[0] == 2
@@ -82,8 +83,8 @@ def test_search_visibility_and_audit(databases):
     assert all(item.get("kind") != "memory" for item in tools.search_context(restricted, ["apple"], client="restricted")["results"])
     private = auth.create_grant("private", buckets=("Private",), operations=("read",))
     assert tools.search_context(private, ["apple"], client="private")["status"] == "no_results"
-    assert memory_tools.update_memory(token, result["results"][0]["id"], "revoke", client="reader")["status"] == "ok"
-    assert all(item.get("kind") != "memory" for item in tools.search_context(token, ["apple"], client="reader")["results"])
+    assert memory_tools.update_memory(token, result["results"][0]["id"], "revoke", client="reader")["status"] == "invalid_argument"
+    assert tools.search_context(token, ["apple"], client="reader")["results"][0]["confirmed"] is True
     assert get_conn().execute("SELECT result_count FROM mcp_audit WHERE tool='search_context' ORDER BY id LIMIT 1").fetchone()[0] == 2
 
 
