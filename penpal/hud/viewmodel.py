@@ -205,6 +205,7 @@ def alerts(snap: Snapshot) -> list[tuple[str, dict]]:
         out.append(("red", row("无法读取数据库", dot="red", sub="运行 penpal doctor 查看详情", sub_tone="red")))
     if status is not None and status.state in {
         RuntimeState.NOT_INSTALLED, RuntimeState.NOT_RUNNING, RuntimeState.HUNG, RuntimeState.OUTDATED,
+        RuntimeState.SCHEMA_TOO_NEW,
     }:
         code = f"daemon.{status.state.value}"
         fixable = is_fixable_in_hud(code)
