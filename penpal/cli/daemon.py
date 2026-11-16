@@ -67,10 +67,25 @@ def resume():
 @click.option("--plain", is_flag=True, default=False, help=PLAIN_HELP)
 def status(plain):
     """Show status."""
+    runtime_status = evaluate()
+    if runtime_status.state == RuntimeState.SCHEMA_TOO_NEW:
+        if plain:
+            print(f"runtime_state={runtime_status.code}")
+            print(f"runtime_message={state_message(runtime_status)}")
+            print(f"runtime_fix={runtime_status.fix_command}")
+            if runtime_status.hud is not None:
+                hud = runtime_status.hud
+                print(f"hud_running={hud.alive}")
+                hud_issue = next((issue for issue in runtime_status.issues if issue.component == "hud"), None)
+                if hud_issue:
+                    print(f"hud_message={hud_issue.message_zh}")
+        else:
+            console.print(_runtime_status_line(runtime_status), markup=False)
+            console.print(state_message(runtime_status), markup=False)
+        return
+
     cfg = get_config()
     require_db(cfg)
-
-    runtime_status = evaluate()
     pid = runtime_status.pid
     is_running = runtime_status.state.value not in {"not_installed", "not_running"}
     supervised = runtime_status.managed
