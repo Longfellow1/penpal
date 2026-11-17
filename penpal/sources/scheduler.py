@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import threading
 import time
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ALL_COMPLETED, Future, ThreadPoolExecutor, wait
 from datetime import datetime, timedelta, timezone
 from typing import Callable, Iterator, Protocol
 
@@ -14,6 +14,7 @@ from penpal.sources.types import DataSource, SemanticEvent
 from penpal.utils.logging import get_logger
 
 LOGGER = get_logger("sources.scheduler")
+DEFAULT_STOP_TIMEOUT_SEC: float = 10.0
 
 
 def _normalize_app_token(value: str) -> str:
@@ -90,6 +91,7 @@ class SourcesScheduler:
         self._always_plugins: set[str] = set()
         self._fast_plugins: set[str] = set()
         self._in_flight: set[str] = set()
+        self._in_flight_tasks: dict[Future, str] = {}
         self._unlock_plugins: set[str] = set()
         self._launch_routes: dict[str, set[str]] = {}
         self._quit_routes: dict[str, set[str]] = {}
@@ -109,6 +111,7 @@ class SourcesScheduler:
             return
 
         self._rebuild_routes()
+        self._in_flight_tasks.clear()
         self._executor = ThreadPoolExecutor(max_workers=4, thread_name_prefix="sources-scan")
         self._stop_event.clear()
         self._running.set()
@@ -145,28 +148,62 @@ class SourcesScheduler:
             sorted(self._unlock_plugins),
         )
 
-    def stop(self) -> None:
-        if not self._running.is_set() and self._executor is None:
-            return
+    def stop(self, timeout_sec: float = DEFAULT_STOP_TIMEOUT_SEC) -> None:
+        start_time = self._monotonic_fn()
+        total_timeout = max(0.0, float(timeout_sec))
 
-        self._running.clear()
-        self._stop_event.set()
+        def _remaining() -> float:
+            elapsed = self._monotonic_fn() - start_time
+            return max(0.0, total_timeout - elapsed)
 
-        if self._event_source is not None:
-            try:
-                self._event_source.stop()
-            except Exception:
-                LOGGER.exception("failed to stop NSWorkspace event source")
-            finally:
-                self._event_source = None
+        if self._running.is_set() or self._executor is not None:
+            self._running.clear()
+            self._stop_event.set()
 
-        if self._always_thread is not None:
-            self._always_thread.join(timeout=2.0)
-            self._always_thread = None
+            if self._event_source is not None:
+                try:
+                    self._event_source.stop()
+                except Exception:
+                    LOGGER.exception("failed to stop NSWorkspace event source")
+                finally:
+                    self._event_source = None
 
-        if self._executor is not None:
-            self._executor.shutdown(wait=False, cancel_futures=False)
-            self._executor = None
+            if self._always_thread is not None:
+                try:
+                    self._always_thread.join(timeout=min(2.0, _remaining()))
+                except Exception:
+                    LOGGER.exception("failed to join always thread")
+                finally:
+                    self._always_thread = None
+
+            with self._lock:
+                tasks = dict(self._in_flight_tasks)
+            if tasks:
+                done, not_done = wait(list(tasks.keys()), timeout=_remaining(), return_when=ALL_COMPLETED)
+                if not_done:
+                    for f in not_done:
+                        plugin_name = tasks.get(f, "unknown")
+                        LOGGER.warning("sync task did not finish: plugin=%s", plugin_name)
+                for f in done:
+                    try:
+                        f.result()
+                    except Exception as exc:
+                        LOGGER.warning("sync task failed: %s", type(exc).__name__)
+
+            if self._executor is not None:
+                try:
+                    self._executor.shutdown(wait=False, cancel_futures=True)
+                except Exception:
+                    LOGGER.exception("failed to shutdown sources scan executor")
+                finally:
+                    self._executor = None
+
+        try:
+            from penpal.sources.sink import flush_named_entity_backfill
+
+            flush_named_entity_backfill(timeout_sec=_remaining())
+        except Exception as exc:
+            LOGGER.warning("failed to flush named entity backfill: %s", type(exc).__name__)
 
         LOGGER.info("sources scheduler stopped")
 
@@ -290,11 +327,20 @@ class SourcesScheduler:
         if not self._claim_scan(plugin_name, reason=reason):
             return
         try:
-            executor.submit(self._scan_plugin, plugin_name, reason)
+            future = executor.submit(self._scan_plugin, plugin_name, reason)
+            if future is not None:
+                with self._lock:
+                    self._in_flight_tasks[future] = plugin_name
+                if hasattr(future, "add_done_callback"):
+                    future.add_done_callback(self._on_scan_done)
         except Exception:
             with self._lock:
                 self._in_flight.discard(plugin_name)
             raise
+
+    def _on_scan_done(self, future: Future) -> None:
+        with self._lock:
+            self._in_flight_tasks.pop(future, None)
 
     @staticmethod
     def _writes_blocked(plugin_name: str) -> bool:
