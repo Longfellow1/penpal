@@ -3,9 +3,46 @@ from __future__ import annotations
 import errno
 import fcntl
 import os
+import time
+from contextlib import contextmanager
 from pathlib import Path
+from typing import Iterator
 
 from penpal.utils.paths import get_daemon_lock_path, get_pid_path
+
+
+class FileLockTimeout(TimeoutError):
+    """Raised when an exclusive file lock cannot be acquired before the deadline."""
+
+
+@contextmanager
+def exclusive_file_lock(lock_path: Path, *, timeout: float = 30.0) -> Iterator[None]:
+    """Hold an exclusive flock on lock_path, waiting at most timeout seconds."""
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+    fd = os.open(str(lock_path), os.O_CREAT | os.O_RDWR, 0o600)
+    deadline = time.monotonic() + timeout
+    try:
+        while True:
+            try:
+                fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                break
+            except OSError as exc:
+                if exc.errno not in (errno.EACCES, errno.EAGAIN):
+                    raise
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    raise FileLockTimeout(f"等待文件锁超时: {lock_path.name}") from exc
+                time.sleep(min(0.05, remaining))
+        try:
+            yield
+        finally:
+            try:
+                fcntl.flock(fd, fcntl.LOCK_UN)
+            except OSError:
+                # The kernel releases the lock when fd is closed below.
+                pass
+    finally:
+        os.close(fd)
 
 
 class SingleInstanceLock:

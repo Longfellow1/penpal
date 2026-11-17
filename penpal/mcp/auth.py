@@ -143,6 +143,17 @@ def revoke_grants(client_id: str) -> int:
     return cur.rowcount
 
 
+def revoke_token(token: str) -> int:
+    """Revoke only the grant matching this plaintext token, leaving other grants intact."""
+    conn = get_conn()
+    cur = conn.execute(
+        "UPDATE access_grants SET revoked_at = ? WHERE token_hash = ? AND revoked_at IS NULL",
+        (_now().isoformat(), hash_token(token)),
+    )
+    conn.commit()
+    return cur.rowcount
+
+
 def rotate_grant(client_id: str) -> str:
     """Issue a new token for the client's active grant (same row, same scope); the old token stops
     working at once because only one hash is ever kept per grant. Returns the new plaintext token."""
