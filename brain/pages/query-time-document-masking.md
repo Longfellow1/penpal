@@ -5,7 +5,7 @@ category: decision
 status: active
 tags: [privacy, redaction, mcp]
 created: "2026-11-15T19:26:48"
-updated: "2026-11-15T23:55:56"
+updated: "2026-11-17T10:04:12"
 ---
 
 <!-- compiled_truth -->
@@ -36,4 +36,10 @@ Passport detection: uppercase-only; shape-matched for CN passport / HK-Macau / h
   kind: decision
   summary: "Owner 2026-11-15: no backfill of stored rows for now (38 rows: 2 memories, 36 events); query-time masking already keeps them from the AI"
   source: owner session 2026-11-15
+  affects: [query-time-document-masking]
+
+- time: 2026-11-17T10:04:12
+  kind: decision
+  summary: "P1 R7 (2026-11-17): the query-time pass now covers every string value except an explicit structural allowlist (ids, enums, timestamps) instead of a text-field allowlist; imported events get the full desensitize (emails, phones, ID/bank cards, documents per privacy switches) but not the whole-line shell wipe, which is for live keyboard/screen text (wiping commands from imported AI chats cut recall); MCP responses with captured text carry content_notice."
+  source: "P1 round 3, branch fix/p1-redaction"
   affects: [query-time-document-masking]
