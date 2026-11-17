@@ -4,7 +4,7 @@ from __future__ import annotations
 from penpal.mcp import audit
 from penpal.mcp.auth import check_access
 from penpal.mcp.tools import TOOL_COMMIT_MEMORY, TOOL_UPDATE_MEMORY, permission_denied
-from penpal.memory.writer import Denied, _target, commit_one
+from penpal.memory.writer import Denied, commit_one, writable_target
 from penpal.store.db import get_conn
 
 
@@ -37,9 +37,7 @@ def commit_memory(token, items, *, client=None):
 
 def update_memory(token, memory_id, action, item=None, *, client=None):
     def write(conn, grant):
-        old = _target(conn, memory_id, grant)
-        if old["status"] != "active" or old["superseded_by"] is not None:
-            raise ValueError("memory is not active")
+        old = writable_target(conn, memory_id, grant)
         if action == "correct":
             if not isinstance(item, dict):
                 raise ValueError("item is required for correction")

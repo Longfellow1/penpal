@@ -5,7 +5,7 @@ category: decision
 status: active
 tags: [memory, security, mcp, prompt-injection]
 created: "2026-11-16T09:48:42"
-updated: "2026-11-16T09:48:42"
+updated: "2026-11-16T20:31:41"
 ---
 
 <!-- compiled_truth -->
@@ -38,4 +38,10 @@ Related: [[memory-distillation-by-agent]], [[user-curates-llm-proposes]].
   kind: decision
   summary: "Owner chose the compromise: procedures isolated to the authoring host until confirmed, other kinds shared but labelled unconfirmed and ranked lower"
   source: owner 2026-11-16
+  affects: [unconfirmed-memory-sharing]
+
+- time: 2026-11-16T20:31:41
+  kind: decision
+  summary: "Implementation choices (round 2): host memories that existed before schema v37 start unconfirmed; Memmy imports count as confirmed because the user ran them; a correction is always a new unconfirmed row; a host's recipe proposal is stored as catalog/<id>.proposed and only the user's 'penpal sources approve' enables it."
+  source: "P0 round 2, branch fix/p0r2-round2"
   affects: [unconfirmed-memory-sharing]

@@ -222,34 +222,57 @@ def validate_recipe(tool: ToolRecipe, env: Mapping[str, str] | None = None) -> t
     return files, turns
 
 
-def save_recipe(content: str, *, data_dir: Path | None = None, env: Mapping[str, str] | None = None, summary: dict | None = None) -> ToolRecipe:
+def _validate_recipe_content(content: str, env: Mapping[str, str] | None = None) -> tuple[ToolRecipe, int, int]:
     from penpal.sources.recipes.catalog import load_catalog, load_recipe_from_string
-    from penpal.utils.paths import get_data_dir
 
     tool = load_recipe_from_string(content)
     if any(t.id == tool.id and t.adapter for t in load_catalog()):
         raise ValueError("该工具由内置插件采集，格式变化随版本修复")
     files, turns = validate_recipe(tool, env)
+    return tool, files, turns
+
+
+def _ensure_catalog_dir(data_dir: Path | None = None) -> Path:
+    from penpal.utils.paths import get_data_dir
+
     directory = (data_dir if data_dir is not None else get_data_dir()) / "catalog"
     directory.mkdir(mode=0o700, parents=True, exist_ok=True)
     directory.chmod(0o700)
-    target = directory / (tool.id + ".toml")
-    backup = directory / (tool.id + ".previous")
+    return directory
+
+
+def _write_atomic(directory: Path, path: Path, text: str) -> None:
     import tempfile
 
-    def write_atomic(path: Path, text: str) -> None:
-        fd, name = tempfile.mkstemp(dir=directory, prefix=".recipe-")
-        try:
-            with os.fdopen(fd, "w", encoding="utf-8") as stream:
-                stream.write(text)
-            os.replace(name, path)
-        finally:
-            if os.path.exists(name):
-                os.unlink(name)
+    fd, name = tempfile.mkstemp(dir=directory, prefix=".recipe-")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as stream:
+            stream.write(text)
+        os.chmod(name, 0o600)
+        os.replace(name, path)
+    finally:
+        if os.path.exists(name):
+            os.unlink(name)
 
+
+def propose_recipe(content: str, *, data_dir: Path | None = None, env: Mapping[str, str] | None = None, summary: dict | None = None) -> ToolRecipe:
+    tool, files, turns = _validate_recipe_content(content, env)
+    directory = _ensure_catalog_dir(data_dir)
+    proposed = directory / (tool.id + ".proposed")
+    _write_atomic(directory, proposed, content)
+    if summary is not None:
+        summary.update(id=tool.id, name=tool.name, matched_files=files, parsed_turns=turns)
+    return tool
+
+
+def save_recipe(content: str, *, data_dir: Path | None = None, env: Mapping[str, str] | None = None, summary: dict | None = None) -> ToolRecipe:
+    tool, files, turns = _validate_recipe_content(content, env)
+    directory = _ensure_catalog_dir(data_dir)
+    target = directory / (tool.id + ".toml")
+    backup = directory / (tool.id + ".previous")
     if target.exists():
-        write_atomic(backup, target.read_text(encoding="utf-8"))
-    write_atomic(target, content)
+        _write_atomic(directory, backup, target.read_text(encoding="utf-8"))
+    _write_atomic(directory, target, content)
     (directory / (tool.id + ".disabled")).unlink(missing_ok=True)
     if summary is not None:
         summary.update(id=tool.id, name=tool.name, matched_files=files, parsed_turns=turns)

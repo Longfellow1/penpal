@@ -10,7 +10,7 @@ from penpal.mcp import audit
 from penpal.store import memories
 
 
-@main.group(name="memory", help=T("查看和删除记忆。", "List and delete memories."))
+@main.group(name="memory", help=T("查看、确认和删除记忆。", "List, confirm and delete memories."))
 def memory_group():
     pass
 
@@ -22,15 +22,28 @@ def memory_group():
               help=T("记忆状态", "Memory status"))
 @click.option("--limit", type=click.IntRange(min=1), default=50, show_default=True,
               help=T("最多显示条数", "Maximum rows to show"))
-def list_command(source, tool, status, limit):
+@click.option("--pending", is_flag=True, help=T("只显示待确认的有效记忆", "Show only active pending memories"))
+def list_command(source, tool, status, limit, pending):
     require_db(get_config())
-    rows, total = memories.list_memories(source=source, tool=tool, status=status, limit=limit)
+    rows, total = memories.list_memories(source=source, tool=tool, status=status, limit=limit, pending=pending)
     for row in rows:
         scope = f"project:{row['project']}" if row["scope"] == "project" else row["scope"]
         content = " ".join(row["content"].split())[:80]
-        click.echo(f"mem_{row['id']} | {row['status']} | {row['type']} | {scope} | "
+        confirmation = T("已确认", "confirmed") if row["confirmed_at"] is not None else T("待确认", "pending")
+        click.echo(f"mem_{row['id']} | {row['status']} | {confirmation} | {row['type']} | {scope} | "
                    f"{row['source_tool']} | {row['created_at'][:10]} | {content}")
     click.echo(f"{T('总数', 'Total')}: {total}")
+
+
+@memory_group.command(name="confirm", help=T("确认指定记忆。", "Confirm memories."))
+@click.argument("memory_ids", nargs=-1, required=True)
+def confirm_command(memory_ids):
+    if any(not re.fullmatch(r"mem_[0-9]{1,18}", value) for value in memory_ids):
+        raise click.UsageError(T("记忆 ID 格式应为 mem_<数字>。", "Memory IDs must have the form mem_<number>."))
+    require_db(get_config())
+    count = memories.confirm_memories([int(value[4:]) for value in memory_ids])
+    audit.record(client="cli", tool="confirm_memory", allowed=True, reason_code="ok", result_count=count)
+    click.echo(f"{T('已确认', 'Confirmed')}: {count}")
 
 
 @memory_group.command(name="delete", help=T("删除指定记忆及其旧版本。", "Delete memories and their old versions."))
