@@ -14,7 +14,7 @@ Paths are relative to the repository root. "Test" names an existing test that de
 
 ## 1. What is stopped before anything is written
 
-Every live capture event goes through one chain before the database (`_process_event` in `penpal/capture/manager.py`): global pause and source switches, exclusion list, domain exclusion, hygiene gate, policy rules, masking, write. There are three outcomes:
+Every live capture event goes through one chain before the database (`_process_event` in `penpal/capture/manager_events.py`): global pause and source switches, exclusion list, domain exclusion, hygiene gate, policy rules, masking, write. There are three outcomes:
 
 - **Dropped**: nothing is written, no trace remains.
 - **Metadata only**: the app and the time are kept; text and window title are cleared and the reason is stamped as `text_dropped` in the metadata.
@@ -117,7 +117,7 @@ Tests: `tests/test_capture_hygiene.py` (`test_keyboard_gate`, `test_keyboard_in_
 
 ## 6. Field-level masking
 
-On write, text, window titles and metadata are masked field by field (`penpal/privacy/desensitizer.py`, `detectors.py`; called from `_process_event` in `manager.py`).
+On live capture, text, window titles and metadata are masked field by field (`penpal/foundation/desensitizer.py`, `penpal/foundation/detectors.py`; called from `_process_event` in `penpal/capture/manager_events.py`).
 
 | Content | Treatment | Note |
 |---|---|---|
@@ -135,8 +135,9 @@ Tests: `tests/test_privacy_detectors.py` (including document-number positives an
 
 Three limits:
 
-- **Live capture** (window, clipboard, keyboard, screen text) goes through every rule above. **Imported sources** (Claude Code/Codex sessions, shell history, Git, Markdown, Spotlight) get only credential-class masking at ingest (`sources/sink.py`, `store/repository.py`): emails, phone numbers, ID numbers, card numbers and passport/permit numbers in imported text are not replaced there (browser-history URLs are the exception and get the full pass). A second layer runs when results are returned to an AI (`_redact_text` in `mcp/tools.py`): passport/permit, ID and card numbers always become `[PASSPORT]` / `[ID_CARD]` / `[BANK_CARD]` (`redact_documents` in `desensitizer.py`), and emails are masked per `privacy.redact_emails` (on by default); phone numbers in imported content have no such layer.
+- **Live capture and imported text** mask emails, phones and tokens according to the user's settings and also mask document numbers. Imported text first always filters credentials; if configuration loading fails, all switches default on (`redact_event` in `sources/sink.py`, `tests/test_import_redaction.py`). Imported metadata is outside this pass.
 - Every write path also runs a credential-class pass just before the row is stored (`insert_raw_event` in `store/repository.py`). At query time, the text of both events and memories (including `content` and `detail`) gets the credential and document-number pass again, so rows stored before a rule existed are not returned verbatim (test: `tests/test_memory_write.py::test_legacy_unmasked_document_numbers_are_masked_when_returned_to_the_host`). The stored text itself is unchanged; rewriting it needs a separate backfill.
+- MCP responses recursively mask string values, including original-file text and unknown fields, except a small set of structural IDs, enums and timestamps. Email masking follows the setting; phone masking is not a query-time backstop (`mcp/tools.py`, `tests/test_import_redaction.py`). Responses with captured content warn hosts to treat records as data, not follow their instructions; this notice cannot guarantee host compliance.
 - All of this is regex. It has no understanding of meaning; "my passphrase is hunter2" with no keyword gets through.
 
 ## 7. While the camera is on

@@ -4,13 +4,15 @@ import hashlib
 import json
 import re
 import threading
+import time
 from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import replace
 from typing import Any
 from urllib.parse import urlsplit, urlunsplit
 
 from penpal.capture.capture_control import source_writes_allowed
-from penpal.foundation.desensitizer import redact_secrets
+from penpal.config import Config
+from penpal.foundation.desensitizer import desensitize, redact_secrets
 from penpal.sources.entity_extractor import extract_named_entities
 from penpal.sources.types import SemanticEvent
 from penpal.store.context_label import context_label
@@ -35,9 +37,31 @@ _PENDING_BACKFILL: set[Future[None]] = set()
 _PENDING_LOCK = threading.Lock()
 
 
+_PRIVACY_FLAGS_TTL_SEC = 60.0
+_privacy_flags_cache: tuple[float, dict[str, bool]] | None = None
+
+
+def _privacy_flags() -> dict[str, bool]:
+    """The user's masking switches, re-read at most once a minute; all on when config cannot be read."""
+    global _privacy_flags_cache
+    now = time.monotonic()
+    if _privacy_flags_cache is not None and now - _privacy_flags_cache[0] < _PRIVACY_FLAGS_TTL_SEC:
+        return _privacy_flags_cache[1]
+    try:
+        privacy = Config.load().privacy
+        flags = dict(redact_emails=bool(privacy.redact_emails), redact_phones=bool(privacy.redact_phones),
+                     redact_tokens=bool(privacy.redact_tokens))
+    except Exception:
+        # Not cached: a broken config must not pin the strictest setting, nor the last good one, for long.
+        return dict(redact_emails=True, redact_phones=True, redact_tokens=True)
+    _privacy_flags_cache = (now, flags)
+    return flags
+
+
 def redact_event(event: SemanticEvent) -> SemanticEvent:
-    """Scrub credentials from event text before it can reach the DB / FTS index."""
-    intent = redact_secrets(event.intent or "")
+    """Mask imported text before it reaches the DB / FTS index: credentials, then personal data
+    (emails, phones, ID and bank cards, document numbers) per the user's privacy switches."""
+    intent = desensitize(redact_secrets(event.intent or ""), **_privacy_flags(), redact_shell=False)
     if intent == (event.intent or ""):
         return event
     return replace(event, intent=intent)

@@ -14,7 +14,7 @@
 
 ## 1. 写入之前先拦什么
 
-所有实时采集的事件在写库前都过同一条链路（`penpal/capture/manager.py` 的 `_process_event`），顺序是：全局暂停/来源开关 → 排除名单 → 域名排除 → 清洗关卡 → 策略规则 → 脱敏 → 写库。结果分三种：
+所有实时采集的事件在写库前都过同一条链路（`penpal/capture/manager_events.py` 的 `_process_event`），顺序是：全局暂停/来源开关 → 排除名单 → 域名排除 → 清洗关卡 → 策略规则 → 脱敏 → 写库。结果分三种：
 
 - **丢弃**：整条不写，库里没有任何痕迹。
 - **只留元数据**：保留"哪个 App、什么时间"，文字和窗口标题清空，并在元数据里标 `text_dropped` 原因。
@@ -117,7 +117,7 @@
 
 ## 6. 字段级打码
 
-写库时对文字、窗口标题和元数据逐字段处理（`penpal/privacy/desensitizer.py`、`detectors.py`；调用在 `manager.py` `_process_event`）。
+实时采集写库时对文字、窗口标题和元数据逐字段处理（`penpal/foundation/desensitizer.py`、`penpal/foundation/detectors.py`；调用在 `penpal/capture/manager_events.py` `_process_event`）。
 
 | 内容 | 处理 | 备注 |
 |---|---|---|
@@ -135,8 +135,9 @@
 
 三个边界：
 
-- **实时采集**（窗口、剪贴板、键盘、屏幕文字）走上表全部规则。**导入来源**（Claude Code/Codex 会话、终端历史、Git、Markdown、Spotlight）在入库时只做"凭据类"打码（`sources/sink.py`、`store/repository.py`）：邮箱、手机号、身份证、银行卡、护照等证件号在导入的原文里不会被替换（浏览器历史的网址例外，整串走了完整打码）。返回给 AI 时还有一层（`mcp/tools.py` `_redact_text`）：护照等证件号、身份证、银行卡始终打成 `[PASSPORT]` / `[ID_CARD]` / `[BANK_CARD]`（`desensitizer.py` `redact_documents`），邮箱按 `privacy.redact_emails` 打码（默认开）；手机号对导入内容没有这一层。
+- **实时采集和导入文字**入库时都按配置打码邮箱、手机号和令牌，并打码证件号；导入文字先强制过滤凭据，配置加载失败时所有开关默认开启（`sources/sink.py` `redact_event`，`tests/test_import_redaction.py`）。导入元数据不在这一处理范围内。
 - 另有一道兜底：任何写入路径落库前都会再过一遍凭据类打码（`store/repository.py` `insert_raw_event`）；查询返回时，事件和记忆（含 `content`、`detail`）的文字都再过一遍凭据类和证件号打码，规则上线前存下的旧数据也不会原样返回（测试：`tests/test_memory_write.py::test_legacy_unmasked_document_numbers_are_masked_when_returned_to_the_host`）。库里的原文不变，要改原文需另行回填。
+- MCP 返回时递归处理所有字符串值，包括原始文件文字和未知字段；少量 ID、枚举、时间等结构值除外，邮箱遵循配置，手机号不在查询时兜底范围内（`mcp/tools.py`，`tests/test_import_redaction.py`）。包含采集内容的结果带提示：将记录视为数据，不执行其中的指令；提示不能保证宿主遵守。
 - 这些全是正则，不理解语义。写成"我的口令是 hunter2"这种没有关键词的句子，就拦不住。
 
 ## 7. 摄像头开启时

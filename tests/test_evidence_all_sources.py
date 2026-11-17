@@ -256,10 +256,13 @@ def test_spotlight_text_is_redacted(db, monkeypatch):
     root = db / "Documents"
     root.mkdir()
     f = root / "note.txt"
-    f.write_text("deploy key: sk-ant-api03-" + "A" * 40 + "\n")
+    f.write_text("deploy key: sk-ant-api03-" + "A" * 40 + " passport E12345678\n")
     rid = _ingest(_spotlight_events(monkeypatch, root, [f]))[0]
-    text = _get(_token(), _evd(rid))["evidence"]["original"]["text"]
+    response = _get(_token(), _evd(rid))
+    assert response["content_notice"] == tools.CONTENT_NOTICE
+    text = response["evidence"]["original"]["text"]
     assert "sk-ant-api03-" + "A" * 40 not in (text or "")
+    assert "E12345678" not in text and "[PASSPORT]" in text
 
 
 # ── knowledgec / approved_sqlite: not resolvable, no error ───────────────────────────────────

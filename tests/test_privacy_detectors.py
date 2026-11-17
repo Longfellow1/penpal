@@ -336,7 +336,7 @@ def test_passport_mask_keeps_surrounding_chinese_context():
 
 
 def test_passport_is_not_a_secret_class_pattern():
-    # Imported sources only get credential-class masking; document numbers follow id_card there.
+    # Credential-only masking leaves document numbers to the separate full pass.
     from penpal.foundation.desensitizer import redact_secrets
 
     assert redact_secrets("护照号是E12345678") == "护照号是E12345678"
