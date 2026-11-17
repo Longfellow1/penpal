@@ -144,7 +144,7 @@ def parse_recipe_dict(data: dict[str, Any], origin: str = "<memory>") -> ToolRec
     _validate_keys(data, _ALLOWED_TOP_KEYS, f"{origin} top-level")
 
     tool_id = data.get("id")
-    if not isinstance(tool_id, str) or not re.match(r"^[a-z0-9_-]+$", tool_id):
+    if not isinstance(tool_id, str) or not re.fullmatch(r"[a-z0-9_-]+", tool_id):
         raise ValueError(f"{origin}: 'id' must be a non-empty kebab/snake string, got {tool_id!r}")
 
     name = data.get("name")
