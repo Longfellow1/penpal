@@ -52,7 +52,7 @@ G1_COVERED_TOOLS = {
     "propose_source_recipe": {"recipe_toml"},
 }
 G1_COVERED_RESPONSE_FIELDS = {
-    "status", "reason_code", "message", "next_action",
+    "status", "reason_code", "message", "next_action", "content_notice",
     "results", "results[].id", "results[].snippet", "results[].occurred_at", "results[].source",
     "results[].bucket", "results[].evidence_id", "results[].evidence_available", "results[].match", "results[].match_reason",
     "results[].occurrences", "results[].first_seen", "results[].last_seen",

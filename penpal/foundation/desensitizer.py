@@ -47,11 +47,16 @@ def _redact_shell_lines(text: str) -> str:
     return redacted
 
 
-def desensitize(text: str, redact_emails: bool = True, redact_phones: bool = True, redact_tokens: bool = True) -> str:
-    """Replace sensitive patterns with [REDACTED] / labelled placeholders; emails become ***@domain."""
+def desensitize(text: str, redact_emails: bool = True, redact_phones: bool = True, redact_tokens: bool = True,
+                redact_shell: bool = True) -> str:
+    """Replace sensitive patterns with [REDACTED] / labelled placeholders; emails become ***@domain.
+
+    redact_shell wipes whole install/sudo/export-style lines; it is meant for live keyboard and screen
+    text. Imported chats and git history keep their commands (secrets inside them are still masked)."""
     if not text:
         return text
-    text = _redact_shell_lines(text)
+    if redact_shell:
+        text = _redact_shell_lines(text)
     if redact_emails:
         text = mask_emails(text)
     enabled = {
@@ -59,6 +64,8 @@ def desensitize(text: str, redact_emails: bool = True, redact_phones: bool = Tru
         "phone_cn": redact_phones,
         "id_card": True,
         "bank_card": True,
+        "passport": True,
+        "passport_context": True,
         "api_key": redact_tokens,
         "bearer_token": redact_tokens,
         "jwt": redact_tokens,
@@ -159,6 +166,30 @@ def redact_secrets(text: str) -> str:
     for d in detections:
         parts.append(text[prev:d.start])
         parts.append("[REDACTED]")
+        prev = d.end
+    parts.append(text[prev:])
+    return "".join(parts)
+
+
+# Document-number detectors only: the query-time backstop for rows stored before these rules existed
+# and for imported text, which gets only credential-class masking at ingest. Phones stay out: no
+# checksum to keep order ids and timestamps from being masked.
+_DOCUMENT_PATTERNS = frozenset({"passport", "passport_context", "id_card", "bank_card"})
+_ENABLED_DOCUMENTS = {name: name in _DOCUMENT_PATTERNS for name in PATTERNS}
+
+
+def redact_documents(text: str) -> str:
+    """Replace passport / permit, ID card and card numbers with their labelled placeholders only."""
+    if not text:
+        return text
+    detections = detect(text, _ENABLED_DOCUMENTS)
+    if not detections:
+        return text
+    parts: list[str] = []
+    prev = 0
+    for d in detections:
+        parts.append(text[prev:d.start])
+        parts.append(d.replacement)
         prev = d.end
     parts.append(text[prev:])
     return "".join(parts)

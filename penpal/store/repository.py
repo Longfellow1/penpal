@@ -17,7 +17,12 @@ def _now() -> str:
 
 # ── RawEvent ─────────────────────────────────────────────────────────────────
 
-def insert_raw_event(e: RawEvent) -> int:
+def insert_raw_event(
+    e: RawEvent,
+    *,
+    conn: Optional[sqlite3.Connection] = None,
+    commit: bool = True,
+) -> int:
     """Idempotent insert.
 
     A unique index on (source, ts_start, IFNULL(content_hash,'')) blocks
@@ -28,7 +33,8 @@ def insert_raw_event(e: RawEvent) -> int:
     after a retry. NULL content_hash is normalised to '' so two
     NULL-hash events with identical (source, ts_start) collide.
     """
-    conn = get_conn()
+    if conn is None:
+        conn = get_conn()
     # Credentials must not reach the DB / FTS index / MCP hosts (D26). Idempotent; capture keeps its
     # own PII filters upstream, this is the secret-class backstop for every writer.
     e.content_text = redact_secrets(strip_invisible(e.content_text))
@@ -65,7 +71,8 @@ def insert_raw_event(e: RawEvent) -> int:
     if cur.rowcount > 0:
         # Progressive-typing snapshots: the previous state of the same field is superseded (v33 rule).
         mark_previous_snapshot(conn, cur.lastrowid, e.source, e.app_name, e.ts_start, e.content_text)
-    conn.commit()
+    if commit:
+        conn.commit()
     if cur.rowcount > 0:
         return cur.lastrowid
     if e.external_id is not None:
@@ -95,9 +102,11 @@ def insert_raw_event(e: RawEvent) -> int:
                    WHERE id = ?""",
                 (e.source_id, e.external_id, e.bucket, e.kind, row[0]),
             )
-            conn.commit()
+            if commit:
+                conn.commit()
         except sqlite3.IntegrityError:
-            conn.rollback()
+            if commit:
+                conn.rollback()
     return row[0]
 
 

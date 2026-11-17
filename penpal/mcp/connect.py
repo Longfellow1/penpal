@@ -5,19 +5,28 @@ import hashlib
 import json
 import re
 import shutil
+from contextlib import contextmanager
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any, Iterator, Mapping
 
 import tomllib
 
-from penpal.mcp.auth import CLIENT_ENV, TOKEN_ENV, active_grants, create_grant, revoke_grants
+from penpal.mcp.auth import (
+    CLIENT_ENV,
+    TOKEN_ENV,
+    active_grants,
+    create_grant,
+    revoke_grants,
+    revoke_token,
+)
 from penpal.mcp.cli import _penpal_executable
 from penpal.sources.recipes.catalog import (
     expand_vars_and_tilde,
     is_tool_detected,
     load_catalog,
 )
+from penpal.utils.lock import FileLockTimeout, exclusive_file_lock
 from penpal.utils.logging import get_logger
 from penpal.utils.paths import get_data_dir
 
@@ -30,6 +39,11 @@ SKILL_DIR_MAP: dict[str, str] = {
     "antigravity": "~/.gemini/config/skills/penpal",
     "cursor": "~/.cursor/skills/penpal",
 }
+
+_CONNECT_LOCK_TIMEOUT_SEC = 30.0
+_CONNECT_FAILURE_MESSAGE = "接入失败，已撤销本次创建的授权并恢复配置，请稍后重试"
+_CONNECT_LOCK_TIMEOUT_MESSAGE = "接入操作正由另一进程执行，请稍后重试"
+_DISCONNECT_LOCK_TIMEOUT_MESSAGE = "断开操作正由另一进程执行，请稍后重试"
 
 
 def _get_yaml_module():
@@ -111,6 +125,16 @@ def _backups_dir() -> Path:
 
 def _state_file_path() -> Path:
     return _connect_dir() / "state.json"
+
+
+def _connect_lock_path() -> Path:
+    return _connect_dir() / "state.lock"
+
+
+@contextmanager
+def _connect_state_lock() -> Iterator[None]:
+    with exclusive_file_lock(_connect_lock_path(), timeout=_CONNECT_LOCK_TIMEOUT_SEC):
+        yield
 
 
 def _load_all_states() -> dict[str, ToolState]:
@@ -526,24 +550,35 @@ def _write_skill_file(tool_id: str, env: Mapping[str, str] | None = None) -> tup
     return skill_path, True
 
 
-def auto_connect(
-    *,
-    dry_run: bool = False,
-    catalog_dir: Path | None = None,
-    env: Mapping[str, str] | None = None,
-) -> list[ConnectResult]:
-    """Auto-connect all detected AI tools to Penpal MCP."""
-    recipes = load_catalog(catalog_dir)
-    states = _load_all_states()
-    results: list[ConnectResult] = []
-    exe = _penpal_executable()
+@dataclass
+class _ConnectPlan:
+    tool_id: str
+    tool_name: str
+    config_path: Path
+    style: str
+    initial_bytes: bytes | None
+    original_mode: int | None
+    backup_path: str | None
+    original_existed: bool
+    is_manual_takeover: bool
 
-    for tool in recipes:
+
+def _discover_connect_candidates(
+    *,
+    catalog_dir: Path | None,
+    env: Mapping[str, str] | None,
+    dry_run: bool,
+    exe: str,
+    states: dict[str, ToolState],
+) -> list[_ConnectPlan | ConnectResult]:
+    """Select tools that need a grant; report tools that need no grant in place."""
+    items: list[_ConnectPlan | ConnectResult] = []
+    for tool in load_catalog(catalog_dir):
         if not is_tool_detected(tool, env=env):
             continue
 
         if not tool.mcp or tool.mcp.style == "none":
-            results.append(
+            items.append(
                 ConnectResult(
                     tool_id=tool.id,
                     tool_name=tool.name,
@@ -554,7 +589,7 @@ def auto_connect(
             continue
 
         if tool.mcp.style == "manual":
-            results.append(
+            items.append(
                 ConnectResult(
                     tool_id=tool.id,
                     tool_name=tool.name,
@@ -567,7 +602,7 @@ def auto_connect(
 
         # YAML dependency check
         if tool.mcp.style == "yaml_mcp_servers" and _get_yaml_module() is None:
-            results.append(
+            items.append(
                 ConnectResult(
                     tool_id=tool.id,
                     tool_name=tool.name,
@@ -583,7 +618,7 @@ def auto_connect(
         config_expanded = Path(expand_vars_and_tilde(tool.mcp.config, env))
 
         if dry_run:
-            results.append(
+            items.append(
                 ConnectResult(
                     tool_id=tool.id,
                     tool_name=tool.name,
@@ -605,11 +640,13 @@ def auto_connect(
             is_manual_takeover = True
 
         # Pre-check: if file exists, verify whether it can be parsed
-        initial_raw_bytes: bytes | None = None
+        initial_bytes: bytes | None = None
+        original_mode: int | None = None
         if config_expanded.is_file():
             try:
-                initial_raw_bytes = config_expanded.read_bytes()
-                raw_check = initial_raw_bytes.decode("utf-8")
+                initial_bytes = config_expanded.read_bytes()
+                original_mode = config_expanded.stat().st_mode & 0o777
+                raw_check = initial_bytes.decode("utf-8")
                 if tool.mcp.style in ("json_mcpServers", "json_servers"):
                     json.loads(raw_check)
                 elif tool.mcp.style == "toml_mcp_servers":
@@ -620,7 +657,7 @@ def auto_connect(
                         yaml_mod.safe_load(raw_check)
             except Exception as exc:
                 LOGGER.warning("config parse error for %s: %s", tool.id, exc)
-                results.append(
+                items.append(
                     ConnectResult(
                         tool_id=tool.id,
                         tool_name=tool.name,
@@ -652,8 +689,8 @@ def auto_connect(
 
         # If already configured and managed by connect with active grant, check idempotency
         if existing_state and active_grant_present and is_already_set and not is_manual_takeover:
-            skill_path, _ = _write_skill_file(tool.id, env=env)
-            results.append(
+            _write_skill_file(tool.id, env=env)
+            items.append(
                 ConnectResult(
                     tool_id=tool.id,
                     tool_name=tool.name,
@@ -664,76 +701,186 @@ def auto_connect(
             )
             continue
 
-        # Create independent grant for this tool (operations: read,write)
-        token = create_grant(client_id=tool.id, operations=["read", "write"])
+        items.append(
+            _ConnectPlan(
+                tool_id=tool.id,
+                tool_name=tool.name,
+                config_path=config_expanded,
+                style=tool.mcp.style,
+                initial_bytes=initial_bytes,
+                original_mode=original_mode,
+                backup_path=backup_path,
+                original_existed=original_existed,
+                is_manual_takeover=is_manual_takeover,
+            )
+        )
+    return items
 
-        # Write config with concurrency guard
+
+def _config_contains_token(path: Path, token: str) -> bool:
+    try:
+        return token in path.read_text(encoding="utf-8")
+    except (OSError, UnicodeError):
+        return False
+
+
+def _restore_config_bytes(path: Path, original_bytes: bytes | None, original_mode: int | None) -> None:
+    if original_bytes is None:
+        path.unlink(missing_ok=True)
+        return
+    temp_path = path.with_suffix(f"{path.suffix}.rollback")
+    try:
+        temp_path.write_bytes(original_bytes)
+        if original_mode is not None:
+            try:
+                temp_path.chmod(original_mode)
+            except OSError as exc:
+                LOGGER.debug("chmod rollback temp failed: %s", type(exc).__name__)
+        temp_path.replace(path)
+    finally:
+        temp_path.unlink(missing_ok=True)
+
+
+def _rollback_connect(
+    plan: _ConnectPlan,
+    token: str,
+    config_written: bool,
+    error: str,
+    message: str,
+) -> ConnectResult:
+    try:
+        revoke_token(token)
+    except Exception as exc:
+        LOGGER.warning("revoke token failed for %s: %s", plan.tool_id, type(exc).__name__)
+    if config_written or _config_contains_token(plan.config_path, token):
+        try:
+            _restore_config_bytes(plan.config_path, plan.initial_bytes, plan.original_mode)
+        except OSError as exc:
+            LOGGER.warning("config rollback failed for %s: %s", plan.tool_id, type(exc).__name__)
+    return ConnectResult(
+        tool_id=plan.tool_id,
+        tool_name=plan.tool_name,
+        status="parse_error",
+        config_path=str(plan.config_path),
+        error=error,
+        message=message,
+    )
+
+
+def _create_grant_and_persist(
+    plan: _ConnectPlan,
+    states: dict[str, ToolState],
+    *,
+    exe: str,
+    env: Mapping[str, str] | None,
+) -> tuple[ConnectResult, ToolState | None]:
+    token = create_grant(client_id=plan.tool_id, operations=["read", "write"])
+    config_written = False
+    stage = "config"
+    try:
         try:
             _update_config_file(
-                config_expanded,
-                tool.mcp.style,
-                tool.id,
+                plan.config_path,
+                plan.style,
+                plan.tool_id,
                 exe,
                 token,
-                expected_bytes=initial_raw_bytes,
+                expected_bytes=plan.initial_bytes,
             )
+            config_written = True
         except ConcurrentModificationError:
-            revoke_grants(tool.id)
-            results.append(
-                ConnectResult(
-                    tool_id=tool.id,
-                    tool_name=tool.name,
-                    status="parse_error",
-                    config_path=str(config_expanded),
-                    error="concurrent_modification",
-                    message="配置文件正被其他程序修改，请稍后重试",
-                )
-            )
-            continue
+            return _rollback_connect(
+                plan, token, config_written, "concurrent_modification", "配置文件正被其他程序修改，请稍后重试"
+            ), None
         except ConfigParseError as exc:
-            revoke_grants(tool.id)
-            results.append(
-                ConnectResult(
-                    tool_id=tool.id,
-                    tool_name=tool.name,
-                    status="parse_error",
-                    config_path=str(config_expanded),
-                    error=str(exc),
-                    message=f"配置文件解析失败: {exc}",
-                )
-            )
-            continue
+            return _rollback_connect(
+                plan, token, config_written, str(exc), f"配置文件解析失败: {exc}"
+            ), None
 
-        written_hash = _file_hash(config_expanded)
+        stage = "hash"
+        written_hash = _file_hash(plan.config_path)
 
         # Write skill file if tool is mapped
-        skill_path, skill_created = _write_skill_file(tool.id, env=env)
+        stage = "skill"
+        skill_path, skill_created = _write_skill_file(plan.tool_id, env=env)
 
         # Save state
-        states[tool.id] = ToolState(
-            tool_id=tool.id,
-            config_path=str(config_expanded),
-            backup_path=backup_path,
-            original_existed=original_existed,
+        stage = "state"
+        new_state = ToolState(
+            tool_id=plan.tool_id,
+            config_path=str(plan.config_path),
+            backup_path=plan.backup_path,
+            original_existed=plan.original_existed,
             written_hash=written_hash,
             skill_path=str(skill_path) if skill_path else None,
             skill_created=skill_created,
-            took_over_manual=is_manual_takeover,
+            took_over_manual=plan.is_manual_takeover,
         )
-        _save_all_states(states)
+        _save_all_states({**states, plan.tool_id: new_state})
+    except Exception as exc:
+        LOGGER.warning("connect failed for %s at %s: %s", plan.tool_id, stage, type(exc).__name__)
+        return _rollback_connect(
+            plan, token, config_written, f"{stage}_failed", _CONNECT_FAILURE_MESSAGE
+        ), None
 
-        msg = f"已接管现有手动配置: {config_expanded}" if is_manual_takeover else f"成功接入: {config_expanded}"
-        results.append(
-            ConnectResult(
-                tool_id=tool.id,
-                tool_name=tool.name,
-                status="connected",
-                config_path=str(config_expanded),
-                message=msg,
-            )
-        )
+    msg = (
+        f"已接管现有手动配置: {plan.config_path}"
+        if plan.is_manual_takeover else f"成功接入: {plan.config_path}"
+    )
+    return ConnectResult(
+        tool_id=plan.tool_id,
+        tool_name=plan.tool_name,
+        status="connected",
+        config_path=str(plan.config_path),
+        message=msg,
+    ), new_state
+
+
+def _auto_connect_locked(
+    *,
+    dry_run: bool,
+    catalog_dir: Path | None,
+    env: Mapping[str, str] | None,
+) -> list[ConnectResult]:
+    states = _load_all_states()
+    results: list[ConnectResult] = []
+    exe = _penpal_executable()
+
+    for item in _discover_connect_candidates(
+        catalog_dir=catalog_dir, env=env, dry_run=dry_run, exe=exe, states=states
+    ):
+        if isinstance(item, ConnectResult):
+            results.append(item)
+            continue
+        result, new_state = _create_grant_and_persist(item, states, exe=exe, env=env)
+        results.append(result)
+        if new_state is not None:
+            states[item.tool_id] = new_state
 
     return results
+
+
+def auto_connect(
+    *,
+    dry_run: bool = False,
+    catalog_dir: Path | None = None,
+    env: Mapping[str, str] | None = None,
+) -> list[ConnectResult]:
+    """Auto-connect all detected AI tools to Penpal MCP."""
+    try:
+        with _connect_state_lock():
+            return _auto_connect_locked(dry_run=dry_run, catalog_dir=catalog_dir, env=env)
+    except FileLockTimeout:
+        LOGGER.warning("connect state lock timeout")
+        return [
+            ConnectResult(
+                tool_id="connect",
+                tool_name="Penpal",
+                status="parse_error",
+                error="lock_timeout",
+                message=_CONNECT_LOCK_TIMEOUT_MESSAGE,
+            )
+        ]
 
 
 def list_tools(
@@ -867,14 +1014,12 @@ def list_tools(
     return statuses
 
 
-def disconnect_tool(
+def _disconnect_tool_locked(
     tool_id: str,
     *,
-    catalog_dir: Path | None = None,
-    env: Mapping[str, str] | None = None,
+    recipes: Mapping[str, Any],
+    env: Mapping[str, str] | None,
 ) -> DisconnectResult:
-    """Disconnect a single tool and restore its configuration."""
-    recipes = {t.id: t for t in load_catalog(catalog_dir)}
     states = _load_all_states()
 
     tool = recipes.get(tool_id)
@@ -938,6 +1083,28 @@ def disconnect_tool(
         _save_all_states(states)
 
     return DisconnectResult(tool_id=tool_id, tool_name=tool_name, status=status, message=message)
+
+
+def disconnect_tool(
+    tool_id: str,
+    *,
+    catalog_dir: Path | None = None,
+    env: Mapping[str, str] | None = None,
+) -> DisconnectResult:
+    """Disconnect a single tool and restore its configuration."""
+    recipes = {t.id: t for t in load_catalog(catalog_dir)}
+    tool_name = recipes[tool_id].name if tool_id in recipes else tool_id
+    try:
+        with _connect_state_lock():
+            return _disconnect_tool_locked(tool_id, recipes=recipes, env=env)
+    except FileLockTimeout:
+        LOGGER.warning("disconnect state lock timeout for %s", tool_id)
+        return DisconnectResult(
+            tool_id=tool_id,
+            tool_name=tool_name,
+            status="error",
+            message=_DISCONNECT_LOCK_TIMEOUT_MESSAGE,
+        )
 
 
 def disconnect_all(

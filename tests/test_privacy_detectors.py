@@ -264,3 +264,115 @@ def test_desensitize_json_value_recurses_through_nested_structures():
     assert result["nested"]["items"][2]["secret"] == "[REDACTED]"
     assert result["count"] == 3
     assert result["flag"] is True
+
+
+# All document numbers below are made up: they follow the format, not any real person.
+PASSPORT_POSITIVES = [
+    ("E12345678", "E12345678"),
+    ("EA1234567", "EA1234567"),
+    ("G12345678", "G12345678"),
+    ("P1234567", "P1234567"),
+    ("S12345678", "S12345678"),
+    ("D1234567", "D1234567"),
+    ("C12345678", "C12345678"),
+    ("CB1234567", "CB1234567"),
+    ("H12345678", "H12345678"),
+    ("M1234567890", "M1234567890"),
+    ("我的护照号是E12345678，下周出发", "E12345678"),
+    ("港澳通行证：CB1234567。", "CB1234567"),
+    ("回乡证H1234567890到期了", "H1234567890"),
+    ("台胞证号码：0123456789", "0123456789"),
+    ("Passport No: X1234567B", "X1234567B"),
+    ("passport number is 987654321", "987654321"),
+    ("PASSPORT #K12345678", "K12345678"),
+    ("Travel Document No. AB123456", "AB123456"),
+    ("证件号为 TW12345678", "TW12345678"),
+    ("通行证号码是 T98765432", "T98765432"),
+    ("My passport is E12345678. See you", "E12345678"),  # sentence-ending dot
+    ("护照号E12345678。", "E12345678"),
+]
+
+PASSPORT_NEGATIVES = [
+    "E2E12345",  # end-to-end test tag
+    "G1234567890123",  # too long for any format
+    "commit e1234567 fixes it",  # lowercase git short sha
+    "sha E1234567",  # one digit short
+    "release v1.2.3 and 2.10.0",
+    "D1234567-ABCD-1234",  # uppercase UUID fragment
+    "colour #D1234567",
+    "test_E12345678",  # identifier
+    "E12345678abc",  # longer alphanumeric run
+    "build 1.E12345678.3",  # version-like
+    "SM-G9980 RTX4090 XPS13-9310",  # product models
+    "DE12345678",  # letter before the prefix
+    "H1234567",  # home-return permit needs 8-10 digits
+    "M12345678901",  # 11 digits
+    "护照到期日 2027-03-01",  # keyword but no number right after it
+    "护照 1234",  # too few digits
+    "passport photo booth",  # keyword followed by a plain word
+    "证件号后四位 ABCD12",  # keyword, then words, not the number
+    "技术交流S12345678.pdf",  # document serial in a file name
+    "scan_E12345678.jpg and EA1234567.png",  # file names
+]
+
+
+@pytest.mark.parametrize("text,number", PASSPORT_POSITIVES)
+def test_passport_like_numbers_are_masked(text, number):
+    detections = detect(text)
+    assert [d.pattern_name for d in detections if text[d.start:d.end] == number]
+    result = desensitize(text)
+    assert number not in result
+    assert "[PASSPORT]" in result
+
+
+@pytest.mark.parametrize("text", PASSPORT_NEGATIVES)
+def test_code_and_product_strings_are_not_passports(text):
+    assert not [d for d in detect(text) if d.replacement == "[PASSPORT]"]
+
+
+def test_passport_mask_keeps_surrounding_chinese_context():
+    assert desensitize("我的护照号是E12345678，下周出发") == "我的护照号是[PASSPORT]，下周出发"
+    assert desensitize("Passport No: X1234567B, expires soon") == "Passport No: [PASSPORT], expires soon"
+
+
+def test_passport_is_not_a_secret_class_pattern():
+    # Credential-only masking leaves document numbers to the separate full pass.
+    from penpal.foundation.desensitizer import redact_secrets
+
+    assert redact_secrets("护照号是E12345678") == "护照号是E12345678"
+
+
+def test_captured_clipboard_text_is_stored_without_passport_number(tmp_path):
+    from penpal.capture.manager import CaptureManager
+    from penpal.capture.normalizer import normalize_clipboard_event
+    from penpal.config import Config
+    from penpal.store import buckets
+    from penpal.store.db import close, get_conn, init_db
+
+    close()
+    buckets.reset_cache()
+    init_db(tmp_path / "capture.db")
+    try:
+        mgr = CaptureManager(Config())
+        mgr._process_event(normalize_clipboard_event(
+            "我的护照号是E12345678，下周出发", app_name="Notes", ts_start="2026-03-02T10:00:01+00:00"))
+        rows = [r[0] for r in get_conn().execute("SELECT content_text FROM raw_events WHERE source = 'clipboard'")]
+        assert rows and all("E12345678" not in r and "[PASSPORT]" in r for r in rows)
+        dump = "\n".join(get_conn().iterdump())
+        assert "E12345678" not in dump
+    finally:
+        close()
+        buckets.reset_cache()
+
+
+def test_redact_documents_masks_only_document_numbers():
+    from penpal.foundation.desensitizer import redact_documents
+
+    # Synthetic: the ID passes GB 11643, the card passes Luhn.
+    text = "护照号E12345678，身份证110101199003071233，卡6222021234567890128，邮箱alice@example.com，电话13812345678"
+    assert redact_documents(text) == (
+        "护照号[PASSPORT]，身份证[ID_CARD]，卡[BANK_CARD]，邮箱alice@example.com，电话13812345678"
+    )
+    assert redact_documents("Passport No: X1234567B") == "Passport No: [PASSPORT]"
+    assert redact_documents("commit e1234567 on 2026-01-01") == "commit e1234567 on 2026-01-01"
+    assert redact_documents("") == ""

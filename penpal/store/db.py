@@ -154,6 +154,11 @@ def initialized_db_path() -> Path | None:
 
 
 def _get_conn() -> sqlite3.Connection:
+    # init_db only resets the calling thread's connection; a pooled thread (entity backfill, scan
+    # executor) still holding one to a previous database reconnects here instead of writing there.
+    if getattr(_local, "conn", None) is not None and getattr(_local, "path", None) != _db_path:
+        _local.conn.close()
+        _local.conn = None
     if not hasattr(_local, "conn") or _local.conn is None:
         if _db_path is None:
             raise RuntimeError("DB not initialized. Call init_db() first.")
@@ -161,6 +166,7 @@ def _get_conn() -> sqlite3.Connection:
         conn.execute("PRAGMA busy_timeout=15000")
         conn.row_factory = sqlite3.Row
         _local.conn = conn
+        _local.path = _db_path
     return _local.conn
 
 

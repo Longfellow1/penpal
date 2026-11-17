@@ -261,7 +261,9 @@ def test_end_to_end_prepare_run_replay_judge_report(tmp_path, fake_bin, capsys):
 
     assert main(["prepare", *base, "--db", str(src), "--exclude-session", "build-sess", "--authored-after", "2026-10-01T00:00:00"]) == 0
     out = capsys.readouterr().out
-    assert "excluded sessions=1, after cutoff=1" in out and "g1" not in out
+    # The run directory is a random temp path that can itself contain "g1"; check the rest only.
+    report = "\n".join(line for line in out.splitlines() if not line.startswith("run dir:"))
+    assert "excluded sessions=1, after cutoff=1" in out and "g1" not in report
     assert "gold validation: 3 checked" in out  # A1, D1, D2 (not_found skipped); no row text
     run_dir = next((data / "runs").iterdir())
 

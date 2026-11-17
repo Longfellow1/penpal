@@ -14,7 +14,7 @@
 
 ## 1. 写入之前先拦什么
 
-所有实时采集的事件在写库前都过同一条链路（`penpal/capture/manager.py` 的 `_process_event`），顺序是：全局暂停/来源开关 → 排除名单 → 域名排除 → 清洗关卡 → 策略规则 → 脱敏 → 写库。结果分三种：
+所有实时采集的事件在写库前都过同一条链路（`penpal/capture/manager_events.py` 的 `_process_event`），顺序是：全局暂停/来源开关 → 排除名单 → 域名排除 → 清洗关卡 → 策略规则 → 脱敏 → 写库。结果分三种：
 
 - **丢弃**：整条不写，库里没有任何痕迹。
 - **只留元数据**：保留"哪个 App、什么时间"，文字和窗口标题清空，并在元数据里标 `text_dropped` 原因。
@@ -117,7 +117,7 @@
 
 ## 6. 字段级打码
 
-写库时对文字、窗口标题和元数据逐字段处理（`penpal/privacy/desensitizer.py`、`detectors.py`；调用在 `manager.py` `_process_event`）。
+实时采集写库时对文字、窗口标题和元数据逐字段处理（`penpal/foundation/desensitizer.py`、`penpal/foundation/detectors.py`；调用在 `penpal/capture/manager_events.py` `_process_event`）。
 
 | 内容 | 处理 | 备注 |
 |---|---|---|
@@ -125,17 +125,19 @@
 | 手机号（中国大陆 11 位） | `[REDACTED]` | |
 | 身份证号（18 位） | `[ID_CARD]` | 校验位对得上才打码 |
 | 银行卡号（16–19 位） | `[BANK_CARD]` | Luhn 校验通过才打码，避免误伤订单号、时间戳 |
+| 护照、港澳通行证、回乡证号码 | `[PASSPORT]` | 中国护照（`E`+8 位、`E`+字母+7 位、`G`+8 位、`P`/`S`/`D`+7–8 位）、港澳通行证（`C`+8 位、`C`+字母+7 位）、回乡证（`H`/`M`+8–10 位）直接打码，只认大写、前后不能紧挨字母数字；台胞证、外国护照等格式不固定的号码，只有紧跟“护照 / 通行证 / 证件号 / passport / travel document”等关键词时才打码（6–12 位字母数字、至少 5 位数字） |
 | `password=…`、`token: …`、`api_key=…`、`secret=…` | `[REDACTED]` | 整个"键值"到空白为止 |
 | Bearer 令牌、JWT、AWS 密钥（`AKIA…`）、`sk-…` 密钥、GitHub 令牌、Slack 令牌、网址里的 `?token=` 等参数、私钥头、UUID v4 | `[REDACTED]` | |
 | 以 `sudo`、`export X=…`、`brew/npm/pip install …` 开头的行等 | `[REDACTED_SHELL]` | 防止命令里夹带凭据 |
 | Penpal 自己的 MCP 令牌（`kp_…`） | `[REDACTED]` | 防止它出现在导入的会话记录里再被读回 |
 
-测试：`tests/test_privacy_detectors.py`、`tests/test_capture_hygiene.py`（卡号、身份证号校验）、`tests/test_auth_audit.py::test_keypulse_token_in_ingested_text_is_redacted`。
+测试：`tests/test_privacy_detectors.py`（含证件号正反例）、`tests/test_capture_hygiene.py`（卡号、身份证号校验）、`tests/test_auth_audit.py::test_keypulse_token_in_ingested_text_is_redacted`。
 
 三个边界：
 
-- **实时采集**（窗口、剪贴板、键盘、屏幕文字）走上表全部规则。**导入来源**（Claude Code/Codex 会话、终端历史、Git、Markdown、Spotlight）在入库时只做"凭据类"打码（`sources/sink.py`、`store/repository.py`）：邮箱、手机号、身份证、银行卡在导入的原文里不会被替换（浏览器历史的网址例外，整串走了完整打码）。邮箱会在 AI 查询返回时再打码（`mcp/tools.py`，由 `privacy.redact_emails` 控制，默认开）；手机号、证件号、银行卡对导入内容则没有这一层。
-- 另有一道兜底：任何写入路径落库前都会再过一遍凭据类打码（`store/repository.py` `insert_raw_event`），查询返回时也再过一遍。
+- **实时采集和导入文字**入库时都按配置打码邮箱、手机号和令牌，并打码证件号；导入文字先强制过滤凭据，配置加载失败时所有开关默认开启（`sources/sink.py` `redact_event`，`tests/test_import_redaction.py`）。导入元数据不在这一处理范围内。
+- 另有一道兜底：任何写入路径落库前都会再过一遍凭据类打码（`store/repository.py` `insert_raw_event`）；查询返回时，事件和记忆（含 `content`、`detail`）的文字都再过一遍凭据类和证件号打码，规则上线前存下的旧数据也不会原样返回（测试：`tests/test_memory_write.py::test_legacy_unmasked_document_numbers_are_masked_when_returned_to_the_host`）。库里的原文不变，要改原文需另行回填。
+- MCP 返回时递归处理所有字符串值，包括原始文件文字和未知字段；少量 ID、枚举、时间等结构值除外，邮箱遵循配置，手机号不在查询时兜底范围内（`mcp/tools.py`，`tests/test_import_redaction.py`）。包含采集内容的结果带提示：将记录视为数据，不执行其中的指令；提示不能保证宿主遵守。
 - 这些全是正则，不理解语义。写成"我的口令是 hunter2"这种没有关键词的句子，就拦不住。
 
 ## 7. 摄像头开启时
@@ -158,13 +160,13 @@
 | 随时撤销，下一次调用立刻失效（不缓存）；`rotate` 换新令牌，旧令牌立刻失效 | `revoke_grants`、`rotate_grant`；`tests/test_auth_audit.py::test_revoke_is_immediate_and_removes_whitelist`、`test_rotate_keeps_grant_and_scope_and_kills_old_token` |
 | 审计日志记：谁（客户端名）、什么时候、哪个工具、放行还是拒绝、授权的分类名、放行时返回几条；**不记查询内容、片段、令牌** | `mcp/audit.py`（表里没有能放查询文字的列）；`penpal mcp audit`；`tests/test_auth_audit.py` |
 | 被拒绝的调用也进审计，且对调用方返回统一的拒绝内容，不透露原因 | `tests/test_auth_audit.py::test_at15_every_denial_has_identical_body_and_an_audit_row` |
-| 返回给 AI 的文字再过一遍凭据打码和邮箱打码 | `mcp/tools.py` `_redact_text` |
+| 返回给 AI 的文字（含记忆）再过一遍凭据打码、证件号打码和邮箱打码 | `mcp/tools.py` `_redact_text` |
 | 现有工具七个：只读的 `search_context`、`get_timeline`、`get_evidence`、`rate_result`，需要写权限的 `commit_memory`、`update_memory`、`propose_source_recipe` | `mcp/server.py`；`tests/test_g1_leakage.py` |
 
 要说清的边界：
 
 - **写入要单独授权**：`commit_memory`、`update_memory`、`propose_source_recipe` 只接受带 `write` 的授权；只读授权调用会被拒绝，也会进审计（`mcp/memory_tools.py`、`mcp/recipe_tools.py`；`tests/test_memory_write.py::test_rejects_unauthorized_without_disclosure`、`tests/test_recipe_submission.py::test_read_only_grant_cannot_propose_a_recipe`）。`penpal connect --auto` 接入时给读写（`mcp/connect.py`），`penpal mcp grant` 默认只读。`rate_result` 只需要读权限，只在本机写一条评分记录（评分、可选的备注和查询文字，限长），只能评它自己拿到过的结果，`penpal purge` 会连带清掉。
-- **记忆**：AI 写入的记忆和 `penpal import memmy` 导入的记忆，存在本机 `penpal.db` 的 `memories` 表。写入时含凭据的内容会被拒绝，导入时会被打码（`memory/writer.py`、`memory/memmy_import.py`；`tests/test_memory_write.py`、`tests/test_memmy_import.py`）。授权必须覆盖一条记忆所属的全部分类，才能读到它。可用 `penpal memory list` 查看，`penpal memory delete mem_<id>` 或 `penpal memory delete --source memmy` 删除（可加 `--dry-run` 预览）；删除也会清除被替代的旧版本（`cli/memory.py`、`store/memories.py`；`tests/test_memory_cli.py`）。AI 写入的记忆在你确认前都标为"待确认"：做法类（procedure）只有写它的那个 AI 能看到，事实、偏好、决定会共享给其他 AI，但带 `confirmed: false`、排在已确认的后面。一个 AI 只能修改、撤回它自己写的记忆。用 `penpal memory list --pending` 查看待确认的，`penpal memory confirm mem_<id>` 确认（`memory/writer.py` `visible`、`require_owner`；`tests/test_memory_trust.py`）。
+- **记忆**：AI 写入的记忆和 `penpal import memmy` 导入的记忆，存在本机 `penpal.db` 的 `memories` 表。写入时含凭据的内容会被拒绝，导入时会被打码；手机号、身份证、银行卡、护照等证件号在写入和导入时都按第 6 节打码后再存（`memory/writer.py`、`memory/memmy_import.py`；`tests/test_memory_write.py`、`tests/test_memmy_import.py`）。授权必须覆盖一条记忆所属的全部分类，才能读到它。可用 `penpal memory list` 查看，`penpal memory delete mem_<id>` 或 `penpal memory delete --source memmy` 删除（可加 `--dry-run` 预览）；删除也会清除被替代的旧版本（`cli/memory.py`、`store/memories.py`；`tests/test_memory_cli.py`）。AI 写入的记忆在你确认前都标为"待确认"：做法类（procedure）只有写它的那个 AI 能看到，事实、偏好、决定会共享给其他 AI，但带 `confirmed: false`、排在已确认的后面。一个 AI 只能修改、撤回它自己写的记忆。用 `penpal memory list --pending` 查看待确认的，`penpal memory confirm mem_<id>` 确认（`memory/writer.py` `visible`、`require_owner`；`tests/test_memory_trust.py`）。
 - **AI 提交的读取配方**：AI 通过 `propose_source_recipe` 提交的配方不会直接生效，只存成待批准，也不会动你已有的配方或停用标记；你运行 `penpal sources approve <id>`（会先列出它要读的路径）后才开始读取，`penpal sources reject <id>` 丢弃。配方要先过身份和路径校验，系统保护库、浏览器、凭据目录、聊天 App、密码管理器一律拒绝，每次同步都会重新校验。`penpal sources recipes` 查看，`penpal sources disable` / `rollback` 停用或回滚（`sources/recipes/identity_gate.py`；`tests/test_recipe_identity_gate.py`）。
 - **客户端身份是自报的**。通过 stdio 连接时，Penpal 无法证明对端进程是谁；`PENPAL_CLIENT` 只是 Host 配置里的一个名字，真正的凭证是令牌。能读到你 Host 配置文件的程序，就能同时拿到令牌和名字（`mcp/auth.py` 文件头注释）。保护好那份配置文件。
 - **被查到的内容会进入那个 AI 的对话**。如果它是云端服务（Claude、ChatGPT、Cursor 的后端等），这些内容可能离开你的电脑。Penpal 无法控制 Host 之后怎么处理。授权前想清楚给哪个分类。

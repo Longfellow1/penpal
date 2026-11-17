@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import sqlite3
 from datetime import datetime, timezone
 from typing import Any, Optional
 
@@ -72,10 +73,14 @@ def add_evidence(
     locator: str,
     offset_or_line: Optional[int],
     content_hash: Optional[str],
+    *,
+    conn: Optional[sqlite3.Connection] = None,
+    commit: bool = True,
 ) -> None:
     """Idempotent: one evidence row per (event, locator). An "unresolvable://" locator (knowledgec,
     approved_sqlite: no openable original) is stored with available=0."""
-    conn = get_conn()
+    if conn is None:
+        conn = get_conn()
     available = 0 if is_unresolvable_locator(locator) else 1
     conn.execute(
         """INSERT INTO evidence(event_id, locator, offset_or_line, content_hash, available, created_at)
@@ -83,4 +88,5 @@ def add_evidence(
            WHERE NOT EXISTS (SELECT 1 FROM evidence WHERE event_id = ? AND locator = ?)""",
         (event_id, locator, offset_or_line, content_hash, available, _now(), event_id, locator),
     )
-    conn.commit()
+    if commit:
+        conn.commit()
