@@ -87,6 +87,9 @@ def _sleep_on_schema_too_new(
             _reload_in_place()
 
 
+DEFAULT_RELOAD_FLUSH_TIMEOUT_SEC: float = 10.0
+
+
 def _reload_in_place() -> None:
     """Replace this process with the installed entry point after a runtime identity change.
 
@@ -98,6 +101,13 @@ def _reload_in_place() -> None:
     """
     from penpal.foundation.native_launcher import native_launcher
     from penpal.foundation.runtime_plist import resolve_penpal_executable
+
+    try:
+        from penpal.sources.sink import flush_named_entity_backfill
+
+        flush_named_entity_backfill(timeout_sec=DEFAULT_RELOAD_FLUSH_TIMEOUT_SEC)
+    except Exception as exc:
+        logger.warning("flush before reload failed: %s", type(exc).__name__)
 
     for handler in logging.getLogger().handlers:
         handler.flush()
@@ -234,9 +244,12 @@ def run(config: Optional[Config] = None, *, config_path: str | Path | None = Non
         logger.info(f"Signal {signum} received, shutting down")
         try:
             scheduler.stop()
+        except Exception as exc:
+            logger.error("error stopping sources scheduler: %s", type(exc).__name__)
+        try:
             manager.stop()
-        except Exception as e:
-            logger.error(f"Error during stop: {e}")
+        except Exception as exc:
+            logger.error("error stopping capture manager: %s", type(exc).__name__)
         finally:
             lock.release()
             sys.exit(0)
@@ -278,25 +291,33 @@ def run(config: Optional[Config] = None, *, config_path: str | Path | None = Non
                 identity_changed = False
             if identity_changed:
                 logger.info("runtime identity changed; flushing and reloading daemon")
-                scheduler.stop()
+                try:
+                    scheduler.stop()
+                except Exception as exc:
+                    logger.error("error stopping sources scheduler during reload: %s", type(exc).__name__)
                 try:
                     manager.stop()
                 except DatabaseSchemaTooNewError:
                     logger.error("newer database schema prevents the old daemon from flushing")
-                manager._write_runtime_record(force=True)
+                except Exception as exc:
+                    logger.error("error stopping capture manager during reload: %s", type(exc).__name__)
+                try:
+                    manager._write_runtime_record(force=True)
+                except Exception as exc:
+                    logger.error("error writing runtime record during reload: %s", type(exc).__name__)
                 lock.release()
                 _reload_in_place()
             time.sleep(1)
     except Exception as e:
-        logger.error(f"Fatal error: {e}")
+        logger.error("Fatal error: %s", type(e).__name__)
         try:
             scheduler.stop()
         except Exception as stop_exc:
-            logger.error(f"Error stopping sources scheduler after fatal error: {stop_exc}")
+            logger.error("Error stopping sources scheduler after fatal error: %s", type(stop_exc).__name__)
         try:
             manager.stop()
         except Exception as stop_exc:
-            logger.error(f"Error stopping capture manager after fatal error: {stop_exc}")
+            logger.error("Error stopping capture manager after fatal error: %s", type(stop_exc).__name__)
         lock.release()
         sys.exit(1)
 

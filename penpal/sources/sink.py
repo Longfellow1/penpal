@@ -5,7 +5,7 @@ import json
 import re
 import threading
 import time
-from concurrent.futures import Future, ThreadPoolExecutor
+from concurrent.futures import ALL_COMPLETED, Future, ThreadPoolExecutor, wait
 from dataclasses import replace
 from typing import Any
 from urllib.parse import urlsplit, urlunsplit
@@ -20,6 +20,10 @@ from penpal.store.models import RawEvent
 from penpal.store.repository import get_conn
 from penpal.store.repository import insert_raw_event
 from penpal.store.sync_repo import add_evidence, ensure_source
+from penpal.utils.logging import get_logger
+
+LOGGER = get_logger("sources.sink")
+DEFAULT_BACKFILL_FLUSH_TIMEOUT_SEC: float = 10.0
 
 
 _SOURCE_WEIGHTS: dict[str, float] = {
@@ -75,14 +79,23 @@ def persist_semantic_event(event: SemanticEvent, *, async_named_entities: bool =
     if event.external_id or event.source_locator:
         source_id = ensure_source(event.source, event.source_locator or event.source)
     raw_event = semantic_event_to_raw_event(event, include_named_entities=False, source_id=source_id)
-    row_id = insert_raw_event(raw_event)
-    if row_id > 0 and event.evidence_locator:
-        add_evidence(
-            row_id,
-            event.evidence_locator,
-            event.evidence_line,
-            hashlib.sha256((event.intent or "").encode("utf-8")).hexdigest(),
-        )
+    conn = get_conn()
+    try:
+        row_id = insert_raw_event(raw_event, conn=conn, commit=False)
+        if row_id > 0 and event.evidence_locator:
+            add_evidence(
+                row_id,
+                event.evidence_locator,
+                event.evidence_line,
+                hashlib.sha256((event.intent or "").encode("utf-8")).hexdigest(),
+                conn=conn,
+                commit=False,
+            )
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+
     if row_id > 0:
         if async_named_entities:
             _submit_named_entity_backfill(row_id, event)
@@ -91,11 +104,20 @@ def persist_semantic_event(event: SemanticEvent, *, async_named_entities: bool =
     return row_id
 
 
-def flush_named_entity_backfill(timeout_sec: float = 5.0) -> None:
+def flush_named_entity_backfill(timeout_sec: float = DEFAULT_BACKFILL_FLUSH_TIMEOUT_SEC) -> None:
     with _PENDING_LOCK:
         futures = list(_PENDING_BACKFILL)
-    for future in futures:
-        future.result(timeout=timeout_sec)
+    if not futures:
+        return
+    timeout = max(0.0, float(timeout_sec))
+    done, not_done = wait(futures, timeout=timeout, return_when=ALL_COMPLETED)
+    if not_done:
+        LOGGER.warning("named entity backfill flush timed out; unfinished=%d", len(not_done))
+    for f in done:
+        try:
+            f.result()
+        except Exception as exc:
+            LOGGER.warning("named entity backfill task failed: %s", type(exc).__name__)
 
 
 def semantic_event_to_raw_event(

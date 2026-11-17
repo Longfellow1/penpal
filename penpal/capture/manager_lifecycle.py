@@ -54,20 +54,50 @@ def start(manager):
 def stop(manager):
     """Stop all watchers and flush remaining events."""
     if manager._camera_monitor is not None:
-        manager._camera_monitor.stop()
+        try:
+            manager._camera_monitor.stop()
+        except Exception as exc:
+            logger.error("error stopping camera monitor: %s", type(exc).__name__)
         manager._camera_monitor = None
     manager._running.clear()
     for w in manager._watchers.values():
-        w.stop()
-    manager._drain_queue()
-    manager._flush_window_session(reason="watcher_stop")
-    manager._aggregator.flush()
+        try:
+            w.stop()
+        except Exception as exc:
+            logger.error("error stopping watcher: %s", type(exc).__name__)
+    try:
+        manager._drain_queue()
+    except Exception as exc:
+        logger.error("error draining queue during stop: %s", type(exc).__name__)
+    try:
+        manager._flush_window_session(reason="watcher_stop")
+    except Exception as exc:
+        logger.error("error flushing window session during stop: %s", type(exc).__name__)
+    try:
+        manager._aggregator.flush()
+    except Exception as exc:
+        logger.error("error flushing aggregator during stop: %s", type(exc).__name__)
     if manager._flush_thread:
-        manager._flush_thread.join(timeout=10)
+        try:
+            manager._flush_thread.join(timeout=10)
+        except Exception as exc:
+            logger.error("error joining flush thread: %s", type(exc).__name__)
     if manager._heartbeat_thread:
-        manager._heartbeat_thread.join(timeout=5)
+        try:
+            manager._heartbeat_thread.join(timeout=5)
+        except Exception as exc:
+            logger.error("error joining heartbeat thread: %s", type(exc).__name__)
+    try:
+        from penpal.sources.sink import flush_named_entity_backfill
+
+        flush_named_entity_backfill(timeout_sec=5.0)
+    except Exception as exc:
+        logger.error("error flushing named entity backfill: %s", type(exc).__name__)
     if not is_capture_paused():  # keep a persisted pause across daemon restarts
-        set_state("status", "stopped")
+        try:
+            set_state("status", "stopped")
+        except Exception as exc:
+            logger.error("error setting status stopped: %s", type(exc).__name__)
     logger.info("CaptureManager stopped")
 
 
