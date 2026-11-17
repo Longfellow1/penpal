@@ -36,6 +36,57 @@ _COMPAT_CAPTURE_CAPS = _CAPTURE_FACT_CAPS
 
 
 
+def _sleep_on_schema_too_new(
+    config: Config,
+    config_path: str | Path | None,
+    lock: SingleInstanceLock,
+    *,
+    sleep=time.sleep,
+    max_iterations: int | None = None,
+) -> None:
+    """Stay alive without writes when DB schema is newer than code supports.
+
+    Avoids exit 75 hot-loops under launchd, maintains SingleInstanceLock, and watches
+    for code upgrades to auto-reload once upgraded.
+    """
+    logger.info("daemon suspended due to newer database schema; waiting for code upgrade")
+
+    def _shutdown(signum, frame):
+        logger.info(f"Signal {signum} received while suspended on schema_too_new, shutting down")
+        lock.release()
+        sys.exit(0)
+
+    signal.signal(signal.SIGTERM, _shutdown)
+    signal.signal(signal.SIGINT, _shutdown)
+
+    identity_watcher = IdentityWatcher(
+        loaded_identity(config, config_path=config_path),
+        lambda: current_identity(config, config_path=config_path),
+    )
+
+    iterations = 0
+    while max_iterations is None or iterations < max_iterations:
+        iterations += 1
+        try:
+            sleep(10)
+        except InterruptedError:
+            pass
+
+        try:
+            if identity_watcher.check():
+                logger.info("runtime identity changed after schema_too_new suspension; reloading daemon")
+                lock.release()
+                _reload_in_place()
+        except Exception as exc:
+            logger.warning("identity check failed during schema_too_new suspension: %s", type(exc).__name__)
+
+        rec = read_schema_version(config.db_path_expanded)
+        if rec is not None and rec <= SCHEMA_VERSION:
+            logger.info("database schema became supported (schema=%d); reloading daemon", rec)
+            lock.release()
+            _reload_in_place()
+
+
 def _reload_in_place() -> None:
     """Replace this process with the installed entry point after a runtime identity change.
 
@@ -57,6 +108,26 @@ def _reload_in_place() -> None:
     except OSError as exc:
         logger.error("in-place reload failed (%s); exiting for launchd to relaunch", type(exc).__name__)
     sys.exit(RELOAD_EXIT_CODE)
+
+
+def _suspend_for_new_schema(config: Config, config_path: str | Path | None,
+                            lock: SingleInstanceLock, recorded_schema: int) -> None:
+    logger.error(
+        "database schema is newer than this daemon supports; refusing database writes "
+        "(recorded=%s supported=%s)", recorded_schema, SCHEMA_VERSION,
+    )
+    from penpal.runtime.evaluate import write_schema_too_new_record
+
+    try:
+        write_schema_too_new_record(
+            config.db_path_expanded,
+            recorded_schema=recorded_schema,
+            supported_schema=SCHEMA_VERSION,
+            pid=os.getpid(),
+        )
+        _sleep_on_schema_too_new(config, config_path, lock)
+    finally:
+        lock.release()
 
 def _on_mac_wake(registry: CapabilityRegistry, scheduler: SourcesScheduler) -> None:
     """After the Mac wakes: the same read-only self-check the supervisor runs (updates the stored
@@ -114,14 +185,8 @@ def run(config: Optional[Config] = None, *, config_path: str | Path | None = Non
 
     recorded_schema = read_schema_version(config.db_path_expanded)
     if recorded_schema is not None and recorded_schema > SCHEMA_VERSION:
-        logger.error(
-            "database schema is newer than this daemon supports; refusing database writes "
-            "(recorded=%s supported=%s)",
-            recorded_schema,
-            SCHEMA_VERSION,
-        )
-        lock.release()
-        sys.exit(RELOAD_EXIT_CODE)
+        _suspend_for_new_schema(config, config_path, lock, recorded_schema)
+        return
 
     try:
         from penpal.permissions import trigger_required_prompts
@@ -135,7 +200,11 @@ def run(config: Optional[Config] = None, *, config_path: str | Path | None = Non
     except Exception as exc:
         logger.warning("permission prompt trigger failed: %s", exc)
 
-    init_db(config.db_path_expanded)
+    try:
+        init_db(config.db_path_expanded)
+    except DatabaseSchemaTooNewError as exc:
+        _suspend_for_new_schema(config, config_path, lock, exc.recorded)
+        return
     cleared_denied = clear_browser_automation_denied_browsers_on_startup()
     logger.info(
         "daemon startup reset browser automation denied cache (cleared=%d, browsers=%s)",

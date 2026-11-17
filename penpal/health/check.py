@@ -12,7 +12,7 @@ from penpal.config import Config, read_config
 from penpal.health.alerts import ProductAlert
 from penpal.health.product_delivery import evaluate_delivery_health
 from penpal.health.report import HEALTH_JSON_PATH, write_health_report
-from penpal.store.db import get_conn, init_db
+from penpal.store.db import get_conn, init_db, read_schema_version
 from penpal.runtime import RuntimeState, evaluate
 from penpal.health.self_heal import run_watchdog
 
@@ -77,10 +77,12 @@ def run_healthcheck(config_path: str | None = None) -> dict[str, Any]:
     checked_at = _utc_now()
     cfg, config_loadable = _load_config(config_path)
     db_path = cfg.db_path_expanded if config_loadable else Path("/tmp/penpal-healthcheck.db")
-    init_db(db_path)
-    conn = get_conn()
-
     runtime_status = evaluate(now=checked_at)
+    schema_too_new = runtime_status.state == RuntimeState.SCHEMA_TOO_NEW
+    conn = None
+    if not schema_too_new:
+        init_db(db_path)
+        conn = get_conn()
     watchdog = run_watchdog(runtime_status, now=checked_at)
     if watchdog.get("action") == "restart":
         runtime_status = evaluate(now=checked_at)
@@ -104,8 +106,11 @@ def run_healthcheck(config_path: str | None = None) -> dict[str, Any]:
             "message": watchdog.get("error_zh") or "后台服务自动重启失败。",
         })
 
-    schema_row = conn.execute("SELECT MAX(version) AS version FROM _schema_version").fetchone()
-    schema_version = int(schema_row["version"] or 0) if schema_row else 0
+    if conn is None:
+        schema_version = read_schema_version(db_path)
+    else:
+        schema_row = conn.execute("SELECT MAX(version) AS version FROM _schema_version").fetchone()
+        schema_version = int(schema_row["version"] or 0) if schema_row else 0
 
     watcher_names = _watcher_names(cfg)
     if not watcher_names:
@@ -117,8 +122,8 @@ def run_healthcheck(config_path: str | None = None) -> dict[str, Any]:
             }
         )
 
-    ratio = _speaker_mislabel_ratio(checked_at)
-    if ratio > 0.10:
+    ratio = None if schema_too_new else _speaker_mislabel_ratio(checked_at)
+    if ratio is not None and ratio > 0.10:
         alerts.append(
             {
                 "severity": "warn",
@@ -136,12 +141,14 @@ def run_healthcheck(config_path: str | None = None) -> dict[str, Any]:
             }
         )
 
-    capabilities_snapshot, capture_error_code = _capabilities_snapshot()
-    delivery = evaluate_delivery_health(runtime_status=runtime_status)
+    capabilities_snapshot, capture_error_code = ({}, "") if schema_too_new else _capabilities_snapshot()
+    delivery = None if schema_too_new else evaluate_delivery_health(runtime_status=runtime_status)
     normalized_alerts = list(alerts)
-    normalized_alerts.extend(_legacy_alerts_from_product_alerts(delivery.alerts))
+    if delivery is not None:
+        normalized_alerts.extend(_legacy_alerts_from_product_alerts(delivery.alerts))
     runtime_has_error = runtime_status.state in {
         RuntimeState.NOT_INSTALLED, RuntimeState.NOT_RUNNING, RuntimeState.HUNG, RuntimeState.OUTDATED,
+        RuntimeState.SCHEMA_TOO_NEW,
     }
     alive = runtime_status.pid is not None and runtime_status.state not in {
         RuntimeState.NOT_INSTALLED, RuntimeState.NOT_RUNNING,
@@ -165,13 +172,13 @@ def run_healthcheck(config_path: str | None = None) -> dict[str, Any]:
         },
         "alerts": normalized_alerts,
         "product_status": {
-            "watcher_emit_counts_24h": delivery.watcher_counts,
+            "watcher_emit_counts_24h": delivery.watcher_counts if delivery is not None else None,
         },
         "capabilities": capabilities_snapshot,
         "capture_error_code": capture_error_code,
         "paused": runtime_status.state == RuntimeState.PAUSED,
-        "disabled_sources": _disabled_sources_snapshot(),
-        "sources_unavailable": _unavailable_sources_snapshot(),
+        "disabled_sources": None if schema_too_new else _disabled_sources_snapshot(),
+        "sources_unavailable": None if schema_too_new else _unavailable_sources_snapshot(),
     }
     write_health_report(HEALTH_JSON_PATH, result)
     return result

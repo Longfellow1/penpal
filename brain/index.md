@@ -1,6 +1,6 @@
 # Brain Index
 
-_Auto-generated. Last updated 2026-11-15T15:55:56.897Z._
+_Auto-generated. Last updated 2026-11-17T01:41:58.419Z._
 
 - [ai-tool-auto-coverage](pages/ai-tool-auto-coverage.md) — category: decision | tags: [capture, mcp, coverage, memmy] | Requirement (user, 2026-10-28, must ship): Phase 1 of the Memmy-class work covers at least 80% of the mainstream AI agents and IDEs a Mac us
 - [anchors-json-is-ssot](pages/anchors-json-is-ssot.md) — category: decision | ## Decision
@@ -44,6 +44,7 @@ _Auto-generated. Last updated 2026-11-15T15:55:56.897Z._
 - [session-handoff-2026-10-10](pages/session-handoff-2026-10-10.md) — category: project | status: archived | tags: [handoff, state, refactor] | <!-- compiled_truth -->
 - [skill-layer](pages/skill-layer.md) — category: project | ## Goal
 - [tcc-permission-refresh-on-install](pages/tcc-permission-refresh-on-install.md) — category: decision | ## Decision
+- [unconfirmed-memory-sharing](pages/unconfirmed-memory-sharing.md) — category: decision | tags: [memory, security, mcp, prompt-injection] | Decision (owner, 2026-11-16, architecture review P0-1 "memory poisoning"): a memory written by an AI host through MCP and not yet confirmed
 - [user-curates-llm-proposes](pages/user-curates-llm-proposes.md) — category: decision | ## Decision
 - [v1-build-by-legacy-extraction](pages/v1-build-by-legacy-extraction.md) — category: decision | tags: [v1, refactor, legacy, decision] | ## Principle (owner, 2026-10-10)
 - [v1-deferred-undecided-items](pages/v1-deferred-undecided-items.md) — category: decision | tags: [scope, open-questions] | ## Status: partly resolved (2026-10-10).

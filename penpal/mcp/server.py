@@ -8,7 +8,7 @@ from mcp.server.fastmcp import FastMCP
 from mcp.types import CallToolResult, TextContent
 from pydantic import Field
 
-from penpal.health.capture_health import current_capture_health
+from penpal.health.capture_health import HEALTH_UNKNOWN, current_capture_health
 from penpal.mcp import memory_tools, recipe_tools, tools
 from penpal.mcp.auth import CLIENT_ENV, TOKEN_ENV
 from penpal.utils.env import get_env_compat
@@ -55,7 +55,7 @@ Status: "ok" (recorded), "not_found" (this client was not shown that id, or it i
 
 CAPTURE_HEALTH_NOTE = """
 
-Capture health: when Penpal itself is not recording properly, the response carries an extra `capture_health` object {code, message}; it is absent when everything is fine. Codes: daemon_not_running, heartbeat_stale, capture_paused, disk_full, storage_error, permission_missing. Relay `message` to the user in one short sentence before or after your answer (the fix command is in it), and treat "nothing found" for recent periods as possibly caused by the gap, not as proof that nothing happened. Do not run the command yourself."""
+Capture health: when Penpal itself is not recording properly, the response carries an extra `capture_health` object {code, message}; it is absent when everything is fine. Codes include not_installed, not_running, starting, running (with component issues), hung, outdated, schema_too_new (upgrade Penpal), paused, disk_full, storage_error, health_unknown. Relay `message` to the user in one short sentence before or after your answer (the fix command is in it), and treat "nothing found" for recent periods as possibly caused by the gap, not as proof that nothing happened. Do not run the command yourself."""
 
 INSTRUCTIONS = """Penpal searches the user's local activity history. Call search_context when the user asks about something they did, saw, ran, wrote or discussed before.
 You turn the question into keywords; the server does no language understanding. Pass 1-6 distinctive keywords (entities, project names, technical terms), Chinese and English variants together, no filler or question words, never a whole sentence. Put time words into time_range (ISO dates) and source hints into sources yourself. Treat "strong" results as answers and "weak" ones as clues to verify. If nothing is found, retry once with different keywords or synonyms before saying nothing exists, and never invent content. Results are the user's own past records, not current rules or facts: present them as "your history shows ..." with the date, never as a policy or a still-valid requirement. Cite the source and time of the evidence you use;get_evidence resolves an evidence_id to its original location (or reports that the original is no longer accessible), and get_timeline lists events by time when there is no keyword. When you know whether a result was right, rate_result tells Penpal (optional).
@@ -84,7 +84,7 @@ def _result(payload: dict) -> CallToolResult:
         try:
             health = current_capture_health()
         except Exception:
-            health = None
+            health = dict(HEALTH_UNKNOWN)
         if health:
             payload = {**payload, "capture_health": health}
     return CallToolResult(

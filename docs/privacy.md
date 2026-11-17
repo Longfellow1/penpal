@@ -177,6 +177,8 @@
 - **无埋点**：`penpal/` 源码里没有使用 `requests`、`httpx`、`urllib.request`、`http.client`、`aiohttp` 的网络代码，也没有任何统计 SDK。这是检索代码得出的结论，没有抓包验证；安装 Penpal 时下载（如 Homebrew）不在此列。
 - **不自动删除**：启动、停止都不会删数据，旧的保留天数配置已被忽略。测试：`tests/test_d32_no_auto_delete.py`（D32）。删除只在你主动执行时发生。
 - **清除**：`penpal purge --source <来源>` / `--app <App>` / `--today` / `--last-hours N`，加 `--dry-run` 先看会删多少（`cli.py` `purge`，`services/purge.py`）。一次事务里同时删：原始记录、关联出处的记忆及其旧版本（`--source memmy` 删除全部 Memmy 记忆）、全文索引、出处（evidence）、返回给 AI 的结果记录、评分记录、剪贴板/手动记录的搜索文档，以及随之清空的会话（只删掉部分事件的会话会被重建，不残留被删文字）。没带任何筛选条件会被拒绝，不会"全删"。出错整体回滚。测试：`tests/test_purge_cascade.py`、`tests/test_memory_cli.py`。
+- **升级备份**：每次数据库升级前会在 `~/.penpal/` 里写一份整库备份（仅本人可读），升级成功后只保留最新 2 份（`store/backups.py`、`store/migrations.py`）。备份是整库快照，所以真正执行 `penpal purge` 时（哪怕只删一部分）会删除全部升级备份，确认提示里会先告诉你份数（`services/purge.py`；`tests/test_purge_cascade.py`、`tests/test_migration_v20.py`）。
+- 数据目录 `~/.penpal/` 设为仅本人可访问（目录 700，数据库、备份和状态文件 600），同一台 Mac 上的其他账号读不到（`utils/paths.py`；`tests/test_data_dir_permissions.py`）。
 - 日志文件里是否可能出现内容片段，这里没有逐行核查；代码约定是日志只记原因计数、不记内容（`hygiene.py` 文件头注释）。
 
 ## 11. 不承诺的事

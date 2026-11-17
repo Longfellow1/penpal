@@ -9,7 +9,7 @@ import click
 from rich.table import Table
 from penpal.config import read_toml
 from penpal.utils.paths import get_apps_dir, get_config_path, get_data_dir, get_launchd_agents_dir
-from penpal.runtime import ICON_OCCLUDED_HINT_ZH, evaluate
+from penpal.runtime import ICON_OCCLUDED_HINT_ZH, RuntimeState, evaluate
 from penpal.capture.capture_control import disabled_sources
 from penpal.capture.keyboard_notice import DISABLE_COMMAND, ENABLE_COMMAND, KEYBOARD_SOURCE, keyboard_capture_enabled, switch_hint
 from penpal.i18n import T
@@ -151,6 +151,22 @@ def doctor(plain, json_output, fix):
         if runtime_status.hud.supervisor_summary_zh:
             hud_detail += f"；{runtime_status.hud.supervisor_summary_zh}"
         check_details["菜单栏 HUD"] = hud_detail
+    if runtime_status.state == RuntimeState.SCHEMA_TOO_NEW:
+        if json_output:
+            click.echo(json.dumps({
+                "checks": {name: {"status": "ok" if passed else "fail", "detail": check_details.get(name, "")}
+                           for name, passed in checks.items()},
+                "info": {}, "unavailable_sources": [], "legacy_artifacts": [], "missing_permissions": [],
+                "partial": True,
+            }, ensure_ascii=False))
+        elif plain:
+            for name, passed in checks.items():
+                print(f"{name}: {'OK' if passed else 'FAIL'} {check_details.get(name, '')}")
+            print(T("其他检查已跳过；请先升级 Penpal。", "Other checks skipped; please upgrade Penpal first."))
+        else:
+            console.print(runtime_detail, markup=False)
+            console.print(T("其他检查已跳过；请先升级 Penpal。", "Other checks skipped; please upgrade Penpal first."), markup=False)
+        return
     cfg = get_config()
     require_db(cfg)
 

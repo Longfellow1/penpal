@@ -23,8 +23,12 @@ from penpal.store.models import RawEvent
 
 
 class CaptureManager:
-    # While the disk is full, capture writes nothing and attempts one probe write per interval.
     DISK_FULL_PROBE_SEC: float = 60.0
+    STORAGE_RETRY_DELAYS: tuple[float, ...] = (0.1, 0.2)
+    # A lock error after this long means the busy timeout already waited; do not retry it.
+    STORAGE_RETRY_MAX_WAITED_SEC: float = 1.0
+    # After storage recovers, the "N events were not saved" notice stays this long, then clears.
+    DROPPED_NOTICE_SEC: float = 3600.0
     HEARTBEAT_CHECK_INTERVAL_SEC: float = 60.0
 
     def __init__(self, config: Config):
@@ -54,10 +58,10 @@ class CaptureManager:
         self._browser_pages: dict[str, str] = {}
         # Disabled sources whose watchers we have already paused (#28).
         self._disabled_applied: frozenset[str] = frozenset()
-        # Storage state: None = writing normally; "disk_full" = writes paused until the next probe.
         self._storage_error: Optional[str] = None
         self._storage_error_since: Optional[str] = None
         self._storage_dropped = 0
+        self._storage_recovered_mono: Optional[float] = None
         self._storage_next_probe_mono = 0.0
         self._runtime_persist_failed = False
         self._wake_handler: Optional[Callable[[], None]] = None
@@ -196,12 +200,11 @@ class CaptureManager:
     def _storage_write_blocked(self) -> bool:
         return manager_storage._storage_write_blocked(self)
 
-    def _enter_disk_full(self) -> None:
-        # Roll back the failed statement so the shared connection is not left mid-transaction.
-        return manager_storage._enter_disk_full(self)
+    def _enter_storage_error(self, reason: str) -> None:
+        return manager_storage._enter_storage_error(self, reason)
 
-    def _leave_disk_full(self) -> None:
-        return manager_storage._leave_disk_full(self)
+    def _leave_storage_error(self) -> None:
+        return manager_storage._leave_storage_error(self)
 
     def _persist_storage_state(self) -> None:
         # The flush loop publishes this state; a full database may not accept another write.

@@ -2,9 +2,12 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 from typing import Optional
 
 from penpal.store import repository
+from penpal.store.backups import list_backups, prune_backups
+from penpal.store.db import get_conn
 
 
 def purge_selector(
@@ -34,6 +37,28 @@ def purge_selector(
     return dict(since=since, until=until or now.isoformat(), app_name=app, source=source)
 
 
+def _active_db_path() -> Path | None:
+    for _, name, file in get_conn().execute("PRAGMA database_list"):
+        if name == "main" and file:
+            return Path(file)
+    return None
+
+
+def purge_backups(db_path: Path | None = None) -> int:
+    """Delete every pre-migration backup of the active database; return how many were removed."""
+    path = db_path if db_path is not None else _active_db_path()
+    return prune_backups(path, keep=0) if path is not None else 0
+
+
+def pending_backup_count() -> int:
+    """How many pre-migration backups a real purge will remove."""
+    path = _active_db_path()
+    return len(list_backups(path)) if path is not None else 0
+
+
 def run_purge(selector: dict, *, dry_run: bool = False) -> dict[str, int]:
     """Per-table row counts; ``dry_run`` counts and deletes nothing."""
-    return repository.purge_raw_events(**selector, dry_run=dry_run)
+    counts = repository.purge_raw_events(**selector, dry_run=dry_run)
+    if not dry_run:
+        purge_backups()
+    return counts
