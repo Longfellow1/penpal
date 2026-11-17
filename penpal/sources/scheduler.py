@@ -340,7 +340,11 @@ class SourcesScheduler:
 
     def _on_scan_done(self, future: Future) -> None:
         with self._lock:
-            self._in_flight_tasks.pop(future, None)
+            plugin_name = self._in_flight_tasks.pop(future, None)
+            # A scan cancelled by stop() never ran _scan_plugin, whose finally releases the claim.
+            # No newer claim can exist meanwhile: _claim_scan refuses while this one is held.
+            if future.cancelled() and plugin_name is not None:
+                self._in_flight.discard(plugin_name)
 
     @staticmethod
     def _writes_blocked(plugin_name: str) -> bool:

@@ -247,3 +247,25 @@ def test_stop_waits_for_running_scan_within_timeout() -> None:
     scheduler._in_flight_tasks[future] = "synthetic"
     scheduler.stop(timeout_sec=5.0)
     assert finished.is_set()
+
+
+def test_scan_cancelled_by_stop_releases_its_claim() -> None:
+    from concurrent.futures import ThreadPoolExecutor
+
+    gate = threading.Event()
+    scheduler = SourcesScheduler(enabled=False)
+    scheduler._executor = ThreadPoolExecutor(max_workers=1)
+    scheduler._running.set()
+    blocker = scheduler._executor.submit(gate.wait, 2.0)
+    scheduler._in_flight_tasks[blocker] = "busy"
+    with scheduler._lock:
+        scheduler._in_flight.add("queued")
+    queued = scheduler._executor.submit(lambda: None)
+    scheduler._in_flight_tasks[queued] = "queued"
+    queued.add_done_callback(scheduler._on_scan_done)
+    try:
+        scheduler.stop(timeout_sec=0.1)
+    finally:
+        gate.set()
+    assert queued.cancelled()
+    assert "queued" not in scheduler._in_flight
