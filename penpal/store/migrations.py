@@ -19,10 +19,11 @@ from penpal.store.migration_v33 import migrate_v33
 from penpal.store.migration_v34 import migrate_v34
 from penpal.store.migration_v35 import migrate_v35
 from penpal.store.migration_v36 import migrate_v36
+from penpal.store.migration_v37 import migrate_v37
 
 LOGGER = logging.getLogger("penpal.store.migrations")
 
-SCHEMA_VERSION = 36
+SCHEMA_VERSION = 37
 
 MIGRATIONS = [
     # v1
@@ -256,6 +257,7 @@ MIGRATIONS = [
     migrate_v34,
     migrate_v35,
     migrate_v36,
+    migrate_v37,
 ]
 
 

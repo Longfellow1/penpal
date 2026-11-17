@@ -53,15 +53,27 @@ content = "body"
         async with create_connected_server_and_client_session(server._mcp_server) as client:
             return (await client.call_tool("propose_source_recipe", {"recipe_toml": recipe})).structuredContent
 
+    from penpal.i18n import T
+
     result = asyncio.run(submit())
-    assert result["status"] == "ok"
+    assert result["status"] == "pending_approval"
+    assert result["id"] == "orbit"
+    assert result["name"] == "Orbit"
     assert (result["matched_files"], result["parsed_turns"]) == (1, 1)
+    assert "penpal sources approve" in result["message"]
     start = datetime(2000, 1, 1, tzinfo=timezone.utc)
     end = datetime.max.replace(tzinfo=timezone.utc)
+    # Penpal reads nothing from a pending proposal before the user approves it.
+    assert list(registry.read_all(start, end, source="ai_tools")) == []
+    assert get_conn().execute("SELECT count(*) FROM raw_events WHERE source='ai_tools'").fetchone()[0] == 0
+    runner = CliRunner()
+    assert T("待批准", "pending") in runner.invoke(sources_group, ["recipes"]).output
+    approve = runner.invoke(sources_group, ["approve", "orbit", "--yes"])
+    assert approve.exit_code == 0, approve.output
+    assert "orbit\tenabled" in approve.output
     assert len(list(registry.read_all(start, end, source="ai_tools"))) == 1
     assert list(registry.read_all(start, end, source="ai_tools")) == []
     assert get_conn().execute("SELECT count(*) FROM raw_events WHERE source='ai_tools'").fetchone()[0] == 1
-    runner = CliRunner()
     # Use the already initialized database for the coverage command.
     monkeypatch.setattr("penpal.sources.coverage.init_db", lambda _: None)
     coverage = runner.invoke(sources_group, ["coverage"])
@@ -113,6 +125,7 @@ content = "body"
     assert result["status"] == "rejected" and "sensitive" in result["reason"]
     assert "SYNTHETIC_CANARY" not in json.dumps(result)
     assert not (home / "data" / "catalog" / "orbit.toml").exists()
+    assert not (home / "data" / "catalog" / "orbit.proposed").exists()
     row = get_conn().execute("SELECT decision, reason_code FROM mcp_audit ORDER BY id DESC LIMIT 1").fetchone()
     assert tuple(row) == ("deny", "recipe_rejected")
     close()

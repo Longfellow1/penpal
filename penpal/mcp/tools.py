@@ -328,10 +328,11 @@ def _search(grant: Grant, keywords: Any, time_range: Any, sources: Any, limit: A
                                     "detail": (row["detail"] or "")[:2000], "type": row["type"],
                                     "scope": row["scope"], "project": row["project"],
                                     "source_tool": row["source_tool"], "created_at": row["created_at"],
+                                    "confirmed": row["confirmed_at"] is not None,
                                     "evidence_ids": json.loads(row["evidence_ids"]), "_matched": matched})
-        # Most matched terms first; memories never take more than half the page, so the raw
+        # Confirmed memories lead, then most matched terms; memories take at most half the page, so the raw
         # events that carry verifiable evidence are not crowded out by many short summaries.
-        memory_hits.sort(key=lambda hit: len(hit["_matched"]), reverse=True)
+        memory_hits.sort(key=lambda hit: (hit["confirmed"], len(hit["_matched"])), reverse=True)
         memory_hits = memory_hits[:max(1, min(limit, 100))]
     except sqlite3.Error:
         # Never surface SQLite / FTS error text: it can echo query fragments or index internals.

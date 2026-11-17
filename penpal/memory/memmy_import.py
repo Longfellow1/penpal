@@ -102,13 +102,13 @@ def import_memmy(path: Path, target: sqlite3.Connection | None, *, dry_run: bool
         if tool not in buckets:
             buckets[tool] = source_default_bucket(tool) or "Work"
         bucket = buckets[tool]
-        pending.append((kind, clean_content, clean_detail, tool, json.dumps([bucket]), digest, created, created, external_id))
+        pending.append((kind, clean_content, clean_detail, tool, json.dumps([bucket]), digest, created, created, created, external_id))
         existing.add(external_id)
         counts["imported"] += 1
     counts["invalid"] = sum(reasons.values())
     if not dry_run and target is not None:
         with target:
-            target.executemany("INSERT INTO memories(type,content,detail,scope,source_tool,evidence_ids,buckets,content_hash,valid_from,created_at,status,confidence,source,external_id) VALUES (?,?,?,'global',?,'[]',?,?,?,?,'active',1.0,'memmy',?)", pending)
+            target.executemany("INSERT INTO memories(type,content,detail,scope,source_tool,evidence_ids,buckets,content_hash,valid_from,created_at,confirmed_at,status,confidence,source,external_id) VALUES (?,?,?,'global',?,'[]',?,?,?,?,?,'active',1.0,'memmy',?)", pending)
         summary = f"eligible={counts['eligible']},existing={counts['existing']},invalid={counts['invalid']},redacted={counts['redacted']}"
         audit.record(client="cli", tool="import_memmy", allowed=True, reason_code="ok", scope=summary, result_count=counts["imported"])
     return {**counts, "invalid_reasons": dict(reasons)}
