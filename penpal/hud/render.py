@@ -10,8 +10,17 @@ from __future__ import annotations
 import json
 from typing import Optional
 
+from penpal.i18n import T, current_lang
+
 HUD_WIDTH = 360
 HUD_HEIGHT = 600
+
+RECHECK_LABEL = ("重新检测", "Recheck")
+CANCEL_LABEL = ("取消", "Cancel")
+CONFIRM_LABEL = ("确认", "Confirm")
+AGE_UPDATED_PREFIX = ("数据更新于 ", "Updated ")
+AGE_UPDATED_SUFFIX = (" 秒前", "s ago")
+AGE_PENDING = ("数据更新尚未完成", "Update pending")
 
 _CSS = """
 :root{--bg:#F5F5F3;--card:#FFFFFF;--line:#E6E6E2;--sep:#EFEFEB;--text:#1C1C1E;--sub:#85857F;--ok:#5A9E78;--amber:#C88A2A;--red:#C4473A;--grey:#B4B4AE;--blue:#2F6FDB;--amber-text:#94661C;--red-text:#9A3A2E;--track:#D9D9D4}
@@ -82,11 +91,15 @@ _JS = r"""
   var NS='http://www.w3.org/2000/svg';
   var $=function(id){return document.getElementById(id)};
   var lastToast=null, lastView='', toastTimer=null, modelBuiltAt=null;
+  var MSG_PREFIX = __MSG_PREFIX__;
+  var MSG_SUFFIX = __MSG_SUFFIX__;
+  var MSG_PENDING = __MSG_PENDING__;
+  var MSG_RECHECK = __MSG_RECHECK__;
 
   function updateAge(){
     var label=$('model-updated');if(!label)return;
     var ts=modelBuiltAt?Date.parse(modelBuiltAt):NaN;
-    label.textContent=Number.isFinite(ts)?'数据更新于 '+Math.max(0,Math.floor((Date.now()-ts)/1000))+' 秒前':'数据更新尚未完成';
+    label.textContent=Number.isFinite(ts)?MSG_PREFIX+Math.max(0,Math.floor((Date.now()-ts)/1000))+MSG_SUFFIX:MSG_PENDING;
   }
 
   function post(action,args){
@@ -146,7 +159,7 @@ _JS = r"""
     var sb=$('statusbar');sb.textContent='';
     sb.appendChild(dot(bar.tone,false));
     var g=el('div','grow');var t1=el('span',null,bar.text);t1.id='st-text';var t2=el('span',null,bar.sub);t2.id='st-sub';g.appendChild(t1);g.appendChild(t2);sb.appendChild(g);
-    var rb=el('button',null,'重新检测');rb.id='recheck';rb.type='button';rb.addEventListener('click',function(){post('health.recheck')});sb.appendChild(rb);
+    var rb=el('button',null,MSG_RECHECK);rb.id='recheck';rb.type='button';rb.addEventListener('click',function(){post('health.recheck')});sb.appendChild(rb);
     var pb=el('button',null,m.pause.label);pb.id='pause';pb.type='button';pb.addEventListener('click',function(){post(m.pause.action)});sb.appendChild(pb);
 
     modelBuiltAt=m.model_built_at||null;
@@ -200,7 +213,7 @@ _BODY = """
   <div id="toast" role="status"></div>
   <div id="tabs"></div>
   <div id="veil"><div id="dlg" role="dialog"><h3 id="dlg-title"></h3><p id="dlg-body"></p>
-    <div class="row"><button id="dlg-cancel" type="button">取消</button><button id="dlg-ok" class="ok" type="button">确认</button></div></div></div>
+    <div class="row"><button id="dlg-cancel" type="button">__MSG_CANCEL__</button><button id="dlg-ok" class="ok" type="button">__MSG_CONFIRM__</button></div></div></div>
 </div>
 """
 
@@ -212,10 +225,26 @@ def _json_for_script(model: dict) -> str:
 def build_html(initial_model: Optional[dict] = None) -> str:
     """The whole page. With ``initial_model`` the page renders it on load (used by the shell and by static
     previews); the shell then pushes later models through ``window.render``."""
+    lang = current_lang()
+    html_lang = "zh-CN" if lang == "zh" else "en"
+    msg_prefix = T(AGE_UPDATED_PREFIX[0], AGE_UPDATED_PREFIX[1])
+    msg_suffix = T(AGE_UPDATED_SUFFIX[0], AGE_UPDATED_SUFFIX[1])
+    msg_pending = T(AGE_PENDING[0], AGE_PENDING[1])
+    msg_recheck = T(RECHECK_LABEL[0], RECHECK_LABEL[1])
+    msg_cancel = T(CANCEL_LABEL[0], CANCEL_LABEL[1])
+    msg_confirm = T(CONFIRM_LABEL[0], CONFIRM_LABEL[1])
+
+    body = _BODY.replace("__MSG_CANCEL__", msg_cancel).replace("__MSG_CONFIRM__", msg_confirm)
+    js = (
+        _JS.replace("__MSG_PREFIX__", json.dumps(msg_prefix))
+        .replace("__MSG_SUFFIX__", json.dumps(msg_suffix))
+        .replace("__MSG_PENDING__", json.dumps(msg_pending))
+        .replace("__MSG_RECHECK__", json.dumps(msg_recheck))
+    )
     boot = f"window.render({_json_for_script(initial_model)});" if initial_model is not None else ""
     return (
-        '<!doctype html><html lang="zh-CN"><head><meta charset="utf-8">'
+        f'<!doctype html><html lang="{html_lang}"><head><meta charset="utf-8">'
         '<meta name="viewport" content="width=360,initial-scale=1">'
-        f"<title>Penpal</title><style>{_CSS}</style></head><body>{_BODY}"
-        f"<script>{_JS}</script><script>{boot}</script></body></html>"
+        f"<title>Penpal</title><style>{_CSS}</style></head><body>{body}"
+        f"<script>{js}</script><script>{boot}</script></body></html>"
     )

@@ -11,18 +11,19 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Optional
 
+from penpal.i18n import T, current_lang
 from penpal.runtime import RuntimeState, RuntimeStatus, evaluate, state_message
 from penpal.utils.logging import get_logger
 
 LOGGER = get_logger("hud.snapshot")
 
 # Source -> overview group. Anything not listed lands in "other".
-GROUPS: tuple[tuple[str, str], ...] = (
-    ("live", "实时采集"),
-    ("browser", "浏览器"),
-    ("ai", "AI 对话"),
-    ("dev", "开发与笔记"),
-    ("other", "其他"),
+GROUPS: tuple[tuple[str, tuple[str, str]], ...] = (
+    ("live", ("实时采集", "Live")),
+    ("browser", ("浏览器", "Browsers")),
+    ("ai", ("AI 对话", "AI Chats")),
+    ("dev", ("开发与笔记", "Dev & Notes")),
+    ("other", ("其他", "Other")),
 )
 SOURCE_GROUP: dict[str, str] = {
     "window": "live", "clipboard": "live", "keyboard_chunk": "live", "ax_text": "live",
@@ -32,22 +33,48 @@ SOURCE_GROUP: dict[str, str] = {
     "claude_code": "ai", "codex_cli": "ai",
     "zsh_history": "dev", "git_log": "dev", "markdown_vault": "dev",
 }
-SOURCE_LABELS: dict[str, str] = {
-    "window": "前台窗口", "clipboard": "剪贴板", "keyboard_chunk": "键盘片段", "ax_text": "当前看到的正文",
-    "idle": "空闲检测", "manual": "手动保存",
-    "browser": "浏览器标签页", "browser_url": "当前网页地址", "browser_history": "浏览器历史",
-    "chrome_history": "Chrome 历史", "safari_history": "Safari 历史",
-    "claude_code": "Claude Code", "codex_cli": "Codex",
-    "zsh_history": "终端命令", "git_log": "Git 提交", "markdown_vault": "笔记库",
-    "wechat": "微信", "knowledgec": "系统使用记录", "spotlight": "Spotlight 文件",
-    "approved_sqlite": "已批准的数据库", "leveldb_reader": "LevelDB 来源",
+SOURCE_LABELS: dict[str, tuple[str, str]] = {
+    "window": ("前台窗口", "Active Window"),
+    "clipboard": ("剪贴板", "Clipboard"),
+    "keyboard_chunk": ("键盘片段", "Keyboard Snippets"),
+    "ax_text": ("当前看到的正文", "On-screen Text"),
+    "idle": ("空闲检测", "Idle Monitor"),
+    "manual": ("手动保存", "Manual Save"),
+    "browser": ("浏览器标签页", "Browser Tabs"),
+    "browser_url": ("当前网页地址", "Current URL"),
+    "browser_history": ("浏览器历史", "Browser History"),
+    "chrome_history": ("Chrome 历史", "Chrome History"),
+    "safari_history": ("Safari 历史", "Safari History"),
+    "claude_code": ("Claude Code", "Claude Code"),
+    "codex_cli": ("Codex", "Codex"),
+    "zsh_history": ("终端命令", "Shell History"),
+    "git_log": ("Git 提交", "Git Log"),
+    "markdown_vault": ("笔记库", "Notes Vault"),
+    "wechat": ("微信", "WeChat"),
+    "knowledgec": ("系统使用记录", "System Usage"),
+    "spotlight": ("Spotlight 文件", "Spotlight"),
+    "approved_sqlite": ("已批准的数据库", "Approved DBs"),
+    "leveldb_reader": ("LevelDB 来源", "LevelDB"),
 }
-BUCKET_LABELS: dict[str, str] = {"Work": "工作", "Personal": "个人", "Private": "私密", "Financial": "财务"}
-HOST_LABELS: dict[str, str] = {"claude": "Claude Code", "codex": "Codex", "cursor": "Cursor", "generic": "其他 MCP 客户端"}
+BUCKET_LABELS: dict[str, tuple[str, str]] = {
+    "Work": ("工作", "Work"),
+    "Personal": ("个人", "Personal"),
+    "Private": ("私密", "Private"),
+    "Financial": ("财务", "Financial"),
+}
+HOST_LABELS: dict[str, tuple[str, str]] = {
+    "claude": ("Claude Code", "Claude Code"),
+    "codex": ("Codex", "Codex"),
+    "cursor": ("Cursor", "Cursor"),
+    "generic": ("其他 MCP 客户端", "Other MCP Clients"),
+}
 
 
 def source_label(name: str) -> str:
-    return SOURCE_LABELS.get(name, name)
+    pair = SOURCE_LABELS.get(name)
+    if pair is None:
+        return name
+    return T(pair[0], pair[1])
 
 
 @dataclass(frozen=True)
@@ -100,6 +127,7 @@ class AuditRow:
 class Snapshot:
     now: datetime
     paused: bool = False
+    language: str = "auto"
     health: Optional[dict] = None            # {"code", "message"} from capture_health, None = healthy
     runtime_status: Optional[RuntimeStatus] = None
     read_error: bool = False                 # the HUD could not read the database at all
@@ -139,7 +167,9 @@ def _safe(label: str, fn, default):
 
 
 def _chat_label(app) -> str:
-    return next((n for n in app.names if any("一" <= ch <= "鿿" for ch in n)), app.key)
+    if current_lang() == "zh":
+        return next((n for n in app.names if any(ord(ch) > 127 for ch in n)), app.key)
+    return next((n for n in app.names if all(ord(ch) < 128 for ch in n)), app.key)
 
 
 def collect_snapshot(cfg, *, now: Optional[datetime] = None) -> Snapshot:
@@ -163,7 +193,7 @@ def collect_snapshot(cfg, *, now: Optional[datetime] = None) -> Snapshot:
     paused = runtime_status is not None and runtime_status.state == RuntimeState.PAUSED
     health = None
     if runtime_status is not None and (runtime_status.state != RuntimeState.RUNNING or runtime_status.issues):
-        health = {"code": runtime_status.code, "message": state_message(runtime_status, language="zh")}
+        health = {"code": runtime_status.code, "message": state_message(runtime_status, language=current_lang())}
 
     db_path = cfg.db_path_expanded
 
@@ -257,7 +287,8 @@ def collect_snapshot(cfg, *, now: Optional[datetime] = None) -> Snapshot:
     ai_today = sum(1 for r in audit_rows if r.allowed and r.ts >= day_start)
 
     return Snapshot(
-        now=now, paused=paused, health=health, runtime_status=runtime_status,
+        now=now, paused=paused, language=str(getattr(cfg.app, "language", "auto") or "auto"),
+        health=health, runtime_status=runtime_status,
         read_error=read_error, last_write_ts=last_write,
         today_records=sum(a["today"] for a in by_source.values()),
         sources=tuple(sources), perm_issues=perm_issues, hosts=tuple(hosts), audit=audit_rows[:5],

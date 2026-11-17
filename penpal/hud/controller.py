@@ -25,6 +25,7 @@ from dataclasses import replace
 from datetime import datetime, timezone
 from typing import Any, Callable, Optional
 
+from penpal.i18n import T, current_lang, set_lang
 from penpal.hud.snapshot import Snapshot, collect_snapshot
 from penpal.hud.viewmodel import NEW_HOST_CHOICES, Reveal, UiState, build_model, delete_options
 from penpal.utils.logging import get_logger
@@ -205,6 +206,7 @@ class HudController:
         spawn: Callable[[Callable[[], Any]], None] = _spawn,
         clock: Callable[[], datetime] = lambda: datetime.now(timezone.utc),
         push_model: Optional[Callable[[], None]] = None,
+        on_language_changed: Optional[Callable[[], None]] = None,
     ) -> None:
         self._load_config = load_config
         self._copy = copy_to_clipboard
@@ -212,6 +214,7 @@ class HudController:
         self._spawn = spawn
         self._clock = clock
         self._push_model = push_model
+        self._on_language_changed = on_language_changed
         self.ui = UiState()
         self._snap: Optional[Snapshot] = None
         self._snap_at = 0.0
@@ -268,7 +271,7 @@ class HudController:
             changed = handler(args)
         except Exception as exc:  # message is not shown: it could echo user data
             LOGGER.warning("hud action %s failed: %s", action, type(exc).__name__)
-            self._say("操作没有成功，详情见 penpal doctor")
+            self._say(T("操作没有成功，详情见 penpal doctor", "Action failed, see penpal doctor"))
             changed = False
         return self.model(fresh=bool(changed) or self._snap is None)
 
@@ -302,19 +305,36 @@ class HudController:
         self.ui = replace(self.ui, page="", confirm=None, toast=None)
         return False
 
+    # language
+    def _do_language_set(self, args: dict) -> bool:
+        from penpal.config import write_app_language
+
+        value = str(args.get("value") or "").strip().lower()
+        if value not in {"auto", "zh", "en"}:
+            return False
+        write_app_language(None, value)
+        set_lang()
+        self._say(T("语言已切换", "Language changed"))
+        if self._on_language_changed is not None:
+            try:
+                self._on_language_changed()
+            except Exception as exc:
+                LOGGER.warning("on_language_changed callback failed: %s", type(exc).__name__)
+        return True
+
     # capture / sources / privacy
     def _do_capture_pause(self, args: dict) -> bool:
         from penpal.capture import capture_control
 
         capture_control.set_capture_paused(True)
-        self._say("已暂停，重启后仍保持")
+        self._say(T("已暂停，重启后仍保持", "Paused; will stay paused after restart"))
         return True
 
     def _do_capture_resume(self, args: dict) -> bool:
         from penpal.capture import capture_control
 
         capture_control.set_capture_paused(False)
-        self._say("已继续记录")
+        self._say(T("已继续记录", "Recording resumed"))
         return True
 
     def _set_source(self, name: str, enable: bool) -> None:
@@ -327,7 +347,8 @@ class HudController:
         if name not in {s.name for s in self.snapshot().sources}:  # same check as `penpal source enable`
             return False
         self._set_source(name, enable)
-        self._say(("已开启 " if enable else "已关闭 ") + next(s.label for s in self.snapshot().sources if s.name == name))
+        prefix = T("已开启 ", "Enabled ") if enable else T("已关闭 ", "Disabled ")
+        self._say(prefix + next(s.label for s in self.snapshot().sources if s.name == name))
         return True
 
     def _do_keyboard_toggle(self, args: dict) -> bool:
@@ -335,7 +356,7 @@ class HudController:
 
         enable = bool(args.get("enable"))
         self._set_source(KEYBOARD_SOURCE, enable)
-        self._say("键盘片段已开启" if enable else "键盘片段已关闭，不再写入")
+        self._say(T("键盘片段已开启", "Keyboard snippets enabled") if enable else T("键盘片段已关闭，不再写入", "Keyboard snippets disabled, no longer recorded"))
         return True
 
     def _do_chat_toggle(self, args: dict) -> bool:
@@ -345,9 +366,10 @@ class HudController:
         try:
             key, _ = config.set_chat_app_opt_in(str(args.get("name") or ""), allow)
         except ValueError:
-            self._say("不认识这个聊天 App")
+            self._say(T("不认识这个聊天 App", "Unknown chat app"))
             return False
-        self._say(("已放行 " if allow else "已取消放行 ") + key + "，约 1 分钟内生效")
+        prefix = T("已放行 ", "Allowed ") if allow else T("已取消放行 ", "Disallowed ")
+        self._say(prefix + key + T("，约 1 分钟内生效", ", takes effect in ~1 min"))
         return True
 
     # AI access
@@ -379,23 +401,23 @@ class HudController:
         if host not in NEW_HOST_CHOICES:
             return False
         if not self.ui.new_buckets:
-            self._say("至少选一个分类")
+            self._say(T("至少选一个分类", "Select at least one category"))
             return False
         if any(h.client_id == host for h in self.snapshot().hosts):
-            self._say("已经连接了，要换范围请先撤销")
+            self._say(T("已经连接了，要换范围请先撤销", "Already connected; revoke first to change scope"))
             return False
         buckets = list(self.ui.new_buckets)
         try:
             token = auth.create_grant(host, buckets=buckets)
         except ValueError:
-            self._say("授权失败")
+            self._say(T("授权失败", "Authorization failed"))
             return False
         scope = f"buckets={','.join(buckets)}, sources=all in buckets, operations=read"
         lines = mcp_cli.grant_output_lines(
             host, scope, token, host, mcp_cli._penpal_executable(), buckets=buckets,
             enabled_sources=[s.name for s in self.snapshot().sources if s.enabled],
         )
-        self.ui = replace(self.ui, page="reveal", reveal=Reveal("授权成功", "\n".join(lines), host), new_buckets=("Work",))
+        self.ui = replace(self.ui, page="reveal", reveal=Reveal(T("授权成功", "Authorized"), "\n".join(lines), host), new_buckets=("Work",))
         return True
 
     def _do_grant_rotate(self, args: dict) -> bool:
@@ -406,7 +428,7 @@ class HudController:
         try:
             token = auth.rotate_grant(client_id)
         except ValueError:
-            self._say("没有可轮换的授权")
+            self._say(T("没有可轮换的授权", "No grant to rotate"))
             return False
         grant = next((g for g in auth.active_grants() if g["client_id"] == client_id), None)
         lines = mcp_cli.rotate_output_lines(
@@ -414,14 +436,14 @@ class HudController:
             buckets=grant["buckets"] if grant else (), sources=grant["sources"] if grant else None,
             enabled_sources=[s.name for s in self.snapshot().sources if s.enabled],
         )
-        self.ui = replace(self.ui, page="reveal", reveal=Reveal("新的密钥", "\n".join(lines), client_id))
+        self.ui = replace(self.ui, page="reveal", reveal=Reveal(T("新的密钥", "New Secret"), "\n".join(lines), client_id))
         return True
 
     def _do_reveal_copy(self, args: dict) -> bool:
         if self.ui.reveal is None or self._copy is None:
             return False
         self._copy(self.ui.reveal.text)
-        self._say("已复制")
+        self._say(T("已复制", "Copied"))
         return False
 
     # delete
@@ -457,14 +479,14 @@ class HudController:
 
             count = auth.revoke_grants(confirm["client_id"])
             self.ui = replace(self.ui, page="")
-            self._say("已撤销授权" if count else "没有可撤销的授权")
+            self._say(T("已撤销授权", "Grant revoked") if count else T("没有可撤销的授权", "No grant to revoke"))
             return True
         if confirm.get("kind") == "purge":
             from penpal.services import purge
 
             counts = purge.run_purge(confirm["selector"])
             self.ui = replace(self.ui, page="", delete_scope="today")
-            self._say(f"已删除 {counts.get('raw_events', 0)} 条记录")
+            self._say(T("已删除 {n} 条记录", "Deleted {n} records").format(n=counts.get('raw_events', 0)))
             return True
         return False
 
@@ -473,7 +495,7 @@ class HudController:
         from penpal.runtime.control import restart
 
         self._spawn(lambda: restart("hud"))
-        self._say("正在重启后台服务")
+        self._say(T("正在重启后台服务", "Restarting background service"))
         return False
 
     def _do_settings_open(self, args: dict) -> bool:
@@ -502,14 +524,14 @@ class HudController:
         from penpal.services.repair import repair
 
         issue_code = str(args.get("issue_code") or "")
-        self._say("正在修复…")
+        self._say(T("正在修复…", "Repairing…"))
         if self._push_model is not None:
             try:
                 self._push_model()
             except Exception as exc:
                 LOGGER.warning("hud intermediate push_model failed: %s", type(exc).__name__)
         result = repair(issue_code)
-        self._say(result.message_zh)
+        self._say(result.message_zh if current_lang() == "zh" else (result.message_en or result.message_zh))
         local_now = self._clock().astimezone()
         now_str = local_now.strftime("%H:%M:%S")
         self.ui = replace(self.ui, rechecked_at=now_str)

@@ -345,10 +345,11 @@ def test_partially_emptied_session_is_rebuilt_without_deleted_text(seeded):
 
 
 # ── upgrade backups go away with deleted data ───────────────────────────────────────────────
-BACKUP_REASON = T(
-    "备份是删除前的整库快照，仍含已删数据，已一并清除。",
-    "Backups are full-DB snapshots that can still hold deleted data; removed too.",
-)
+def _backup_reason() -> str:
+    return T(
+        "备份是删除前的整库快照，仍含已删数据，已一并清除。",
+        "Backups are full-DB snapshots that can still hold deleted data; removed too.",
+    )
 
 
 def _backup_notice(count: int) -> str:
@@ -374,7 +375,7 @@ def test_cli_purge_deletes_all_backups_and_reports_count(cli_db, backups):
 
     assert result.exit_code == 0, result.output
     assert _backup_notice(2) in result.output
-    assert BACKUP_REASON in result.output
+    assert _backup_reason() in result.output
     assert all(not path.exists() for path in snapshots)
     assert decoy.exists()
 
@@ -386,7 +387,7 @@ def test_cli_source_purge_also_deletes_all_backups(cli_db, backups):
 
     assert result.exit_code == 0, result.output
     assert _backup_notice(2) in result.output
-    assert BACKUP_REASON in result.output
+    assert _backup_reason() in result.output
     assert all(not path.exists() for path in snapshots)
     assert decoy.exists()
 
