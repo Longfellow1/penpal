@@ -8,7 +8,7 @@
 ## 1. 钱花在哪
 **数据来源**：2026-10 一个连续 20 天的主会话（5,688 轮），加上它派出的 83 个子 Agent，按 API 标价折算。折算只用来比较各项的相对大小；如果是订阅制，这些数字体现为额度消耗的快慢。
 
-- **主会话与子 Agent**：主会话约占全部 Claude 消耗的 80%，子 Agent 约占 20%。Codex 和 agy 用各自的额度，不计在内。
+- **主会话与子 Agent**：主会话约占全部 Claude 消耗的 80%，子 Agent 约占 20%。Codex 和 opencode 用各自的额度，不计在内。
 - **主会话的构成**：重读上下文约占一半，写入上下文和生成输出各约占四分之一。
 - **上下文大小**：每轮上下文的中位数是 16.4 万 token。按这个大小，每轮仅重读一项的成本，就是上下文 4 万时的 4 倍。
 - **重读次数**：每个进入上下文的 token，平均会在后续各轮里被重读约 50 次。折算下来，往上下文里放 1 个 token，成本接近生成 1 个输出 token。
@@ -40,20 +40,20 @@
 - 中间产物多、结论少吗？是就派出去。
 - 能写出可执行的验收标准吗？写不出就先别派，把问题想清楚再说。
 
-默认先派给 Codex 或 agy，因为它们不占 Claude 额度；它们做不了或失败了，再派 Claude 子 Agent。
+默认先派给 Codex 或 opencode，因为它们不占 Claude 额度；它们做不了或失败了，再派 Claude 子 Agent。
 
 | 情况 | 交给 | 原因 |
 |---|---|---|
 | 小改动（约 3 个文件以内，上下文已在手） | 主控自己 | worker 冷启动要重建上下文，比直接改更贵 |
 | 方案取舍、验收、给负责人的汇报 | 主控自己 | 依赖本次对话，不能外包 |
-| 前后端实现与清理（HUD、CLI、安装 / launchd、打包） | agy，在独立工作区里做 | 负责人定的分工；不占 Claude 额度 |
+| 前后端实现与清理（HUD、CLI、安装 / launchd、打包） | opencode（写模式），在独立工作区里做 | 不占 Claude 额度 |
 | Agent 相关实现（MCP、宿主接入、记忆召回、评测），以及批量机械改动 | Codex（`gpt-6.1-terra`），在独立工作区里做 | 同上 |
-| 搜索、摸底、统计，只要结论 | Codex `-s read-only` 或 agy `--mode plan`；要在本会话里快速拿到结论时，用 Claude 子 Agent（Haiku 5.5） | 读到的内容不进主上下文 |
-| Codex 和 agy 都做不了的实现或排查 | Claude 子 Agent，Haiku 优先，失败后换 Sonnet 5.5 | 兜底 |
-| 交叉审查、第二意见 | 用一个与作者不同的模型：agy `--mode plan` 或 Codex `-s read-only` | 视角独立 |
+| 搜索、摸底、统计，只要结论 | Codex `-s read-only` 或 opencode 只读模式；要在本会话里快速拿到结论时，用 Claude 子 Agent（Haiku 5.5） | 读到的内容不进主上下文 |
+| Codex 和 opencode 都做不了的实现或排查 | Claude 子 Agent，Haiku 优先，失败后换 Sonnet 5.5 | 兜底 |
+| 交叉审查、第二意见 | 用一个与作者不同的模型：opencode 只读模式或 Codex `-s read-only` | 视角独立 |
 
 规模上限：
-- 一个子任务预计不超过 50 轮，上下文不超过 10 万 token。超出就拆分，或改派 Codex / agy。
+- 一个子任务预计不超过 50 轮，上下文不超过 10 万 token。超出就拆分，或改派 Codex / opencode。
 - Haiku 只接搜索、统计和机械改动；需要判断的派给 Sonnet 或 Codex。
 - 同时在跑的 worker 不超过 3 个，各自改的文件不能重叠。
 
@@ -86,18 +86,8 @@
   ```text
   codex exec -m gpt-6.1-terra -s workspace-write -C <工作区> --skip-git-repo-check --output-last-message <报告文件> "$(cat <简报>)" </dev/null
   ```
-- **agy**：在工作区里运行下面的命令；只读审查用 `--mode plan`。不得使用 `--dangerously-skip-permissions`。
-  ```text
-  agy --print '<简报>' --mode accept-edits --sandbox --output-format json
-  ```
-  agy 在无人值守模式下，会拒绝白名单以外的所有命令，而只要有一条命令被拒，整次运行就没有任何产出。白名单是：`penpal-isolated-pytest`、`bash -n`、`shellcheck`、`git diff|status|log`。所以给 agy 的简报必须写明以下几点：
-  - 只能用白名单里的命令；
-  - 开工前不跑基线测试；
-  - 不在后台运行任何东西；
-  - 不用管道、重定向和环境变量前缀。
-  - 不读工作区以外的文件：无人值守模式会拒绝读取工作区外的文件，结果同样是整次运行没有产出。所以 ub-lite 要去掉文件头后把全文贴进简报，不能只写路径；Codex 能读路径，不受此限。
-
-  如果运行中断，用 `--conversation <id>` 接着跑。
+- **opencode**：用本机的 opencode worker 封装运行，写模式只在独立工作区里用，审查用只读模式。它能自己跑 `penpal-isolated-pytest` 和 `git commit`，不能推送。
+- **agy 不再作为 worker 调用**（2026-11-23 起）：Google 的说明不允许把个人套餐的 agy 无人值守模式包进第三方编码 Agent 里调用，也不允许自动轮换账号。所以 Claude、Codex 和任何中转服务都不调用 agy。这之前写下的 agy 用法已删除，需要时看 git 历史。
 
 ## 5. 验收清单
 主控逐条做；worker 说"通过"只当作线索。
