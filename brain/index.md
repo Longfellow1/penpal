@@ -1,6 +1,6 @@
 # Brain Index
 
-_Auto-generated. Last updated 2026-11-16T12:31:41.688Z._
+_Auto-generated. Last updated 2026-11-23T12:22:04.681Z._
 
 - [ai-tool-auto-coverage](pages/ai-tool-auto-coverage.md) — category: decision | tags: [capture, mcp, coverage, memmy] | Requirement (user, 2026-10-28, must ship): Phase 1 of the Memmy-class work covers at least 80% of the mainstream AI agents and IDEs a Mac us
 - [anchors-json-is-ssot](pages/anchors-json-is-ssot.md) — category: decision | ## Decision

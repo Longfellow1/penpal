@@ -5,7 +5,7 @@ category: decision
 status: active
 tags: [v1, refactor, plan]
 created: "2026-10-10T14:19:24"
-updated: "2026-10-30T16:15:59"
+updated: "2026-11-23T20:22:04"
 ---
 
 <!-- compiled_truth -->
@@ -105,3 +105,9 @@ V1 重构计划（docs/KeyPulse_V1_重构计划.md，v1.0，owner 2026-10-10 批
   summary: "Memmy track (docs/design/memory-write-architecture.md) joins the milestone table. Owner chose all of P2 auto-connect, P3 commit_memory + Memmy import and P4 host-written recipes for 2026-11-03; P1 already at 94.1% session coverage on the owner Mac. Issues #173 (P2), #24 (P3), #174 (P4)."
   source: "owner 2026-10-30 (AskUserQuestion): P2 + P3 + P4 全做"
   affects: [v1-refactor-plan, ai-tool-auto-coverage]
+
+- time: 2026-11-23T20:22:04
+  kind: note
+  summary: "2026-11-23: architecture-review stabilization milestone done. Round 1 (#187): no silent event loss, serialized migrations, backup pruning, owner-only data dir. Round 2 (#188): AI-written memories need confirmation, host recipes wait for approval. Round 3 (#189): imports get full masking and commit atomically, every MCP string redacted plus content_notice, connect rollback revokes only its own grant. Open follow-ups: stored metadata_json masking (P2), recipe validation probe oracle, /tmp healthcheck fallback DB, read-only commands still call init_db. Next focus proposed by the owner: project continuity (docs/design/project-brief.md)."
+  source: "rounds 1-3 PRs #187 #188 #189"
+  affects: [v1-refactor-plan]
